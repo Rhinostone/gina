@@ -1492,6 +1492,46 @@ function SuperController(options) {
         // delegate fetches the nunjucks module itself via
         // `lib.nunjucksResolver.get()`, so the `swig` / `SwigFilters` deps
         // passed below are harmless when unused.
+        // #SPA1 — content negotiation, resolved BEFORE the delegate is chosen because
+        // this is the one place all four HTML delegates converge and where `local.req`
+        // (routing + gina headers) and `local.res` are both live. Two independent effects:
+        //
+        //   (a) a NEGOTIABLE route ALWAYS advertises `Vary: X-Gina-Navigate` — a cache
+        //       must be told the response varies whether or not THIS request asked for a
+        //       fragment. Set via res.setHeader so it reaches both engines: every HTTP/2
+        //       send site folds res.getHeaders() into stream.respond(). `completeHeaders`
+        //       is NOT usable for this — it runs at server.js:6452, before the params
+        //       block builds req.routing, so the flag would not exist yet (measured).
+        //
+        //   (b) `X-Gina-Navigate: fragment` reuses the PROVEN layoutless path by setting
+        //       isWithoutLayout, rather than adding a fifth delegate. A custom-error
+        //       render is unaffected by construction: those delegates read `errOptions`,
+        //       not `local.options`.
+        //
+        // Wrapped so an absent/undeclared flag leaves the default path byte-identical,
+        // and so any unexpected value simply falls through to the full page.
+        try {
+            if ( local.req && local.req.routing && local.req.routing.negotiate === true ) {
+                var _navRes = local.res;
+                if ( _navRes && typeof(_navRes.setHeader) == 'function' && !_navRes.headersSent ) {
+                    var _existingVary = ( typeof(_navRes.getHeader) == 'function' ) ? _navRes.getHeader('vary') : null;
+                    if ( !_existingVary ) {
+                        _navRes.setHeader('vary', 'X-Gina-Navigate');
+                    } else if ( !/x-gina-navigate/i.test( String(_existingVary) ) ) {
+                        // Vary is a LIST header — append, never clobber a sibling value
+                        // (the CORS paths set `vary: Origin`).
+                        _navRes.setHeader('vary', String(_existingVary) + ', X-Gina-Navigate');
+                    }
+                }
+                if ( local.req.ginaHeaders && local.req.ginaHeaders.navigate === 'fragment' ) {
+                    local.options.isWithoutLayout = true;
+                }
+            }
+        } catch (negotiationErr) {
+            // Negotiation is an enhancement — it must never break a render.
+            console.warn('[#SPA1] content negotiation skipped: '+ (negotiationErr.message || negotiationErr));
+        }
+
         var _engine = 'swig';
         try {
             var _settings = local.options

@@ -3983,6 +3983,16 @@ function Server(options) {
             if ( typeof(request.headers['x-gina-popin-name']) != 'undefined' ) {
                 ginaHeaders.popin.name = request.headers['x-gina-popin-name'];
             }
+            // #SPA1 — content-negotiation signal. `X-Gina-Navigate: fragment` asks a
+            // NEGOTIABLE route (routing.json `negotiate: true`) for its layoutless body
+            // instead of the full page. Parked here with the other gina headers rather
+            // than overloading `X-Requested-With`, which popin / link / validator all
+            // already send and which the render + error paths already fork on.
+            // Unknown values are deliberately NOT rejected — they fall through to the
+            // full page, so extending the vocabulary later is backward-compatible.
+            if ( typeof(request.headers['x-gina-navigate']) != 'undefined' ) {
+                ginaHeaders.navigate = String(request.headers['x-gina-navigate']).trim().toLowerCase();
+            }
             if ( typeof(request.headers['x-gina-form-rule']) != 'undefined' ) {
                 var rule = request.headers['x-gina-form-rule'].split(/\@/);
                 ginaHeaders.form.rule = rule[0];
@@ -6305,6 +6315,12 @@ function Server(options) {
         var _method = ( /http\/2/.test(self.conf[self.appName][self.env].server.protocol) ) ? req.headers[':method'] : req.method;
         if ( !/^get$/i.test(_method || req.method || '') ) { return false; }
         if ( !req.routing || !req.routing.cache ) { return false; }
+        // #SPA1 — never SERVE a negotiable route from the output cache. The key has no
+        // shape dimension and this serve point runs before the shape is resolved, so a
+        // hit could replay a fragment to a page request. The writer refuses too
+        // (render-swig writeCache), making this defence-in-depth rather than the only
+        // guard — but it is stated at BOTH ends so the invariant is local to each site.
+        if ( req.routing.negotiate === true ) { return false; }
         if ( String(self.instance._cacheIsEnabled).toLowerCase() !== 'true' ) { return false; }
         // No L2 store wired (memory/fs bundle, or boot degraded) → nothing to warm here;
         // isaac already served any L1 hit, and express memory/fs read is a later slice.
@@ -6685,6 +6701,13 @@ function Server(options) {
                     // req.routing.param.culture as the highest-priority
                     // culture source (URL `/fr/...` → req.culture='fr').
                     culturePrefix       : routing[name].culturePrefix || false,
+                    // #SPA1 — per-route content-negotiation capability. Declares that
+                    // this route may answer in more than one shape, so the render cache
+                    // (whose key carries no shape dimension) must not serve or store it.
+                    // Read at the request-pipeline boundary, BEFORE the cache serve
+                    // points — which is precisely why the capability is route-declared
+                    // rather than derived inside render().
+                    negotiate           : routing[name].negotiate || false,
                     // We clone because we are going to modify it while comparing urls
                     param               : JSON.clone(routing[name].param),
                     // We clone because we are going to modify it while routing (.splice(..))

@@ -2159,6 +2159,14 @@ function ServerEngineClass(options) {
                     // after a restart (the Map is empty on boot): has()/get() fall back to the disk
                     // body + its `.meta` sidecar. == server.cache.path (the writer's opt.path) by
                     // default — both resolve to the top-level `${cachePath}` (${projectPath}/cache).
+                    // #SPA1 — NOTE for anyone adding a per-route guard here: this read
+                    // is PRE-ROUTING. It keys off the raw `request.url` and there is no
+                    // `request.routing` in scope yet, so a `request.routing.negotiate`
+                    // check at this site would be a control that can never fire. A
+                    // negotiable route is kept out of the cache by the WRITERS refusing
+                    // to store it (render-swig / render-nunjucks writeCache) — which is
+                    // precisely why that refusal is load-bearing rather than belt-and-
+                    // braces. Do not "fix" this by adding a dead guard.
                     renderCache.from(server._cached, options.cachePath);
                     var cacheKey        = null
                         , hasCachedKey  = false

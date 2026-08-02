@@ -2157,7 +2157,8 @@ describe('05e - #NJ3 static HTML cache (writeCache port)', function () {
         // The server-layer read path re-plays these headers before emitting
         // the cached body (server.isaac.js:1065-1068).
         var idx  = RENDER_NJ_SRC.indexOf('async function writeCache');
-        var body = RENDER_NJ_SRC.slice(idx, idx + 1200);
+        // Window widened for the #SPA1 negotiate-refusal guard at the top of writeCache.
+        var body = RENDER_NJ_SRC.slice(idx, idx + 3200);
         assert.match(body, /var\s+responseHeaders\s*=\s*\bres\.getHeaders\(\)\s*\|\|\s*\{\s*\}/);
     });
 
@@ -2190,7 +2191,8 @@ describe('05e - #NJ3 static HTML cache (writeCache port)', function () {
         // opt (server.cache) value only fills an omitted field. Kept in
         // lockstep across render-swig / render-nunjucks / render-json.
         var idx  = RENDER_NJ_SRC.indexOf('async function writeCache');
-        var body = RENDER_NJ_SRC.slice(idx, idx + 2600);
+        // Window widened for the #SPA1 negotiate-refusal guard at the top of writeCache.
+        var body = RENDER_NJ_SRC.slice(idx, idx + 4600);
         assert.match(
             body,
             /typeof\(\s*cachingOption\.sliding\s*\)\s*==\s*['"]undefined['"]\s*&&\s*typeof\(\s*opt\.sliding\s*\)\s*!=\s*['"]undefined['"][\s\S]{0,80}cachingOption\.sliding\s*=\s*opt\.sliding/
@@ -2203,7 +2205,8 @@ describe('05e - #NJ3 static HTML cache (writeCache port)', function () {
 
     it('defaults visibility to "private" (opt-in to "public")', function () {
         var idx  = RENDER_NJ_SRC.indexOf('async function writeCache');
-        var body = RENDER_NJ_SRC.slice(idx, idx + 2500);
+        // Window widened for the #SPA1 negotiate-refusal guard at the top of writeCache.
+        var body = RENDER_NJ_SRC.slice(idx, idx + 4500);
         assert.match(
             body,
             /cacheObject\.visibility\s*=\s*\(\s*cachingOption\.visibility\s*===\s*['"]public['"]\s*\)\s*\?\s*['"]public['"]\s*:\s*['"]private['"]/
@@ -2214,7 +2217,10 @@ describe('05e - #NJ3 static HTML cache (writeCache port)', function () {
         var idx  = RENDER_NJ_SRC.indexOf('async function writeCache');
         // Window widened for the #B158 guard added at the top of writeCache: it shifts
         // `cacheObject.maxAge` from offset 2894 to 3113, past the old 3000 ceiling.
-        var body = RENDER_NJ_SRC.slice(idx, idx + 3400);
+        // Widened AGAIN for the #SPA1 negotiate-refusal guard at the same site — this
+        // is the second recurrence, so treat the fixed-offset shape as offset-fragile:
+        // any future insertion above these targets breaks it the same way.
+        var body = RENDER_NJ_SRC.slice(idx, idx + 5400);
         assert.match(body, /cachingOption\.sliding\s*===\s*true[\s\S]{0,120}cacheObject\.sliding\s*=\s*true/);
         assert.match(
             body,
@@ -2233,7 +2239,8 @@ describe('05e - #NJ3 static HTML cache (writeCache port)', function () {
         // behaviour (fromMemory/content, fs file + mkdir + cleanupFn, async
         // write) is covered by test/lib/render-cache.test.js.
         var idx  = RENDER_NJ_SRC.indexOf('async function writeCache');
-        var body = RENDER_NJ_SRC.slice(idx, idx + 4000);
+        // Window widened for the #SPA1 negotiate-refusal guard at the top of writeCache.
+        var body = RENDER_NJ_SRC.slice(idx, idx + 6000);
         assert.match(
             body,
             /await\s+renderCache\.set\(\s*cachingOption\.type\s*,\s*cacheKey\s*,\s*cacheObject\s*,\s*\{[\s\S]{0,260}content\s*:\s*htmlContent[\s\S]{0,260}kind\s*:\s*['"]html['"]/

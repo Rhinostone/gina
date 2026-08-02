@@ -2154,7 +2154,10 @@ describe('22 - bundle-wide sliding / maxAge cache defaults (server.cache)', func
         var src  = fs.readFileSync(SOURCE, 'utf8');
         var idx  = src.indexOf('async function writeCache');
         assert.ok(idx > 0, 'writeCache found');
-        var body = src.slice(idx, idx + 2600);
+        // Window widened again for the #SPA1 negotiate-refusal guard added at the top
+        // of writeCache (same class as the #B158 widening below in the sibling file):
+        // the guard shifts the sliding/maxAge fallbacks past the old 2600 ceiling.
+        var body = src.slice(idx, idx + 4600);
         // ttl fallback still present (regression)
         assert.match(body, /typeof\(\s*cachingOption\.ttl\s*\)\s*==\s*['"]undefined['"][\s\S]{0,120}cachingOption\.ttl\s*=\s*opt\.ttl/);
         // new sliding + maxAge fallbacks (route value wins; opt only fills an omitted field)

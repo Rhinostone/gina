@@ -230,6 +230,13 @@ function Routing() {
             if ( typeof(routeObject.queryTimeout) != 'undefined' ) {
                 params.queryTimeout = parseTimeout(routeObject.queryTimeout);
             }
+            // #SPA1 — propagate the per-route content-negotiation capability to
+            // req.routing.negotiate (top-level, NOT req.routing.param.* — the #CSRF2
+            // trap). Assigned only when declared, so a routing.json that never mentions
+            // `negotiate` produces a byte-identical params object.
+            if ( typeof(routeObject.negotiate) != 'undefined' ) {
+                params.negotiate = routeObject.negotiate;
+            }
 
             // isRoute
             return self.compareUrls(params, routeObject.url, req);

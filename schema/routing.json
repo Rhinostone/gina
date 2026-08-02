@@ -122,6 +122,11 @@
             "enum": ["local", "beta", "production", "testing"]
           }
         },
+        "negotiate": {
+          "type": "boolean",
+          "default": false,
+          "description": "Opt this route into content negotiation (#SPA1). When true, a request carrying `X-Gina-Navigate: fragment` receives the route's layoutless body instead of the full page, and the response advertises `Vary: X-Gina-Navigate`. Absent or false, the route renders exactly as before. A negotiable route never participates in the render cache: the cache key carries no shape dimension, and both serve points run before the shape is resolved — so pairing `negotiate` with `cache` would risk serving a fragment to a page request."
+        },
         "cache": {
           "description": "Response caching configuration. Use a string for the cache type shorthand, or an object for full control.",
           "oneOf": [

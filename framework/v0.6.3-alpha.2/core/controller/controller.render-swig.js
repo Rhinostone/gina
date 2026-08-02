@@ -53,6 +53,17 @@ async function writeCache(bundle, opt, htmlContent, req, res, cacheIsEnabled, th
         // #B158 — a gated route is never stored: the key carries no principal and
         // both serve points run before the gate. Full rationale on isRouteGated.
         lib.authzGate.isRouteGated(req)
+        ||
+        // #SPA1 — a NEGOTIABLE route is never stored, for the identical reason one
+        // sentence up: the key carries no SHAPE dimension, and both serve points run
+        // before the shape is resolved. Storing one would let a fragment be replayed
+        // to a page request (and vice versa) on the same URL.
+        // This WRITE-side refusal is LOAD-BEARING, not merely defence-in-depth:
+        // isaac's cache read runs PRE-ROUTING (server.isaac.js ~:2150 — it keys off
+        // the raw request.url with no request.routing in scope, measured), so that
+        // read CANNOT be guarded on the flag. Never writing the entry is what keeps
+        // the isaac path correct; the express-side read guard is the belt.
+        ( req.routing && req.routing.negotiate === true )
     ) {
         return;
     }
