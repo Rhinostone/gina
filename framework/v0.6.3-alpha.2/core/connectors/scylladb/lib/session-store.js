@@ -48,8 +48,9 @@ var noop = function() {};
  * waiting for TTL to expire.
  *
  * @param {object} session - The `express-session` module (must have `.Store` on it).
- *                           The caller sets `session.name` to the connectors.json key
- *                           before calling `new SessionStore(session)`.
+ *                           `session.name` is express-session's read-only function name —
+ *                           the literal `'session'` — so the bundle's connectors.json must
+ *                           declare its store entry under the key `"session"` (#B206).
  * @param {string} bundle  - Bundle name — used to look up `getConfig()[bundle][env]`.
  * @returns {function}     - ScylladbStore constructor.
  */

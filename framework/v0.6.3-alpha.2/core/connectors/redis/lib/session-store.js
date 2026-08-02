@@ -37,8 +37,10 @@ var noop = function() {};
  * Supports standalone Redis, Redis Cluster, and TLS (ElastiCache, Cloud Memorystore, Upstash).
  *
  * @param {object} session       - The `express-session` module (must have `.Store` on it).
- *                                 The caller sets `session.name` to the connectors.json key
- *                                 before calling `new SessionStore(session)`.
+ *                                 `session.name` is express-session's read-only function
+ *                                 name — the literal `'session'` — so the bundle's
+ *                                 connectors.json must declare its store entry under the
+ *                                 key `"session"` (#B206).
  * @param {string} bundle        - Bundle name — used to look up `getConfig()[bundle][env]`.
  * @returns {function}           - RedisStore constructor.
  */
@@ -54,7 +56,7 @@ module.exports = function(session, bundle) {
     // `getConfig()` and `getContext()` are framework globals injected by gna.js.
     var env      = getContext().env;
     var conf     = getConfig()[bundle][env];
-    var connName = session.name; // the key in connectors.json (e.g. "myRedis")
+    var connName = session.name; // express-session's read-only function name — always the literal 'session' (#B206)
     var connConf = (conf && conf.content && conf.content.connectors && conf.content.connectors[connName]) || {};
 
     /**

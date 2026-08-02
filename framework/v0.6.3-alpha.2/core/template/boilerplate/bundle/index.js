@@ -32,13 +32,15 @@ var ${bundle} = require('gina');
 //    // var session = ${bundle}.plugins.Session(expressSession);
 //    //
 //    // Redis — multi-pod / K8s (requires: npm install ioredis)
-//    // Configure connectors.json: { "myRedis": { "connector": "redis", "host": "...", "port": 6379, "ttl": 86400 } }
-//    // expressSession.name = 'myRedis';
+//    // Configure connectors.json: { "session": { "connector": "redis", "host": "...", "port": 6379, "ttl": 86400 } }
 //    //
 //    // SQLite — dev / staging / single-pod (requires: Node >= 22.5.0, zero npm deps)
-//    // Configure connectors.json: { "myDb": { "connector": "sqlite", "database": ":memory:", "ttl": 86400 } }
-//    // expressSession.name = 'myDb';
+//    // Configure connectors.json: { "session": { "connector": "sqlite", "database": ":memory:", "ttl": 86400 } }
 //    //
+//    // The store factory keys on express-session's function name — the literal
+//    // "session", which is read-only and cannot be re-pointed — so the
+//    // connectors.json entry MUST be named "session"; its `connector` field
+//    // selects the backend (#B206).
 //    // var StoreClass = new SessionStore(expressSession);  // returns connector-specific Store class
 //    //
 //    // Recommended: keep the session secret out of tracked source via the
