@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Fixed lib/math checkSumSync misrouting data to the filesystem: any input whose serialized form ended in a dot plus 3 lowercase letters (an email domain, a URL, a filename mentioned in text) was passed to fs.readFileSync and threw ENOENT or ENAMETOOLONG instead of returning a checksum, with the error naming the caller''s own data as a path. The extension-shaped tail is now only a fast-path hint: the file branch is taken solely when the path resolves to an existing regular file, and everything else - including a directory whose name looks like a domain - is hashed as data. Inputs that previously succeeded return byte-identical checksums; unreadable existing files (e.g. EACCES) still fail loudly. (#B207)'
+time: 2026-08-02T03:29:51+01:00

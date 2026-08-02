@@ -133,3 +133,77 @@ describe('04 - math.operate — source-inspection guards', function () {
         assert.ok(/#SCS1/.test(mathSource), 'expected `#SCS1` tag in source');
     });
 });
+
+describe('05 - math.checkSumSync — file/data dispatch on extension-shaped tails', function () {
+    // #B207 — an extension-shaped tail (`.com`, `.pdf`, ...) is only a HINT that the
+    // input names a file: serialized data can end the same way. The file branch must
+    // only be taken when the path actually resolves to a file; everything else is data.
+    var { before, after } = require('node:test');
+    var fs     = require('fs');
+    var os     = require('os');
+    var crypto = require('crypto');
+
+    var sha1 = function (data) {
+        return crypto.createHash('sha1').update(data, 'utf8').digest('hex');
+    };
+
+    var tmpDir = null, tmpFile = null, tmpSubDir = null;
+    before(function () {
+        tmpDir    = fs.mkdtempSync(path.join(os.tmpdir(), 'gina-math-'));
+        tmpFile   = path.join(tmpDir, 'fixture.txt');
+        fs.writeFileSync(tmpFile, 'file body bytes\n');
+        tmpSubDir = path.join(tmpDir, 'sub.com'); // an existing DIRECTORY with a dot+3 tail
+        fs.mkdirSync(tmpSubDir);
+    });
+    after(function () {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+    });
+
+    it('hashes an object whose serialization ends in an extension-shaped tail as data', function () {
+        assert.equal(
+            math.checkSumSync({ contact: 'user@example.com' }, 'sha1'),
+            sha1('contact:user@example.com')
+        );
+    });
+
+    it('hashes string data ending in `.com` as data', function () {
+        var data = 'any text mentioning example.com';
+        assert.equal(math.checkSumSync(data, 'sha1'), sha1(data));
+    });
+
+    it('hashes data longer than the OS filename limit ending in `.com` as data', function () {
+        var data = 'x'.repeat(1000) + '.com';
+        assert.equal(math.checkSumSync(data, 'sha1'), sha1(data));
+    });
+
+    it('hashes data containing a NUL byte ending in `.com` as data', function () {
+        var data = 'data\u0000ending.com';
+        assert.equal(math.checkSumSync(data, 'sha1'), sha1(data));
+    });
+
+    it('hashes a path naming an existing directory with a dot+3 tail as data', function () {
+        assert.equal(math.checkSumSync(tmpSubDir, 'sha1'), sha1(tmpSubDir));
+    });
+
+    it('still hashes an existing file with a dot+3 tail by its bytes (control)', function () {
+        assert.equal(
+            math.checkSumSync(tmpFile, 'sha1'),
+            crypto.createHash('sha1').update(fs.readFileSync(tmpFile)).digest('hex')
+        );
+    });
+
+    it('still hashes plain string data with no extension tail (control)', function () {
+        assert.equal(math.checkSumSync('hello world', 'sha1'), sha1('hello world'));
+    });
+
+    it('still hashes an object with a non-extension tail (control)', function () {
+        assert.equal(math.checkSumSync({ count: 42 }, 'sha1'), sha1('count:42'));
+    });
+
+    it('defaults to md5/hex when algorithm and encoding are omitted (control)', function () {
+        assert.equal(
+            math.checkSumSync('hello world'),
+            crypto.createHash('md5').update('hello world', 'utf8').digest('hex')
+        );
+    });
+});

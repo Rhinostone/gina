@@ -213,13 +213,28 @@ function MathHelper() {
     };
 
     /**
-     * Check sum from file or form data
+     * Check sum from a file or from form data.
      *
-     * @param {string|ojbect|array} filename|data
-     * @param {string} algorithm
-     * @param {string} encoding
+     * Dispatch: an object or array input is serialized first (a plain object as
+     * sorted `key:value` pairs joined with `,` — see `objectToString`). A string
+     * ending in a dot followed by 3 lowercase letters (`.txt`, `.css`, ...) is
+     * then PROBED as a filename: the file branch is taken only when the path
+     * resolves to an existing regular file — anything else (no such entry, name
+     * too long, a directory, a NUL-carrying string) is hashed as data. Note the
+     * file probe only fires for dot+3-lowercase tails, so a path like `file.js`
+     * or `file.json` is hashed as a data string, never read from disk. (#B207)
+     *
+     * @param {string|object|array} filename|data - path to an existing file, or raw data
+     * @param {string} [algorithm] - e.g.: sha1 (defaults to md5)
+     * @param {string} [encoding] - e.g.: hex (default)
      *
      * @returns {string} checksum
+     * @throws {Error} on an unreadable existing file (e.g. EACCES) or a digest failure
+     *
+     * @example
+     *  var math = require('gina').lib.math;
+     *  math.checkSumSync({ contact: 'user@example.com' }, 'sha1'); // hash of `contact:user@example.com`
+     *  math.checkSumSync('/tmp/manifest.txt', 'sha1');             // hash of the file bytes
      * */
     self.checkSumSync = function(filename, algorithm, encoding) {
         var sum = null;
@@ -229,7 +244,25 @@ function MathHelper() {
                 filename = objectToString(filename);
             }
 
+            // #B207 — an extension-shaped tail is only a HINT that the input is a
+            // filename: serialized data ends the same way (`user@example.com`,
+            // `report.pdf`). Only take the file branch when the path resolves to an
+            // actual file; data that merely looks like a name falls through.
+            var isFile = false;
             if ( /(\.[a-z]{3})$/.test(filename) ) { // must be a string
+                try {
+                    isFile = fs.statSync(filename).isFile();
+                } catch (statErr) {
+                    // ENOENT / ENAMETOOLONG / ENOTDIR / ERR_INVALID_ARG_VALUE: the
+                    // input cannot name an existing file — treat it as data. Anything
+                    // else (e.g. EACCES on a real entry) must keep failing loudly.
+                    if ( !/^(ENOENT|ENAMETOOLONG|ENOTDIR|ERR_INVALID_ARG_VALUE)$/.test(statErr.code) ) {
+                        throw statErr;
+                    }
+                }
+            }
+
+            if (isFile) {
                 // from filename
                 sum = checkSum( fs.readFileSync(filename), algorithm, encoding )
             } else {
