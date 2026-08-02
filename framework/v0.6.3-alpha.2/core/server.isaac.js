@@ -310,7 +310,8 @@ const slice = Array.prototype.slice;
  * @param {string} options.cachePath - Absolute path to the bundle cache directory
  * @param {boolean} options.isCacheless - True in dev mode; clears local cache on startup
  * @param {object} options.credentials - TLS credentials (privateKey, certificate, ca, passphrase)
- * @param {object} options.allRoutes - Full routing map (used for frontend routing cache)
+ * @param {object} options.allRoutes - Full routing map (no longer read here — the client maps arrive pre-built, see clientRoutingAssets)
+ * @param {{full: object, stripped: object}} options.clientRoutingAssets - Client-served routing maps built once by core/server.js `buildClientRoutingAssets` (#B212) — the full map and the #B66 host-stripped variant; isaac writes them to disk and serves the precompressed files as its fast-path
  * @param {string} options.preferedCompressionEncodingOrder - Ordered list of accepted encodings
  * @param {number} [options.keepAliveTimeout] - Server keep-alive timeout in ms
  * @param {number} [options.headersTimeout] - Server headers timeout in ms
@@ -360,56 +361,20 @@ function ServerEngineClass(options) {
             localCachePathObj.rmSync();
         }
         // For frontend template routing if needed
-        // TODO - Used `options.routing` instead after having filtered `options.allRoutes` vs `options.formsRules` to use only external routes exposed by `"query"` validation
-        // replaced: delete operator + for...in — destructuring rest builds clean objects (#P21, #P22)
-        var _routing = JSON.clone(options.allRoutes);
-        // var _routing = JSON.clone(options.routing);
-        var _routingKeys = Object.keys(_routing);
-        for (var ri = 0; ri < _routingKeys.length; ++ri) {
-            const { _comment, middleware, ...clean } = _routing[_routingKeys[ri]];
-            // #COMPLY1 — the authorization keys are server-side contracts, stripped from
-            // the client-served map: `roles` (and later `policy`) name the bundle's
-            // authorization model — a disclosure to the browser — and `requireAuth`
-            // rides along for consistency. The browser bundle reads none of them
-            // (measured: zero readers in the client src AND in the built artifacts).
-            // `_routing` is a JSON.clone, so rebuilding `param` here can never touch the
-            // live config; the #B66 stripped variant below is cloned FROM this map, so
-            // it inherits the strip.
-            if ( clean.param && typeof(clean.param) == 'object' ) {
-                const { requireAuth, roles, policy, ...cleanParam } = clean.param;
-                // #COMPLY10 — `public` is an authorization key too: under deny-by-default
-                // the set of public routes IS the authentication surface, so serving the
-                // markers hands an anonymous client a free recon map of what it can reach.
-                // Stripped with `delete` rather than by joining the destructuring above,
-                // for two independent reasons: `public` is a strict-mode RESERVED WORD, so
-                // the bare binding form is a SyntaxError (only a renamed binding compiles);
-                // and a separate statement leaves the destructuring line byte-identical to
-                // what the #COMPLY1 tests pin. The `#P21`/`#P22` note at the top of this
-                // loop moved AWAY from `delete` for V8 hidden-class reasons on hot paths —
-                // this loop runs once at boot over a bounded route table, so that rationale
-                // does not apply here.
-                delete cleanParam.public;
-                clean.param = cleanParam;
-            }
-            _routing[_routingKeys[ri]] = clean;
-
-            // reverseRouting is done on the frontend side
-
-        }// EO for routing keys
-
-        // #B66 — a host-stripped variant of the routing map, served to PROXIED clients
-        // so the browser never receives any bundle's INTERNAL scheme://host:port (an
-        // information disclosure) and cross-bundle client toUrl resolves same-origin.
-        // Drop each route's `host` + `hostname`; KEEP `webroot` (the client toUrl path
-        // relies on it). Proxy-host-agnostic + boot-static like the full map above; the
-        // serve-time handler picks stripped-vs-full per request on request._ginaIsProxyHost.
-        // See the #B66 handler branch below.
-        var _routingStripped = JSON.clone(_routing);
-        var _routingStrippedKeys = Object.keys(_routingStripped);
-        for (var si = 0; si < _routingStrippedKeys.length; ++si) {
-            const { host, hostname, ...cleanStripped } = _routingStripped[_routingStrippedKeys[si]];
-            _routingStripped[_routingStrippedKeys[si]] = cleanStripped;
-        }// EO for stripped routing keys
+        // #B212 — the client-served maps (the full map + the #B66 host-stripped
+        // variant, #COMPLY1/#COMPLY10 strip included) are now built ONCE, engine-
+        // agnostically, by core/server.js (buildClientRoutingAssets) and handed to
+        // every engine via options.clientRoutingAssets — one builder, two consumers:
+        // server.js serves the pre-stringified maps from memory in its onRequest
+        // catch-all (the express path, which used to 404 here), while isaac writes
+        // them to disk below and serves the precompressed files as its fast-path.
+        // Rebuilding the maps here would re-create the exact writer/reader drift
+        // the #C3 lesson warns about.
+        var _routing         = ( options.clientRoutingAssets && options.clientRoutingAssets.full ) || null;
+        var _routingStripped = ( options.clientRoutingAssets && options.clientRoutingAssets.stripped ) || null;
+        if ( !_routing ) {
+            console.warn('[ SERVER ][ isaac ] options.clientRoutingAssets missing — the client routing assets (routing.json / routing.stripped.json) will not be written for this boot.');
+        }
 
         // Checking if brotli is installed
         var brotliBin = null;

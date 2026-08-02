@@ -731,9 +731,11 @@ describe('§09 — the slice-2 boot lint (pure-logic replica of the FULL core/se
     });
 });
 
-describe('§10 — the client-served routing blob strips the authorization keys (server.isaac.js)', function () {
+describe('§10 — the client-served routing blob strips the authorization keys (core/server.js — the shared #B212 builder, both engines)', function () {
 
-    // Verbatim-lifted from the server.isaac.js full-blob loop body.
+    // Verbatim-lifted from the core/server.js buildClientRoutingAssets loop body
+    // (#B212 — the build moved there from server.isaac.js so both engines serve
+    // the same strip; isaac now consumes the built maps for its file fast-path).
     function stripLikeIsaac(route) {
         const { _comment, middleware, ...clean } = route;
         if ( clean.param && typeof(clean.param) == 'object' ) {
@@ -744,13 +746,13 @@ describe('§10 — the client-served routing blob strips the authorization keys 
     }
 
     it('01. source pin — the boot-built blob rebuilds param without requireAuth/roles/policy', function () {
-        assert.match(ISAAC_SRC, /const \{ requireAuth, roles, policy, \.\.\.cleanParam \} = clean\.param;/);
-        assert.match(ISAAC_SRC, /clean\.param = cleanParam;/);
+        assert.match(SERVER_SRC, /const \{ requireAuth, roles, policy, \.\.\.cleanParam \} = clean\.param;/);
+        assert.match(SERVER_SRC, /clean\.param = cleanParam;/);
     });
 
     it('02. DECISIVE — the strip runs BEFORE the #B66 stripped variant is derived, so BOTH client blobs inherit it', function () {
-        var stripIdx   = ISAAC_SRC.indexOf('const { requireAuth, roles, policy, ...cleanParam } = clean.param;');
-        var derivedIdx = ISAAC_SRC.indexOf('var _routingStripped = JSON.clone(_routing);');
+        var stripIdx   = SERVER_SRC.indexOf('const { requireAuth, roles, policy, ...cleanParam } = clean.param;');
+        var derivedIdx = SERVER_SRC.indexOf('var _routingStripped = JSON.clone(_routing);');
         assert.ok(stripIdx > -1, 'the strip');
         assert.ok(derivedIdx > -1, 'the #B66 host-stripped derivation');
         assert.ok(stripIdx < derivedIdx,
@@ -1495,9 +1497,10 @@ describe('§15 — #COMPLY10 deny-by-default: source pins', function () {
                && SERVER_SRC.indexOf('? process.gina._authConf.byBundle : {}') > -1, 'reads the existing map first, so an earlier bundle is not erased');
     });
     it('15.5 - the client-served routing blob strips `public` too', function () {
-        assert.ok(ISAAC_SRC.indexOf('delete cleanParam.public;') > -1, '`public` is stripped');
+        assert.ok(SERVER_SRC.indexOf('delete cleanParam.public;') > -1, '`public` is stripped');
         // The #COMPLY1 destructuring line must stay byte-identical — §10 pins it.
-        assert.ok(ISAAC_SRC.indexOf('const { requireAuth, roles, policy, ...cleanParam } = clean.param;') > -1,
+        // (#B212 — the strip lives in core/server.js's buildClientRoutingAssets now.)
+        assert.ok(SERVER_SRC.indexOf('const { requireAuth, roles, policy, ...cleanParam } = clean.param;') > -1,
             'the pinned #COMPLY1 strip line is untouched');
     });
     it('15.6 - the shipped settings template ships the mode OFF', function () {

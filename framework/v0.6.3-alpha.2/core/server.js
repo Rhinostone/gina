@@ -433,6 +433,82 @@ function _readInstrumentBody(req, cb) {
     req.on('error', function(e) { _finish(e); });
 }
 
+/**
+ * Builds the client-served routing maps from the boot-time global route
+ * table: the full map, and the #B66 host-stripped variant served to proxied
+ * clients.
+ *
+ * #B212 — this is the ONE engine-agnostic builder. It moved here verbatim
+ * from the isaac engine constructor (`server.isaac.js`), where it lived
+ * isaac-only — leaving `/_gina/assets/routing.json` a 404 under any other
+ * engine, in violation of the `/_gina/*` endpoint-sync rule (and the client,
+ * lacking a `response.ok` check — #B213 — then installed the 404 JSON body AS
+ * its routing table). Two consumers, one source of truth: `init()` hands the
+ * maps to the engine via `serverOpt.clientRoutingAssets` (isaac writes them to
+ * disk and serves the precompressed files as its fast-path) and keeps
+ * pre-stringified copies on `self._clientRoutingAssets` for the engine-
+ * agnostic `onRequest` handler (the express path). Rebuilding per engine
+ * would re-create the writer/reader drift the #C3 lesson warns about.
+ *
+ * Runs once at boot over a bounded route table — not a hot path.
+ *
+ * @private
+ * @param {object} allRoutes - The boot-time global (all-bundles) route table (`options.conf.routing`)
+ * @returns {{full: object, stripped: object}} The client-safe full map and the #B66 host-stripped variant (both fresh clones — the live config is never touched)
+ */
+function buildClientRoutingAssets(allRoutes) {
+    // replaced: delete operator + for...in — destructuring rest builds clean objects (#P21, #P22)
+    var _routing = JSON.clone(allRoutes);
+    var _routingKeys = Object.keys(_routing);
+    for (var ri = 0; ri < _routingKeys.length; ++ri) {
+        const { _comment, middleware, ...clean } = _routing[_routingKeys[ri]];
+        // #COMPLY1 — the authorization keys are server-side contracts, stripped from
+        // the client-served map: `roles` (and later `policy`) name the bundle's
+        // authorization model — a disclosure to the browser — and `requireAuth`
+        // rides along for consistency. The browser bundle reads none of them
+        // (measured: zero readers in the client src AND in the built artifacts).
+        // `_routing` is a JSON.clone, so rebuilding `param` here can never touch the
+        // live config; the #B66 stripped variant below is cloned FROM this map, so
+        // it inherits the strip.
+        if ( clean.param && typeof(clean.param) == 'object' ) {
+            const { requireAuth, roles, policy, ...cleanParam } = clean.param;
+            // #COMPLY10 — `public` is an authorization key too: under deny-by-default
+            // the set of public routes IS the authentication surface, so serving the
+            // markers hands an anonymous client a free recon map of what it can reach.
+            // Stripped with `delete` rather than by joining the destructuring above,
+            // for two independent reasons: `public` is a strict-mode RESERVED WORD, so
+            // the bare binding form is a SyntaxError (only a renamed binding compiles);
+            // and a separate statement leaves the destructuring line byte-identical to
+            // what the #COMPLY1 tests pin. The `#P21`/`#P22` note at the top of this
+            // loop moved AWAY from `delete` for V8 hidden-class reasons on hot paths —
+            // this loop runs once at boot over a bounded route table, so that rationale
+            // does not apply here.
+            delete cleanParam.public;
+            clean.param = cleanParam;
+        }
+        _routing[_routingKeys[ri]] = clean;
+
+        // reverseRouting is done on the frontend side
+
+    }// EO for routing keys
+
+    // #B66 — a host-stripped variant of the routing map, served to PROXIED clients
+    // so the browser never receives any bundle's INTERNAL scheme://host:port (an
+    // information disclosure) and cross-bundle client toUrl resolves same-origin.
+    // Drop each route's `host` + `hostname`; KEEP `webroot` (the client toUrl path
+    // relies on it). Proxy-host-agnostic + boot-static like the full map above; the
+    // serve-time handlers pick stripped-vs-full per request (isaac on the #B65
+    // request stamp, the engine-agnostic onRequest handler on its #B65-twin).
+    var _routingStripped = JSON.clone(_routing);
+    var _routingStrippedKeys = Object.keys(_routingStripped);
+    for (var si = 0; si < _routingStrippedKeys.length; ++si) {
+        const { host, hostname, ...cleanStripped } = _routingStripped[_routingStrippedKeys[si]];
+        _routingStripped[_routingStrippedKeys[si]] = cleanStripped;
+    }// EO for stripped routing keys
+
+    return { full: _routing, stripped: _routingStripped };
+}
+
 function Server(options) {
 
     // switching logger flow
@@ -736,6 +812,24 @@ function Server(options) {
             if ( ioServerOpt ) {
                 serverOpt.ioServer = ioServerOpt
             }
+
+            // #B212 — build the client-served routing maps ONCE here, engine-
+            // agnostically, so /_gina/assets/routing.json serves identically under
+            // every engine: isaac consumes these via serverOpt for its
+            // precompressed-file fast-path, and the engine-agnostic onRequest
+            // handler below serves the pre-stringified copies from memory (the
+            // express path, which used to fall through to routing and 404).
+            // Built BEFORE `new Engine(serverOpt)` — isaac reads them in its
+            // constructor.
+            // TODO - Use the per-bundle `routing` instead of `allRoutes` after having
+            // filtered `allRoutes` vs `formsRules` to use only external routes exposed
+            // by `"query"` validation
+            var _clientRoutingAssets = buildClientRoutingAssets(serverOpt.allRoutes);
+            serverOpt.clientRoutingAssets = _clientRoutingAssets;
+            self._clientRoutingAssets = {
+                full     : JSON.stringify(_clientRoutingAssets.full),
+                stripped : JSON.stringify(_clientRoutingAssets.stripped)
+            };
 
             Engine = require('./server.' + ((typeof (serverOpt.engine) != 'undefined' && serverOpt.engine != '') ? serverOpt.engine : 'express'));
             var engine = new Engine(serverOpt);
@@ -4038,6 +4132,46 @@ function Server(options) {
                 response.setHeader('expires',       '0');
                 response.statusCode = 200;
                 return response.end(JSON.stringify({ status: 'healthy', timestamp: new Date().toISOString() }));
+            }
+
+            // ── /_gina/assets/routing.json — client routing map (always-on, public) ─────
+            // (#B212) Engine-agnostic mirror of the Isaac fast-path (server.isaac.js
+            // ~:2079). Under isaac the fast-path answers first with the precompressed
+            // file variants, so this handler is what serves the map under any other
+            // engine (express) — where the asset previously fell through to routing
+            // and 404'd, and the client (no response.ok check — #B213) then installed
+            // the 404 JSON body AS its routing table. Serves the maps built once at
+            // init by buildClientRoutingAssets(). GET only + the isaac header set;
+            // X-Powered-By / X-Request-Id are already emitted above for every
+            // onInstance response, so they are inherited, not re-set.
+            if (
+                request.method.toUpperCase() === 'GET'
+                && /\/_gina\/assets\/routing\.json$/i.test(request.url)
+                && self._clientRoutingAssets
+            ) {
+                // #B65-twin — per-request proxied classification (keep in sync with
+                // the core/server.isaac.js #B65 block + the core/router.js #B67 twin):
+                // proxied iff the inbound Host is port-less (heuristic, disabled by
+                // process.gina._proxyRequireForwarded — #B152) OR an explicit
+                // X-Forwarded-Host is present. Computed inline because the #B65 stamp
+                // (request._ginaIsProxyHost) is isaac-request-path-only and the #B67
+                // twin runs at routing time — after this handler.
+                var _croutHost    = request.headers.host || request.headers[':authority'];
+                var _croutProxied = (
+                    ( _croutHost && !/\:[0-9]+$/.test(_croutHost)
+                        && process.gina._proxyRequireForwarded !== true )
+                    || request.headers['x-forwarded-host']
+                ) ? true : false;
+                response.setHeader('content-type', 'application/json; charset=utf8');
+                response.setHeader('vary', 'Origin');
+                // #B66 — a shared cache must not cross-serve the stripped (proxied) and
+                // full (raw) variants under the same URL; mark the proxied variant private.
+                response.setHeader('cache-control', ( _croutProxied === true ) ? 'private, max-age=86400' : 'public, max-age=86400');
+                response.setHeader('x-content-type-options', 'nosniff');
+                response.setHeader('x-frame-options', 'DENY');
+                response.setHeader('x-xss-protection', '1; mode=block');
+                response.statusCode = 200;
+                return response.end( ( _croutProxied === true ) ? self._clientRoutingAssets.stripped : self._clientRoutingAssets.full );
             }
 
             // ── /_gina/metrics — Prometheus exposition (always-on, opt-in via app.json) ──

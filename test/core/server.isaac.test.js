@@ -12,13 +12,19 @@ var src; // lazily loaded — avoids repeated readFileSync calls
 describe('01 - V8 arm64 regression: const not var for object rest destructuring', function() {
 
     it('source uses const (not var) for routing object rest destructuring', function() {
-        var src = fs.readFileSync(SOURCE, 'utf8');
+        // #B212 — the routing rest-destructuring moved to core/server.js's
+        // buildClientRoutingAssets (built once, both engines); the const-not-var
+        // V8 arm64 guard follows the line to its new home. The negative half is
+        // asserted on BOTH files so a revert cannot reappear in either.
+        var serverSrc = fs.readFileSync(path.join(require('../fw'), 'core/server.js'), 'utf8');
+        var isaacSrc  = fs.readFileSync(SOURCE, 'utf8');
         assert.ok(
-            /const\s*\{\s*_comment\s*,\s*middleware\s*,\s*\.\.\.clean\s*\}/.test(src),
+            /const\s*\{\s*_comment\s*,\s*middleware\s*,\s*\.\.\.clean\s*\}/.test(serverSrc),
             'expected `const { _comment, middleware, ...clean }` — was changed from `var` to fix V8 arm64 hang'
         );
         assert.ok(
-            !/var\s*\{\s*_comment\s*,\s*middleware\s*,\s*\.\.\.clean\s*\}/.test(src),
+            !/var\s*\{\s*_comment\s*,\s*middleware\s*,\s*\.\.\.clean\s*\}/.test(serverSrc)
+            && !/var\s*\{\s*_comment\s*,\s*middleware\s*,\s*\.\.\.clean\s*\}/.test(isaacSrc),
             '`var { _comment, middleware, ...clean }` must not appear — causes V8 hang on arm64 Node 25'
         );
     });
@@ -2943,9 +2949,15 @@ describe('15b - #B65 reverse-proxy host context: classification, three-topology 
 describe('16 - #B66 host-stripped routing.json for proxied clients source structure', function() {
 
     function getSrc() { return src || (src = fs.readFileSync(SOURCE, 'utf8')); }
+    // #B212 — the map BUILD (full + stripped, #COMPLY1 strip included) moved to
+    // core/server.js's buildClientRoutingAssets so both engines serve the same
+    // maps; isaac keeps the file write + precompression + serve fast-path below.
+    // The build-shape pins therefore read core/server.js now.
+    var serverSrc;
+    function getServerSrc() { return serverSrc || (serverSrc = fs.readFileSync(path.join(require('../fw'), 'core/server.js'), 'utf8')); }
 
     it('boot-builds a host-stripped variant by cloning the full map and dropping host+hostname', function() {
-        var s = getSrc();
+        var s = getServerSrc();
         assert.ok(s.indexOf('var _routingStripped = JSON.clone(_routing);') > -1,
             'expected _routingStripped cloned from the (already comment/middleware-stripped) full map');
         assert.ok(s.indexOf('const { host, hostname, ...cleanStripped } = _routingStripped[_routingStrippedKeys[si]];') > -1,
@@ -2953,7 +2965,7 @@ describe('16 - #B66 host-stripped routing.json for proxied clients source struct
     });
 
     it('keeps webroot in the stripped variant (never destructured away — load-bearing for client toUrl)', function() {
-        var s = getSrc();
+        var s = getServerSrc();
         assert.ok(s.indexOf('const { host, hostname, ...cleanStripped }') > -1);
         assert.ok(s.indexOf('const { host, hostname, webroot,') < 0,
             'webroot must NOT be dropped — the client toUrl path relies on route.webroot');
