@@ -257,3 +257,70 @@ describe('06 - math.checkSumSync — array and object serialization', function (
         );
     });
 });
+
+describe('07 - math.checkSumSync — widened extension probe (any real extension)', function () {
+    // #B210 — the file probe used to fire ONLY for dot+3-lowercase tails, so real
+    // paths like file.js / file.json / FILE.TXT were hashed as PATH STRINGS and
+    // never read. The probe now accepts a dot + 1-10 alphanumerics (still
+    // stat-gated per the dispatch contract); extension-less paths remain data.
+    var { before, after } = require('node:test');
+    var fs     = require('fs');
+    var os     = require('os');
+    var crypto = require('crypto');
+
+    var sha1 = function (data) {
+        return crypto.createHash('sha1').update(data, 'utf8').digest('hex');
+    };
+    var sha1File = function (p) {
+        return crypto.createHash('sha1').update(fs.readFileSync(p)).digest('hex');
+    };
+
+    var tmpDir = null, files = {};
+    before(function () {
+        tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gina-math-ext-'));
+        var fixtures = {
+            js:     ['fixture.js',   'var x = 1;\n'],
+            json:   ['fixture.json', '{"k":"v"}\n'],
+            upper:  ['FIXTURE.TXT',  'UPPER body\n'],
+            single: ['fixture.c',    'int main() { return 0; }\n'],
+            noext:  ['LICENSEFILE',  'license text body\n']
+        };
+        for (var key in fixtures) {
+            files[key] = path.join(tmpDir, fixtures[key][0]);
+            fs.writeFileSync(files[key], fixtures[key][1]);
+        }
+    });
+    after(function () {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+    });
+
+    it('hashes an existing `.js` file by its bytes', function () {
+        assert.equal(math.checkSumSync(files.js, 'sha1'), sha1File(files.js));
+    });
+
+    it('hashes an existing `.json` file by its bytes', function () {
+        assert.equal(math.checkSumSync(files.json, 'sha1'), sha1File(files.json));
+    });
+
+    it('hashes an existing uppercase-extension file by its bytes', function () {
+        assert.equal(math.checkSumSync(files.upper, 'sha1'), sha1File(files.upper));
+    });
+
+    it('hashes an existing single-letter-extension file by its bytes', function () {
+        assert.equal(math.checkSumSync(files.single, 'sha1'), sha1File(files.single));
+    });
+
+    it('still hashes an extension-less file path as data (boundary control)', function () {
+        assert.equal(math.checkSumSync(files.noext, 'sha1'), sha1(files.noext));
+    });
+
+    it('still hashes extension-shaped data naming no file as data (control)', function () {
+        var data = 'report draft.docx';
+        assert.equal(math.checkSumSync(data, 'sha1'), sha1(data));
+    });
+
+    it('a trailing dot is not an extension shape (control)', function () {
+        var data = 'a sentence that ends with a dot.';
+        assert.equal(math.checkSumSync(data, 'sha1'), sha1(data));
+    });
+});

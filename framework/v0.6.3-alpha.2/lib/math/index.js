@@ -231,12 +231,13 @@ function MathHelper() {
      *
      * Dispatch: an object or array input is serialized first (a plain object as
      * sorted `key:value` pairs joined with `,` — see `objectToString`). A string
-     * ending in a dot followed by 3 lowercase letters (`.txt`, `.css`, ...) is
-     * then PROBED as a filename: the file branch is taken only when the path
-     * resolves to an existing regular file — anything else (no such entry, name
-     * too long, a directory, a NUL-carrying string) is hashed as data. Note the
-     * file probe only fires for dot+3-lowercase tails, so a path like `file.js`
-     * or `file.json` is hashed as a data string, never read from disk. (#B207)
+     * ending in an extension shape — a dot followed by 1-10 alphanumerics
+     * (`.txt`, `.js`, `.json`, `.TXT`, `.c`, ...) — is then PROBED as a
+     * filename: the file branch is taken only when the WHOLE string resolves to
+     * an existing regular file — anything else (no such entry, name too long, a
+     * directory, a NUL-carrying string) is hashed as data. Note the probe needs
+     * an extension-shaped tail: an extension-less path (`Makefile`, `LICENSE`)
+     * is hashed as a data string, never read from disk. (#B207/#B210)
      *
      * @param {string|object|array} filename|data - path to an existing file, or raw data
      * @param {string} [algorithm] - e.g.: sha1 (defaults to md5)
@@ -263,7 +264,10 @@ function MathHelper() {
             // `report.pdf`). Only take the file branch when the path resolves to an
             // actual file; data that merely looks like a name falls through.
             var isFile = false;
-            if ( /(\.[a-z]{3})$/.test(filename) ) { // must be a string
+            // #B210 — any real extension shape (dot + 1-10 alphanumerics), not just
+            // dot+3-lowercase: file.js / file.json / FILE.TXT used to be hashed as
+            // PATH STRINGS because the narrow probe never fired for them.
+            if ( /(\.[A-Za-z0-9]{1,10})$/.test(filename) ) { // must be a string
                 try {
                     isFile = fs.statSync(filename).isFile();
                 } catch (statErr) {
