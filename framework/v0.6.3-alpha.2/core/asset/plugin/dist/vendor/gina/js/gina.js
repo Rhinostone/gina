@@ -18288,7 +18288,18 @@ function ValidatorPlugin(rules, data, formId, culture) {
 
             stringifiedRules = stringifiedRules.replace(re, fieldValue );
         }
-        if ( /\$(.*)/.test(stringifiedRules) ) {
+        // #B234 — this second loop is a DOM FALLBACK: it re-derives each splice
+        // value from the live element (`$fields[...].value` / `.checked`), and
+        // the server auto path (`backendInit`) passes `$fields = null`, so ANY
+        // `$` surviving loop 1 threw here — a regex end-anchor in an `is`
+        // condition, or a `$` inside a human-readable message string. Loop 1
+        // already replaces every KNOWN field's token, so what reaches loop 2 is
+        // a leftover it structurally cannot match anyway: skipping when there is
+        // no DOM matches what the client does when this re-scan no-ops, and
+        // leaves every previously-working substitution byte-identical. Same
+        // `$fields &&` guard shape as the #B127 precedent one function later.
+        // was: `if ( /\$(.*)/.test(stringifiedRules) ) {`
+        if ( $fields && /\$(.*)/.test(stringifiedRules) ) {
             for (let i = 0, len = arrFields.length; i < len; i++) {
                 _field = arrFields[i].replace(/\-|\_|\@|\#|\.|\[|\]/g, '\\$&');
                 re = new RegExp('\\$'+_field, 'g');
