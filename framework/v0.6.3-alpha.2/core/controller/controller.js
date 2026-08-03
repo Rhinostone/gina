@@ -2904,35 +2904,75 @@ function SuperController(options) {
     /**
      * Move files to assets dir
      *
-     * @param {object} res
-     * @param {collection} files
+     * #B223 — each move streams the source into a temp sibling
+     * (`<target>.<pid>.<rand>.tmp`) inside the destination directory, then
+     * publishes it with an atomic `rename(2)`: a reader never observes a
+     * partial file under the final name, and a pre-existing destination is
+     * replaced atomically instead of being deleted up front. Failures settle
+     * the callback ONCE with the real filesystem `Error` — source-side stream
+     * errors included (they previously had no listener, so a source vanishing
+     * mid-move escalated to an uncaughtException that killed the bundle
+     * process) — and a failed move never consumes the source file.
+     *
+     * @inner
+     * @param {number} i - Current index in `files`
+     * @param {object} res - Response reference (unused; kept for signature stability)
+     * @param {array} files - `{ source, target }` pairs — spliced as moves complete
      *
      * @callback cb
-     * @param {object} [err]
+     * @param {Error|boolean} err - `false` once every file moved; the real `Error` on the first failure
      * */
     var movefiles = function (i, res, files, cb) {
         if (!files.length || files.length == 0) {
             cb(false)
         } else {
-            if ( fs.existsSync(files[i].target) ) new _(files[i].target).rmSync();
+            // #B223 — no destination pre-delete: the atomic rename below replaces
+            // it only once the new content is fully written
+            // was: if ( fs.existsSync(files[i].target) ) new _(files[i].target).rmSync();
+            var _tmpTarget  = files[i].target + '.' + process.pid + '.' + Math.random().toString(36).slice(2, 8) + '.tmp';
+            var _settled    = false;
 
             var sourceStream = fs.createReadStream(files[i].source);
-            var destinationStream = fs.createWriteStream(files[i].target);
+            // was: var destinationStream = fs.createWriteStream(files[i].target);
+            var destinationStream = fs.createWriteStream(_tmpTarget);
+
+            var onMoveError = function (err) {
+                if (_settled) return;
+                _settled = true;
+                try { destinationStream.destroy() } catch (_e) {}
+                try { if ( fs.existsSync(_tmpTarget) ) fs.unlinkSync(_tmpTarget) } catch (_e) {}
+                cb(err)
+            };
+
+            // #B223 — the source stream previously had NO error listener: an
+            // unreadable/vanished source raised an unhandled 'error' event
+            sourceStream.on('error', onMoveError);
 
             sourceStream
                 .pipe(destinationStream)
-                .on('error', function () {
-                    var err = 'Error on SuperController::copyFile(...): Not found ' + files[i].source + ' or ' + files[i].target;
-                    cb(err)
-                })
+                .on('error', onMoveError)
                 .on('close', function () {
+                    // 'close' also follows 'error' on an autoDestroyed stream — the
+                    // settled latch keeps a failed move from resuming the loop (the
+                    // pre-fix shape settled the callback a second time, as a success,
+                    // and unlinked the source of a move that had just failed)
+                    if (_settled) return;
 
                     try {
-                        fs.unlinkSync(files[i].source);
-                        files.splice(i, 1);
+                        fs.renameSync(_tmpTarget, files[i].target);
                     } catch (err) {
-                        cb(err)
+                        return onMoveError(err)
                     }
+                    try {
+                        fs.unlinkSync(files[i].source);
+                    } catch (err) {
+                        // the source vanishing AFTER a successful publish is not a
+                        // move failure (e.g. the upload tmp-cleanup timer took it)
+                        if (err.code != 'ENOENT') {
+                            return onMoveError(err)
+                        }
+                    }
+                    files.splice(i, 1);
 
                     movefiles(i, res, files, cb)
                 })
@@ -3280,17 +3320,30 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
      * You only need to provide the destination path
      * Use `cb` callback or `onComplete` event
      *
+     * Files are published atomically (temp sibling + rename — #B223), so a
+     * reader never observes a partially-written file under the final name.
+     *
      * @param {string} target is the upload dir destination
      * @param {array} [files]
      *
      * @callback [cb]
-     *  @param {object} error
+     *  @param {Error|boolean} error - `false` on success; the real move `Error`
+     *    on failure (`No file to upload` only when there was nothing to store)
      *  @param {array} files
      *
      * @event
      *  @param {object} error
      *  @param {array} files
      *
+     * @example
+     * // store the request's uploaded files, surfacing the real failure cause
+     * self.store(uploadDir, req.files, function onStored(err, files) {
+     *     if (err) {
+     *         // err.code carries the filesystem diagnostic (EACCES, ENOSPC, ENOENT, ...)
+     *         return self.throwError(500, err);
+     *     }
+     *     self.renderJSON({ files: files });
+     * });
      * */
     this.store = async function(target, files, cb) {
 
@@ -3362,10 +3415,15 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
 
                     movefiles(0, local.res, list, function (err) {
                         if (err) {
+                            // #B223 — surface the REAL move error: every failure used
+                            // to be reported as the fabricated empty-upload message,
+                            // masking the actual filesystem diagnostics (ENOSPC,
+                            // EACCES, a vanished source, ...)
+                            var _moveErr = ( err instanceof Error ) ? err : new Error(String(err));
                             if (cb) {
-                                cb(new Error('No file to upload'))
+                                cb(_moveErr)
                             } else {
-                                self.emit('uploaded', new Error('No file to upload'))
+                                self.emit('uploaded', _moveErr)
                             }
                         } else {
                             if (cb) {
