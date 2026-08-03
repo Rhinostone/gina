@@ -1,0 +1,3 @@
+kind: Added
+body: 'Inspector: hidden tabs can now be restored one at a time. In Custom layout mode, each removed tab''s dimmed preview pill becomes a click-to-restore control — a leading + glyph (amber on hover) and a native "Restore <Tab> tab" tooltip signal it; clicking brings just that tab back at the end of the tab bar, without switching to it. The Reset link still restores everything at once.'
+time: 2026-08-03T16:47:32+01:00

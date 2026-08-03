@@ -517,6 +517,26 @@ input:checked ~ .bm-toggle-track::after {
 .bm-lp-pill-hidden {
   opacity: 0.35;
   text-decoration: line-through;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.bm-lp-pill-hidden:hover {
+  opacity: 0.7;
+}
+
+/* The + affordance on a hidden pill — inline-block escapes the parent's
+   line-through (text-decoration does not propagate into atomic inlines),
+   so the + stays unstruck while the label reads as removed. Amber on
+   hover, matching the reset-link hover idiom. */
+.bm-lp-pill-add {
+  display: inline-block;
+  margin-right: 3px;
+  font-weight: 700;
+}
+
+.bm-lp-pill-hidden:hover .bm-lp-pill-add {
+  color: var(--accent);
 }
 
 .bm-lp-arrow {

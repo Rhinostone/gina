@@ -1681,6 +1681,45 @@
     }
 
     /**
+     * Restore a single hidden tab in custom layout mode — the per-tab
+     * inverse of {@link hideTab}, wired to the dimmed preview pills (see
+     * {@link renderLayoutPreview}): the struck-through pill is the removed
+     * tab's only remaining representative, so clicking it brings the tab
+     * back without touching the others (Reset stays the bulk path).
+     *
+     * Removes the tab from the hidden list, shows its button again at the
+     * END of the visible tabs — hiding dropped it from the saved custom
+     * order and applyTabLayout parks hidden buttons at the FRONT of the
+     * nav (only ordered visible tabs are appended), so the explicit
+     * appendChild is what makes the landing spot deterministic; drag-mode
+     * is active right there for repositioning — then persists the new
+     * order and re-renders the preview.
+     *
+     * Deliberately does NOT activate the restored tab: the user is
+     * mid-layout-editing, so the tab reappearing in the bar and its pill
+     * un-dimming is the whole feedback — no panel switch.
+     *
+     * @inner
+     * @param {string} tabName - Tab name to restore (e.g. 'view', 'forms')
+     */
+    function restoreTab(tabName) {
+        var hidden = getHiddenTabs();
+        var idx = hidden.indexOf(tabName);
+        if (idx === -1) return;
+        hidden.splice(idx, 1);
+        saveHiddenTabs(hidden);
+
+        var btn = qs('.bm-tab[data-tab="' + tabName + '"]');
+        var nav = qs('.bm-tabs');
+        if (btn) {
+            btn.style.display = '';
+            if (nav) nav.appendChild(btn);
+        }
+        saveCustomOrder();
+        renderLayoutPreview('custom');
+    }
+
+    /**
      * Restore all hidden tabs in custom layout mode. Shows all tab buttons,
      * clears the hidden list from localStorage, and rebuilds the custom order
      * to include all tabs.
@@ -1827,10 +1866,16 @@
                 visibleFirst = false;
             }
         }
-        // Append hidden tabs as dimmed pills
+        // Append hidden tabs as dimmed pills \u2014 each is a click-to-restore
+        // control (delegated on #bm-layout-preview): it carries data-tab for
+        // the handler, a native Restore tooltip, and a leading + glyph as
+        // the visible affordance. Visible pills stay a passive readout.
         for (var h = 0; h < hidden.length; h++) {
             if (!visibleFirst) html += '<span class="bm-lp-arrow bm-lp-arrow-dim">\u203A</span>';
-            html += '<span class="bm-lp-pill bm-lp-pill-hidden" style="--pill-color:' + pillColor(hidden[h]) + '">'
+            html += '<span class="bm-lp-pill bm-lp-pill-hidden" data-tab="' + hidden[h] + '"'
+                  + ' title="Restore ' + pillLabel(hidden[h]) + ' tab"'
+                  + ' style="--pill-color:' + pillColor(hidden[h]) + '">'
+                  + '<span class="bm-lp-pill-add">+</span>'
                   + pillLabel(hidden[h]) + '</span>';
             visibleFirst = false;
         }
@@ -5003,6 +5048,20 @@
         var resetBtn = qs('#bm-layout-reset');
         if (resetBtn) {
             resetBtn.addEventListener('click', function () { restoreAllTabs(); });
+        }
+
+        // Per-tab restore — clicking a dimmed (hidden) preview pill restores
+        // just that tab. Delegated on the container: the pill row is rebuilt
+        // via innerHTML on every renderLayoutPreview(), so per-pill listeners
+        // would not survive; the container does.
+        var previewEl = qs('#bm-layout-preview');
+        if (previewEl) {
+            previewEl.addEventListener('click', function (e) {
+                var pill = e.target && e.target.closest ? e.target.closest('.bm-lp-pill-hidden') : null;
+                if (!pill) return;
+                var name = pill.getAttribute('data-tab');
+                if (name) restoreTab(name);
+            });
         }
 
         // ── Tab drag-to-reorder (custom layout mode) ──────────────────────

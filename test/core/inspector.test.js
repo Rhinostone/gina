@@ -9108,9 +9108,11 @@ describe('83 - tab-layout preview: every preset tab has a label + color; unknown
 
     it('renderLayoutPreview routes BOTH render sites through the helpers (count pins)', function() {
         var src = js83();
-        // visible + hidden pill loops: 2 pillLabel( + 2 pillColor( call sites
+        // visible + hidden pill loops: 3 pillLabel( call sites (visible label,
+        // hidden pill's "Restore <Label> tab" title — §88 per-tab restore —
+        // and hidden label) + 2 pillColor( call sites
         // (the '(' excludes the definitions, which match 'function pillLabel(').
-        assert.equal((src.match(/pillLabel\(/g) || []).length, 3, 'definition + 2 call sites');
+        assert.equal((src.match(/pillLabel\(/g) || []).length, 4, 'definition + 3 call sites (§88 added the restore-title site)');
         assert.equal((src.match(/pillColor\(/g) || []).length, 3, 'definition + 2 call sites');
         // the maps are read ONLY inside the helpers now — a bare map read at a
         // render site is the "undefined"-class regression this section kills.
@@ -10044,4 +10046,262 @@ describe('87 - #B231: ?ch=-less Inspector adopts the statusbar-advertised tab ch
     it('index.html dist is the verbatim src copy', function() {
         assert.strictEqual(fs.readFileSync(INDEX_87, 'utf8'), fs.readFileSync(SRC_INDEX_87, 'utf8'));
     });
+});
+
+
+// ── 88 — per-tab restore: clickable hidden preview pills (+ glyph) ────────────
+
+describe('88 - per-tab restore: a dimmed preview pill restores just that tab (Reset untouched)', function() {
+
+    // Tab hiding (custom layout mode) had no per-tab inverse: hideTab() existed,
+    // but the only way back was the all-or-nothing Reset link (restoreAllTabs).
+    // The struck-through preview pill is the removed tab's only remaining
+    // representative, so it becomes the restore control: it carries data-tab
+    // for a delegated click handler, a native title, and a leading + glyph as
+    // the visible affordance. Restoring deliberately does NOT activate the
+    // restored tab (the user is mid-layout-editing), and the button is
+    // explicitly re-parked at the END of the nav — applyTabLayout parks
+    // hidden buttons at the FRONT (only ordered visible tabs are appended),
+    // so without the appendChild the restored tab would surface leftmost.
+
+    var INSPECTOR_88 = path.join(BM_DIR, 'inspector.js');
+    var CSS_88       = path.join(BM_DIR, 'inspector.css');
+    var SRC_JS_88    = path.join(FW, 'core/asset/plugin/src/vendor/gina/inspector/js/inspector.js');
+    var SRC_CSS_88   = path.join(FW, 'core/asset/plugin/src/vendor/gina/inspector/css/inspector.css');
+    var _src88, _css88;
+    function getSrc88() { return _src88 || (_src88 = fs.readFileSync(INSPECTOR_88, 'utf8')); }
+    function getCss88() { return _css88 || (_css88 = fs.readFileSync(CSS_88, 'utf8')); }
+
+    /** Same started-flag brace walker as §84/§85 (no braces inside string literals in these blocks). */
+    function extractFn88(src, decl) {
+        var i = src.indexOf(decl);
+        if (i < 0) throw new Error('decl not found: ' + decl);
+        if (src.indexOf(decl, i + 1) > -1) throw new Error('decl not unique: ' + decl);
+        var depth = 0, started = false, j = i;
+        for (; j < src.length; j++) {
+            var c = src[j];
+            if (c === '{') { depth++; started = true; }
+            else if (c === '}') {
+                depth--;
+                if (started && depth === 0) { j++; break; }
+            }
+        }
+        if (!started || depth !== 0) throw new Error('unbalanced braces for: ' + decl);
+        return src.slice(i, j);
+    }
+
+    // ── Instrument control ────────────────────────────────────────────────
+
+    it('control: the extractor can fail (bogus decl throws)', function() {
+        assert.throws(function () { extractFn88(getSrc88(), 'function noSuchFn88()'); },
+            /decl not found/, 'a walker that cannot miss proves nothing');
+    });
+
+    // ── Premises (document the asymmetry being closed + Reset preserved) ──
+
+    it('premise: hideTab exists and DOES switch away from an active hidden tab', function() {
+        var blk = extractFn88(getSrc88(), 'function hideTab(tabName)');
+        assert.ok(blk.indexOf('switchTab(') > -1,
+            'hideTab must switch away when hiding the active tab — the discriminator for the no-activation pin on restoreTab');
+    });
+
+    it('premise: restoreAllTabs (the Reset path) is untouched and still clears the whole hidden list', function() {
+        var blk = extractFn88(getSrc88(), 'function restoreAllTabs()');
+        assert.ok(blk.indexOf('saveHiddenTabs([])') > -1, 'Reset must still clear the entire hidden list');
+    });
+
+    // ── restoreTab source pins ────────────────────────────────────────────
+
+    it('restoreTab is declared (the per-tab inverse of hideTab)', function() {
+        var blk = extractFn88(getSrc88(), 'function restoreTab(tabName)');
+        var iGuard  = blk.indexOf('indexOf(tabName)');
+        var iSplice = blk.indexOf('splice(');
+        var iSave   = blk.indexOf('saveHiddenTabs(');
+        assert.ok(iGuard > -1, 'must guard on the tab actually being hidden');
+        assert.ok(iSplice > iGuard && iSave > iSplice,
+            'must remove the one name then persist — guard, splice, saveHiddenTabs in that order');
+    });
+
+    it('restoreTab re-shows the button at the END of the nav and persists the new order', function() {
+        var blk = extractFn88(getSrc88(), 'function restoreTab(tabName)');
+        var iShow   = blk.indexOf(".style.display = ''");
+        var iAppend = blk.indexOf('nav.appendChild(btn)');
+        var iOrder  = blk.indexOf('saveCustomOrder()');
+        var iPrev   = blk.indexOf("renderLayoutPreview('custom')");
+        assert.ok(iShow > -1, 'must clear display:none on the tab button');
+        assert.ok(iAppend > iShow, 'must re-park the button at the end (hidden buttons sit at the FRONT of the nav)');
+        assert.ok(iOrder > iAppend && iPrev > iOrder,
+            'must save the order AFTER the move, then re-render the pills');
+    });
+
+    it('restoreTab does NOT activate the restored tab (no switchTab call)', function() {
+        var blk = extractFn88(getSrc88(), 'function restoreTab(tabName)');
+        assert.ok(blk.indexOf('switchTab(') < 0,
+            'restoring must not steal the active panel — hideTab is the half that switches (see premise)');
+    });
+
+    // ── renderLayoutPreview emission pins ─────────────────────────────────
+
+    it('hidden-pill emission carries data-tab, a Restore title, and the + glyph', function() {
+        var blk = extractFn88(getSrc88(), 'function renderLayoutPreview(layout)');
+        var i = blk.indexOf('bm-lp-pill-hidden');
+        assert.ok(i > -1, 'hidden-pill emission must exist');
+        var slice = blk.slice(i, i + 400);
+        assert.ok(slice.indexOf('data-tab="') > -1, 'hidden pill must carry data-tab for the delegated handler');
+        assert.ok(slice.indexOf('title="Restore ') > -1, 'hidden pill must carry the native Restore tooltip');
+        assert.ok(slice.indexOf('bm-lp-pill-add') > -1, 'hidden pill must carry the + affordance span');
+    });
+
+    it('control: visible-pill emission stays a passive readout (none of the three)', function() {
+        var blk = extractFn88(getSrc88(), 'function renderLayoutPreview(layout)');
+        var i = blk.indexOf('<span class="bm-lp-pill" style=');
+        assert.ok(i > -1, 'visible-pill emission must exist (and must NOT gain data-tab — that is the discriminator between readout and control)');
+        var end = blk.indexOf('</span>', i);
+        var slice = blk.slice(i, end);
+        assert.ok(slice.indexOf('data-tab') < 0 && slice.indexOf('title="Restore') < 0 && slice.indexOf('bm-lp-pill-add') < 0,
+            'visible pills are not restore controls');
+    });
+
+    // ── Behavioral: drive the extracted restoreTab (real bytes, no replica) ──
+
+    function driveRestore88(tabName, hiddenList, btnPresent) {
+        var blk = extractFn88(getSrc88(), 'function restoreTab(tabName)');
+        var saved = { hidden: null, orderCalls: 0, previewArg: null, switched: 0, appended: [] };
+        var btn = { style: { display: 'none' } };
+        var nav = { appendChild: function (n) { saved.appended.push(n); } };
+        var qsFake = function (sel) {
+            if (sel === '.bm-tabs') return nav;
+            if (sel.indexOf('.bm-tab[data-tab=') === 0) return btnPresent ? btn : null;
+            return null;
+        };
+        var runner = new Function('qs', 'getHiddenTabs', 'saveHiddenTabs', 'saveCustomOrder', 'renderLayoutPreview', 'switchTab',
+            blk + '\nreturn restoreTab;');
+        var restoreTab = runner(
+            qsFake,
+            function () { return hiddenList.slice(); },
+            function (h) { saved.hidden = h; },
+            function () { saved.orderCalls++; },
+            function (l) { saved.previewArg = l; },
+            function () { saved.switched++; }
+        );
+        restoreTab(tabName);
+        return { saved: saved, btn: btn };
+    }
+
+    it('restoring a hidden tab: list persisted without it, button shown + re-parked, preview re-rendered, no activation', function() {
+        var out = driveRestore88('forms', ['forms', 'flow'], true);
+        assert.deepStrictEqual(out.saved.hidden, ['flow'], 'only the restored name leaves the hidden list');
+        assert.strictEqual(out.btn.style.display, '', 'the tab button must be shown again');
+        assert.strictEqual(out.saved.appended.length, 1, 'the button must be re-parked via appendChild');
+        assert.strictEqual(out.saved.orderCalls, 1, 'the new order must be persisted');
+        assert.strictEqual(out.saved.previewArg, 'custom', 'the pills must re-render for custom mode');
+        assert.strictEqual(out.saved.switched, 0, 'restore must not activate the tab');
+    });
+
+    it('restoring a name that is not hidden is a no-op', function() {
+        var out = driveRestore88('query', ['forms'], true);
+        assert.strictEqual(out.saved.hidden, null, 'nothing may be persisted');
+        assert.strictEqual(out.saved.orderCalls, 0, 'no order write');
+        assert.strictEqual(out.btn.style.display, 'none', 'no DOM change');
+    });
+
+    it('restoring with the button absent still cleans the stored list (stale-storage resilience)', function() {
+        var out = driveRestore88('forms', ['forms'], false);
+        assert.deepStrictEqual(out.saved.hidden, [], 'the stale name must leave the list even with no button to show');
+        assert.strictEqual(out.saved.orderCalls, 1, 'order still persisted');
+        assert.strictEqual(out.saved.appended.length, 0, 'nothing to re-park');
+    });
+
+    it('extracted renderLayoutPreview emits the restorable hidden pill (real bytes)', function() {
+        var blk = extractFn88(getSrc88(), 'function renderLayoutPreview(layout)');
+        var el = { innerHTML: '' };
+        var resetEl = { classList: { toggle: function () {} } };
+        var qsFake = function (sel) {
+            if (sel === '#bm-layout-preview') return el;
+            if (sel === '#bm-layout-reset') return resetEl;
+            return null;
+        };
+        var runner = new Function('qs', 'getCustomOrder', 'getCurrentTabOrder', 'getHiddenTabs', 'TAB_LAYOUTS', 'pillColor', 'pillLabel',
+            blk + '\nreturn renderLayoutPreview;');
+        var render = runner(
+            qsFake,
+            function () { return ['data', 'view']; },
+            function () { return ['data', 'view']; },
+            function () { return ['forms']; },
+            { balanced: ['data', 'view', 'logs', 'forms', 'query', 'flow', 'stream', 'events'] },
+            function () { return 'red'; },
+            function (t) { return t.charAt(0).toUpperCase() + t.slice(1); }
+        );
+        render('custom');
+        assert.ok(el.innerHTML.indexOf('data-tab="forms"') > -1, 'hidden pill must name its tab');
+        assert.ok(el.innerHTML.indexOf('title="Restore Forms tab"') > -1, 'hidden pill must carry the tooltip');
+        assert.ok(el.innerHTML.indexOf('<span class="bm-lp-pill-add">+</span>') > -1, 'hidden pill must carry the + glyph');
+        var visible = el.innerHTML.slice(0, el.innerHTML.indexOf('bm-lp-pill-hidden'));
+        assert.ok(visible.indexOf('data-tab') < 0, 'visible pills must stay passive (control)');
+    });
+
+    // ── Delegated wiring ──────────────────────────────────────────────────
+
+    it('the restore handler is delegated on #bm-layout-preview and resolves pills via closest()', function() {
+        var src = getSrc88();
+        var i = src.indexOf("var previewEl = qs('#bm-layout-preview')");
+        assert.ok(i > -1, 'the container lookup must exist');
+        assert.ok(src.indexOf("var previewEl = qs('#bm-layout-preview')", i + 1) < 0, 'and be unique');
+        var end = src.indexOf('setupTabDrag()', i);
+        assert.ok(end > i, 'the wiring must sit before the drag setup');
+        var slice = src.slice(i, end);
+        assert.ok(slice.indexOf("closest('.bm-lp-pill-hidden')") > -1, 'must resolve the pill via closest (the + glyph is a child span)');
+        assert.ok(slice.indexOf('restoreTab(') > -1, 'must call restoreTab');
+        assert.ok(slice.indexOf('addEventListener') > -1, 'must be a listener on the container (the row is rebuilt via innerHTML)');
+    });
+
+    it('driven handler: a click inside a hidden pill restores that tab; elsewhere is ignored (real bytes)', function() {
+        var src = getSrc88();
+        var i = src.indexOf("var previewEl = qs('#bm-layout-preview')");
+        var end = src.indexOf('// ── Tab drag-to-reorder', i);
+        assert.ok(i > -1 && end > i, 'wiring slice must be extractable');
+        var slice = src.slice(i, end);
+        var recorded = [];
+        var fakeEl = { addEventListener: function (type, fn) { recorded.push({ type: type, fn: fn }); } };
+        var restored = [];
+        var runner = new Function('qs', 'restoreTab', slice + '\nreturn previewEl;');
+        runner(function (sel) { return sel === '#bm-layout-preview' ? fakeEl : null; },
+               function (name) { restored.push(name); });
+        assert.strictEqual(recorded.length, 1, 'exactly one listener on the container');
+        assert.strictEqual(recorded[0].type, 'click');
+        var pill = { getAttribute: function (a) { return a === 'data-tab' ? 'flow' : null; } };
+        recorded[0].fn({ target: { closest: function (sel) { return sel === '.bm-lp-pill-hidden' ? pill : null; } } });
+        assert.deepStrictEqual(restored, ['flow'], 'a pill-borne click restores its tab');
+        recorded[0].fn({ target: { closest: function () { return null; } } });
+        assert.deepStrictEqual(restored, ['flow'], 'a click outside any hidden pill is ignored');
+        recorded[0].fn({ target: { closest: function (sel) { return sel === '.bm-lp-pill-hidden' ? { getAttribute: function () { return null; } } : null; } } });
+        assert.deepStrictEqual(restored, ['flow'], 'a pill without data-tab is ignored (defensive)');
+    });
+
+    // ── CSS ───────────────────────────────────────────────────────────────
+
+    it('hidden pills advertise clickability: cursor pointer + hover opacity lift', function() {
+        var css = getCss88();
+        assert.match(css, /\.bm-lp-pill-hidden\s*\{[^}]*cursor:\s*pointer/, 'hidden pills must get cursor:pointer');
+        assert.match(css, /\.bm-lp-pill-hidden:hover\s*\{[^}]*opacity/, 'hover must lift the dimming');
+    });
+
+    it('the + glyph escapes the strikethrough (inline-block) and turns amber on hover', function() {
+        var css = getCss88();
+        assert.match(css, /\.bm-lp-pill-add\s*\{[^}]*display:\s*inline-block/,
+            'inline-block is what keeps the + unstruck — text-decoration does not propagate into atomic inlines');
+        assert.match(css, /\.bm-lp-pill-hidden:hover\s+\.bm-lp-pill-add\s*\{[^}]*var\(--accent\)/,
+            'the + must go amber on hover, matching the reset-link hover idiom');
+    });
+
+    // ── Build-step lock: served dist copies are the src, verbatim ─────────
+
+    it('dist inspector.js is byte-identical to src (verbatim-copy build step)', function() {
+        assert.strictEqual(getSrc88(), fs.readFileSync(SRC_JS_88, 'utf8'));
+    });
+
+    it('dist inspector.css is byte-identical to the committed src intermediate', function() {
+        assert.strictEqual(getCss88(), fs.readFileSync(SRC_CSS_88, 'utf8'));
+    });
+
 });
