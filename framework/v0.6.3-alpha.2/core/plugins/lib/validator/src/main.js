@@ -8426,6 +8426,7 @@ function ValidatorPlugin(rules, data, formId, culture) {
             var localRules = null, caseName = null;
             var localRuleObj = null, skipTest = null;
             var localFieldType  = null;
+            var caseValueBackup = null; // #B229 — see the `caseName == field` arm below
 
             //console.debug('parsing ', fields, $fields, rules);
             if ( typeof(rules) != 'undefined' ) {
@@ -8810,7 +8811,45 @@ function ValidatorPlugin(rules, data, formId, culture) {
                         }
                     }
 
-                    if (isInCase || caseName == field) continue;
+                    if (isInCase) continue;
+
+                    // #B229 — a field that DRIVES a `_case_` still owns its BASE
+                    // rules. `caseName` is assigned inside the `_case_` scan loop
+                    // above, which runs in full on EVERY field iteration, so at this
+                    // point it always holds the LAST scanned `_case_` key's driver
+                    // name. The old combined tail therefore skipped the whole rest of
+                    // the iteration for that driver — base-rule check included — so a
+                    // rule shape { "group": { "isRequired": true }, "_case_group": {…} }
+                    // never adjudicated `group` on the bind pass, the live-check
+                    // global pass OR the submit pass: the form never gated and an
+                    // empty submit went out unvalidated (the #B221 silent-submit
+                    // class, resurfacing for the self-driving shape — downstream of
+                    // #B221's collection fix, which already admits the group as '').
+                    // The driver's `allFields` entry is restored around the call:
+                    // checkFieldAgainstRules ends every applied rule with
+                    // `delete fields[field]` on the object it is handed, and
+                    // `allFields[caseName]` is the case VALUE the scan block re-reads
+                    // on every later field iteration — a deleted entry re-seeds from
+                    // `$allFields[name].value`, which for a radio group is the FIRST
+                    // member's value regardless of `.checked` (#B230, pre-existing).
+                    // The direct-case block below stays skipped for the driver, so
+                    // WHICH conditions apply is unchanged (measured: that block is
+                    // never entered for a self-driving case, pre-fix or post-fix).
+                    // was:
+                    // if (isInCase || caseName == field) continue;
+                    if ( caseName == field ) {
+                        if ( typeof(rules[field]) != 'undefined' ) {
+                            caseValueBackup = allFields[field];
+                            checkFieldAgainstRules(field, rules, allFields);
+                            if (
+                                typeof(allFields[field]) == 'undefined'
+                                && typeof(caseValueBackup) != 'undefined'
+                            ) {
+                                allFields[field] = caseValueBackup;
+                            }
+                        }
+                        continue;
+                    }
 
                     // check each field against rule only if rule exists 3/3
                     if ( typeof(rules[field]) != 'undefined' ) {
