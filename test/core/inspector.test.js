@@ -10305,3 +10305,117 @@ describe('88 - per-tab restore: a dimmed preview pill restores just that tab (Re
     });
 
 });
+
+
+// ── 89 — footer memory gauge: the unfilled track must be visible ─────────────
+
+describe('89 - footer memory gauge: the unfilled track is visible in both themes (#B237)', function() {
+
+    // The gauge track (.bm-mem-bar-wrap) had background: var(--bg2) — the exact
+    // token .bm-footer uses for its own background — so the unfilled portion
+    // rendered invisible in BOTH themes, and a low fill (64 MB / 3.1 GB ≈ 2%)
+    // read as a floating green dot. The recessed-groove fix: the track sits on
+    // --bg3 (visibly lighter than the footer in dark, darker in light) with a
+    // theme-scoped inset shadow for depth. An inset box-shadow paints UNDER
+    // child content, so the groove shading shows only on the empty region —
+    // the fill covers it as it grows.
+
+    var CSS_89     = path.join(BM_DIR, 'inspector.css');
+    var SRC_CSS_89 = path.join(FW, 'core/asset/plugin/src/vendor/gina/inspector/css/inspector.css');
+    var SCSS_89    = path.join(FW, 'core/asset/plugin/src/vendor/gina/inspector/sass/inspector.scss');
+    var _scss89, _css89;
+    function getScss89() { return _scss89 || (_scss89 = fs.readFileSync(SCSS_89, 'utf8')); }
+    function getCss89()  { return _css89  || (_css89  = fs.readFileSync(SRC_CSS_89, 'utf8')); }
+
+    /**
+     * Extract one top-level rule block (selector at column 0, brace-free body —
+     * true for every block §89 pins, comments included).
+     * @inner
+     * @param   {string} src       Stylesheet text (scss or compiled css).
+     * @param   {string} selector  Escaped selector regex fragment.
+     * @returns {?string} The matched block, or null when absent.
+     */
+    function cssBlock89(src, selector) {
+        var m = src.match(new RegExp('^' + selector + '\\s*\\{[^}]*\\}', 'm'));
+        return m ? m[0] : null;
+    }
+
+    // ── Instrument control ────────────────────────────────────────────────
+
+    it('control: the block matcher can fail (bogus selector yields null)', function() {
+        assert.strictEqual(cssBlock89(getCss89(), '\\.bm-no-such-gauge'), null,
+            'a matcher that cannot miss proves nothing');
+    });
+
+    // ── Premises (the collision being fixed + the contrast it relies on) ──
+
+    it('premise: .bm-footer background is var(--bg2) — the surface the track sits on', function() {
+        var blk = cssBlock89(getCss89(), '\\.bm-footer');
+        assert.ok(blk && blk.indexOf('background: var(--bg2)') > -1,
+            'the footer bg is what the track must NOT share — if this token ever moves, re-evaluate the track contrast');
+    });
+
+    it('premise: both themes define --bg3 distinct from --bg2 (the contrast mechanism)', function() {
+        ['dark', 'light'].forEach(function (theme) {
+            var blk = cssBlock89(getCss89(), '\\[data-theme=' + theme + '\\]');
+            assert.ok(blk, theme + ' theme variables block must exist');
+            var bg2 = (blk.match(/--bg2:\s*([^;]+);/) || [])[1];
+            var bg3 = (blk.match(/--bg3:\s*([^;]+);/) || [])[1];
+            assert.ok(bg2 && bg3, theme + ' must define both --bg2 and --bg3');
+            assert.notStrictEqual(bg2.trim(), bg3.trim(),
+                theme + ': --bg3 must differ from --bg2, or the track vanishes again');
+        });
+    });
+
+    // ── Feature pins (scss is the authored source) ────────────────────────
+
+    it('scss: the track sits on var(--bg3), footer token gone, geometry untouched', function() {
+        var blk = cssBlock89(getScss89(), '\\.bm-mem-bar-wrap');
+        assert.ok(blk, 'main .bm-mem-bar-wrap block must exist');
+        assert.ok(blk.indexOf('background: var(--bg3)') > -1, 'track must sit on --bg3');
+        assert.ok(blk.indexOf('--bg2') < 0, 'the footer background token must be gone from the track block');
+        assert.ok(blk.indexOf('height: 6px') > -1 && blk.indexOf('border-radius: 3px') > -1
+            && blk.indexOf('overflow: hidden') > -1,
+            'visibility fix only — geometry must be unchanged');
+    });
+
+    it('scss: the track carries the recessed-groove inset shadow', function() {
+        var blk = cssBlock89(getScss89(), '\\.bm-mem-bar-wrap');
+        assert.ok(blk && blk.indexOf('box-shadow: inset 0 1px 2px rgba(0,0,0,.35)') > -1,
+            'the groove depth shadow must be on the track');
+    });
+
+    it('scss: the light theme softens the groove shadow (quoted attribute form)', function() {
+        var blk = cssBlock89(getScss89(), '\\[data-theme="light"\\] \\.bm-mem-bar-wrap');
+        assert.ok(blk && blk.indexOf('rgba(0,0,0,.12)') > -1,
+            '35% black on #dddde1 would read as a smudge — light theme needs its own softer shadow');
+    });
+
+    it('compiled css carries all three (sass-normalized rgba, unquoted [data-theme=light])', function() {
+        var main = cssBlock89(getCss89(), '\\.bm-mem-bar-wrap');
+        assert.ok(main && main.indexOf('background: var(--bg3)') > -1,
+            'compiled track must sit on --bg3 — a red here with green scss pins means the sass step was skipped');
+        assert.ok(main.indexOf('box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35)') > -1,
+            'compiled shadow must carry the dart-sass-normalized rgba form');
+        var light = cssBlock89(getCss89(), '\\[data-theme=light\\] \\.bm-mem-bar-wrap');
+        assert.ok(light && light.indexOf('rgba(0, 0, 0, 0.12)') > -1,
+            'compiled light override must exist in the UNQUOTED attribute form (sass strips the quotes)');
+    });
+
+    // ── Control: the fill is untouched ────────────────────────────────────
+
+    it('control: the fill severity classes are untouched (ok/warn/crit)', function() {
+        [['mem-ok', '--ok'], ['mem-warn', '--warn'], ['mem-crit', '--err']].forEach(function (pair) {
+            var blk = cssBlock89(getCss89(), '\\.bm-mem-bar\\.' + pair[0]);
+            assert.ok(blk && blk.indexOf('var(' + pair[1] + ')') > -1,
+                '.' + pair[0] + ' must still map to var(' + pair[1] + ') — the fix touches the track, never the fill');
+        });
+    });
+
+    // ── Build-step lock: served dist copy is the src, verbatim ────────────
+
+    it('dist inspector.css is byte-identical to the committed src intermediate', function() {
+        assert.strictEqual(fs.readFileSync(CSS_89, 'utf8'), fs.readFileSync(SRC_CSS_89, 'utf8'));
+    });
+
+});
