@@ -1435,34 +1435,57 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
         }
 
         /**
-         * Check if boolean and convert to `true/false` booloean if value is a string or a number
-         * Will include `false` value if isRequired
+         * Check if boolean and convert to `true/false` boolean if value is a string or a number.
+         * Accepts `true`/`'true'`/`1` and `false`/`'false'`/`0` — the documented set.
+         *
+         * #B78 contract (#B235): an EMPTY value is adjudicated by `isRequired`
+         * alone — the rule self-passes on the literal empty string, and the tail
+         * keeps `this.valid` consistent with a surviving isRequired error
+         * (Shape A). An ACCEPTED answer also clears a prior isRequired error:
+         * `false` and `0` are loose-equal to the empty string so isRequired
+         * flags them, but a recognized boolean false is a present answer (an
+         * unchecked-but-required toggle does not fail). The pre-fix rescue ran
+         * BEFORE the switch on a loose equality that also matched the empty
+         * string, deleting the isRequired error a genuinely-empty field had
+         * earned (#B235).
          * */
         self[el]['isBoolean'] = function() {
             var val     = null
                 , errors = self[this['name']]['errors'] || {}
+                , isValid = false
             ;
 
-            if ( errors['isRequired'] && this.value == false) {
+            // #B235 — was (the loose == also matched ''; `isValid = true` was a
+            // dead write into the binding hoisted from below):
+            // if ( errors['isRequired'] && this.value == false) {
+            //     isValid = true;
+            //     delete errors['isRequired'];
+            //     this['errors'] = errors;
+            // }
+
+            if ( this.value === '' ) { // #B78/#B235 — emptiness is isRequired's verdict alone
                 isValid = true;
-                delete errors['isRequired'];
-                this['errors'] = errors;
-            }
+            } else {
+                switch(this.value) {
+                    case 'true':
+                    case true:
+                    case 1:
+                        val = this.value = local.data[this.name] = true;
+                        break;
+                    case 'false':
+                    case false:
+                    case 0:
+                        val = this.value = local.data[this.name] = false;
+                        break;
+                }
 
-            switch(this.value) {
-                case 'true':
-                case true:
-                case 1:
-                    val = this.value = local.data[this.name] = true;
-                    break;
-                case 'false':
-                case false:
-                case 0:
-                    val = this.value = local.data[this.name] = false;
-                    break;
+                isValid = (val !== null) ? true : false;
+                // an engine-ACCEPTED answer clears the error that isRequired's
+                // loose emptiness test recorded on false/0
+                if ( val !== null && errors['isRequired'] ) {
+                    delete errors['isRequired'];
+                }
             }
-
-            var isValid = (val !== null) ? true : false;
 
             if (!isValid) {
                 errors['isBoolean'] = replace(this.error || local.errorLabels['isBoolean'], this, 'isBoolean')
@@ -1473,7 +1496,8 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
                 //delete errors['stack'];
             }
 
-            this.valid = isValid;
+            // #B78 mirror (Shape A): keep .valid consistent with a surviving isRequired error
+            this.valid = isValid && !errors['isRequired'];
             if ( errors.count() > 0 )
                 this['errors'] = errors;
 

@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Fixed `isBoolean` deleting the `isRequired` error on a required-but-empty field (its rescue used a loose equality that also matched the empty string, so the user lost `Cannot be left empty` and got `Must be a valid boolean` instead). The rule now joins the empty-value contract: a blank field is adjudicated by `isRequired` alone, an optional blank boolean field passes instead of erroring, and a recognized `false`/`0` answer still satisfies a required toggle.'
+time: 2026-08-03T19:32:48+01:00

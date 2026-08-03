@@ -4320,34 +4320,57 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
         }
 
         /**
-         * Check if boolean and convert to `true/false` booloean if value is a string or a number
-         * Will include `false` value if isRequired
+         * Check if boolean and convert to `true/false` boolean if value is a string or a number.
+         * Accepts `true`/`'true'`/`1` and `false`/`'false'`/`0` — the documented set.
+         *
+         * #B78 contract (#B235): an EMPTY value is adjudicated by `isRequired`
+         * alone — the rule self-passes on the literal empty string, and the tail
+         * keeps `this.valid` consistent with a surviving isRequired error
+         * (Shape A). An ACCEPTED answer also clears a prior isRequired error:
+         * `false` and `0` are loose-equal to the empty string so isRequired
+         * flags them, but a recognized boolean false is a present answer (an
+         * unchecked-but-required toggle does not fail). The pre-fix rescue ran
+         * BEFORE the switch on a loose equality that also matched the empty
+         * string, deleting the isRequired error a genuinely-empty field had
+         * earned (#B235).
          * */
         self[el]['isBoolean'] = function() {
             var val     = null
                 , errors = self[this['name']]['errors'] || {}
+                , isValid = false
             ;
 
-            if ( errors['isRequired'] && this.value == false) {
+            // #B235 — was (the loose == also matched ''; `isValid = true` was a
+            // dead write into the binding hoisted from below):
+            // if ( errors['isRequired'] && this.value == false) {
+            //     isValid = true;
+            //     delete errors['isRequired'];
+            //     this['errors'] = errors;
+            // }
+
+            if ( this.value === '' ) { // #B78/#B235 — emptiness is isRequired's verdict alone
                 isValid = true;
-                delete errors['isRequired'];
-                this['errors'] = errors;
-            }
+            } else {
+                switch(this.value) {
+                    case 'true':
+                    case true:
+                    case 1:
+                        val = this.value = local.data[this.name] = true;
+                        break;
+                    case 'false':
+                    case false:
+                    case 0:
+                        val = this.value = local.data[this.name] = false;
+                        break;
+                }
 
-            switch(this.value) {
-                case 'true':
-                case true:
-                case 1:
-                    val = this.value = local.data[this.name] = true;
-                    break;
-                case 'false':
-                case false:
-                case 0:
-                    val = this.value = local.data[this.name] = false;
-                    break;
+                isValid = (val !== null) ? true : false;
+                // an engine-ACCEPTED answer clears the error that isRequired's
+                // loose emptiness test recorded on false/0
+                if ( val !== null && errors['isRequired'] ) {
+                    delete errors['isRequired'];
+                }
             }
-
-            var isValid = (val !== null) ? true : false;
 
             if (!isValid) {
                 errors['isBoolean'] = replace(this.error || local.errorLabels['isBoolean'], this, 'isBoolean')
@@ -4358,7 +4381,8 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
                 //delete errors['stack'];
             }
 
-            this.valid = isValid;
+            // #B78 mirror (Shape A): keep .valid consistent with a surviving isRequired error
+            this.valid = isValid && !errors['isRequired'];
             if ( errors.count() > 0 )
                 this['errors'] = errors;
 
@@ -18119,6 +18143,26 @@ function ValidatorPlugin(rules, data, formId, culture) {
         }
     }
 
+    /**
+     * getCastedValue
+     * Returns the value to use for `fieldName` — raw for the engine to
+     * adjudicate, or cast/quoted for dynamised-rules substitution.
+     *
+     * Plain mode (`formatFields`): numeric-rule comma normalisation only;
+     * real booleans pass through as-is and every other value stays RAW — the
+     * engine's own rules cast on acceptance (#B236).
+     * Dynamised mode (`getDynamisedRules`): values are spliced into a
+     * stringified condition, so a boolean-ruled field casts to an unquoted
+     * boolean operand, an empty value becomes a quoted empty string, and
+     * other strings are quoted.
+     *
+     * @inner
+     * @param {object} ruleObj - parsed rules (quoted booleans unquoted)
+     * @param {object} fields - collected field values (MUTATED: comma normalisation)
+     * @param {string} fieldName
+     * @param {boolean|string} [isOnDynamisedRulesMode] - truthy/`'true'` in dynamised mode
+     * @returns {*} the raw, cast, or quoted value
+     */
     var getCastedValue = function(ruleObj, fields, fieldName, isOnDynamisedRulesMode) {
 
         var isOnDynamisedRules = (
@@ -18163,7 +18207,16 @@ function ValidatorPlugin(rules, data, formId, culture) {
 
         if ( typeof(fields[fieldName]) == 'boolean') {
             return fields[fieldName]
-        } else if (ruleObj[fieldName].isBoolean) {
+        // #B236 — the boolean pre-cast survives ONLY in dynamised-rules mode, where a
+        // referenced isBoolean field must splice into a stringified condition as an
+        // unquoted boolean operand (`$flag === true`). On the PLAIN pass it funneled
+        // every value not matching the case-insensitive literal `true` to `false`
+        // BEFORE the engine ran, so junk (and the HTML checkbox default `on`, and
+        // the number 1) validated clean and persisted as `false` on the server auto
+        // path. The engine is the single adjudicator now — the same contract the
+        // routing requirements surface always enforced.
+        // was: `} else if (ruleObj[fieldName].isBoolean) {`
+        } else if (isOnDynamisedRules && ruleObj[fieldName].isBoolean) {
             return (/^true$/i.test(fields[fieldName])) ? true : false;
         }
 

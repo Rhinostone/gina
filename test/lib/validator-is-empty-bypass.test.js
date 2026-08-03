@@ -133,10 +133,10 @@ describe('validator-is-empty-bypass §01 — source pins', function () {
             'per-field flag stays consistent with a surviving isRequired error');
     });
 
-    it('01.6 - Shape-A population count: exactly FIVE rules carry the regate', function () {
+    it('01.6 - Shape-A population count: exactly SIX rules carry the regate', function () {
         var m = activeLines(ENGINE_SRC).match(/this\.valid = isValid && !errors\['isRequired'\];/g) || [];
-        assert.equal(m.length, 5,
-            'isEmail + isJsonWebToken + isFloat + isInList + is — a sixth or fourth means this file is stale');
+        assert.equal(m.length, 6,
+            'is + isEmail + isJsonWebToken + isBoolean + isFloat + isInList — a seventh or fifth means this file is stale');
     });
 });
 
@@ -241,7 +241,7 @@ describe('validator-is-empty-bypass §04 — dist fidelity', function () {
         assert.ok(raw.indexOf("!errors['isRequired'] && typeof(this.value) == 'string' && this.value == ''") === -1,
             'the old gated bypass must not survive in executable dist bytes');
         var m = raw.match(/this\.valid = isValid && !errors\['isRequired'\];/g) || [];
-        assert.equal(m.length, 5, 'the regate population must reach the bundle (4 pre-fix)');
+        assert.equal(m.length, 6, 'the regate population must reach the bundle (5 pre-isBoolean)');
     });
 
     it('04.2 - gina.js no longer ships the isApiError label', function () {
@@ -251,13 +251,18 @@ describe('validator-is-empty-bypass §04 — dist fidelity', function () {
             'control: the client re-key site legitimately keeps the property NAME');
     });
 
-    it('04.3 - gina.min.js: the minified regate population is 5', function () {
+    it('04.3 - gina.min.js: the minified regate population is 6', function () {
         var min = fs.readFileSync(DIST_MIN_PATH, 'utf8');
         // Closure emission of `this.valid = isValid && !errors['isRequired'];`
-        // (drafted from the existing four; VALIDATED against the real artifacts
-        // at the rebuild — expected 4 on pre-fix gina.min.js, 5 after).
-        var m = min.match(/\.valid=[A-Za-z_$][\w$]*&&![A-Za-z_$][\w$]*\.isRequired/g) || [];
-        assert.equal(m.length, 5,
-            'the served artifact must carry the fifth regate — gina.min.js is what browsers run');
+        // VALIDATED against the real artifacts at each rebuild.
+        // WRAP-AGNOSTIC BY MEASUREMENT: Closure line-wraps its output, and the
+        // isBoolean rebuild put a break inside one of the six tails
+        // (`.valid=V&&\n!I.isRequired`). A needle without the `\s*` boundaries
+        // counted 5 of the 6 and so passed its old `=== 5` by COINCIDENCE —
+        // where the break falls depends on preceding token lengths, so a strict
+        // needle flips this pin on unrelated future rebuilds.
+        var m = min.match(/\.valid\s*=\s*[A-Za-z_$][\w$]*\s*&&\s*!\s*[A-Za-z_$][\w$]*\s*\.\s*isRequired/g) || [];
+        assert.equal(m.length, 6,
+            'the served artifact must carry the sixth regate — gina.min.js is what browsers run');
     });
 });

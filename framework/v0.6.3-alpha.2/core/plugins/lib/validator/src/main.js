@@ -7928,6 +7928,26 @@ function ValidatorPlugin(rules, data, formId, culture) {
         }
     }
 
+    /**
+     * getCastedValue
+     * Returns the value to use for `fieldName` — raw for the engine to
+     * adjudicate, or cast/quoted for dynamised-rules substitution.
+     *
+     * Plain mode (`formatFields`): numeric-rule comma normalisation only;
+     * real booleans pass through as-is and every other value stays RAW — the
+     * engine's own rules cast on acceptance (#B236).
+     * Dynamised mode (`getDynamisedRules`): values are spliced into a
+     * stringified condition, so a boolean-ruled field casts to an unquoted
+     * boolean operand, an empty value becomes a quoted empty string, and
+     * other strings are quoted.
+     *
+     * @inner
+     * @param {object} ruleObj - parsed rules (quoted booleans unquoted)
+     * @param {object} fields - collected field values (MUTATED: comma normalisation)
+     * @param {string} fieldName
+     * @param {boolean|string} [isOnDynamisedRulesMode] - truthy/`'true'` in dynamised mode
+     * @returns {*} the raw, cast, or quoted value
+     */
     var getCastedValue = function(ruleObj, fields, fieldName, isOnDynamisedRulesMode) {
 
         var isOnDynamisedRules = (
@@ -7972,7 +7992,16 @@ function ValidatorPlugin(rules, data, formId, culture) {
 
         if ( typeof(fields[fieldName]) == 'boolean') {
             return fields[fieldName]
-        } else if (ruleObj[fieldName].isBoolean) {
+        // #B236 — the boolean pre-cast survives ONLY in dynamised-rules mode, where a
+        // referenced isBoolean field must splice into a stringified condition as an
+        // unquoted boolean operand (`$flag === true`). On the PLAIN pass it funneled
+        // every value not matching the case-insensitive literal `true` to `false`
+        // BEFORE the engine ran, so junk (and the HTML checkbox default `on`, and
+        // the number 1) validated clean and persisted as `false` on the server auto
+        // path. The engine is the single adjudicator now — the same contract the
+        // routing requirements surface always enforced.
+        // was: `} else if (ruleObj[fieldName].isBoolean) {`
+        } else if (isOnDynamisedRules && ruleObj[fieldName].isBoolean) {
             return (/^true$/i.test(fields[fieldName])) ? true : false;
         }
 
