@@ -29,6 +29,12 @@
     } catch (e) { _ginaBC = null; }
     function _ginaPublish() {
         if (!_ginaBC) return;
+        // #B231 — advertise this tab's channel id so a ?ch=-less embedded
+        // Inspector (direct URL / bookmark / a window predating bound mode)
+        // can ADOPT bound mode instead of the bundle-global fallback.
+        // Last-writer-wins across tabs; adoption is guarded by a liveness
+        // handshake on the reader side (a stale advert never strands it).
+        try { localStorage.setItem('__gina_last_tab_ch', _ginaTabId); } catch (e) {}
         try { _ginaBC.postMessage({ type: 'data', payload: window.__ginaData }); } catch (e) {}
     }
     // A freshly-opened Inspector posts {type:'request'} (BroadcastChannel does

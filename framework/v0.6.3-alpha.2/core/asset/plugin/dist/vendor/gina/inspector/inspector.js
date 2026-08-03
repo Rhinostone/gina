@@ -62,6 +62,14 @@
     // ── Constants ──────────────────────────────────────────────────────────
     /** @type {number} Data poll interval in ms — adjustable via Settings panel */
     var pollDataMs  = 2000;
+    /** @constant {number} Liveness-handshake window in ms for an ADOPTED bound
+     *  channel (#B231): after `_adoptAdvertisedChannel()` binds the
+     *  statusbar-advertised tab channel (which posts `{type:'request'}` on bind),
+     *  a `{type:'data'}` reply must land within this window — a stale advert
+     *  (its tab closed; localStorage outlives tabs) would otherwise strand the
+     *  window on a silent channel. On expiry the adopt path tears down and hands
+     *  over to the legacy bundle-global acquisition. */
+    var ADOPT_HANDSHAKE_MS = 1500;
     /** @constant {number} Log poll interval in ms */
     var POLL_LOGS_MS = 1000;
     /** @constant {number} Maximum retained log entries before oldest are dropped */
@@ -3640,6 +3648,101 @@
         return true;
     }
 
+    /**
+     * Adopt the statusbar-advertised tab channel when no usable `?ch=` was
+     * given (#B231).
+     *
+     * Every dev page's statusbar advertises its per-tab channel id in
+     * `localStorage['__gina_last_tab_ch']` on each publish, so an embedded
+     * Inspector opened WITHOUT `?ch=` (direct URL, bookmark, a window predating
+     * bound mode) can still bind to the most-recently-published tab instead of
+     * falling back to the bundle-global channels (opener/localStorage polling +
+     * the passive `/_gina/agent` SSE), where ANY background request to the
+     * bundle overwrites the page-scoped popin/XHR overlay within seconds.
+     *
+     * A liveness handshake guards the adopt: `setupBoundChannel()` posts
+     * `{type:'request'}` on bind; if no `{type:'data'}` reply lands within
+     * {@link ADOPT_HANDSHAKE_MS} (stale advert — its tab is closed, and
+     * localStorage outlives tabs), the bound channel AND the `/_gina/logs`
+     * stream the caller opened alongside it are torn down, and `onDead` runs
+     * the legacy acquisition (leaving the logs stream open would double-deliver
+     * log entries once the legacy path's passive agent stream attaches).
+     *
+     * Multi-tab semantics: adopts the LAST tab that published (last-writer-wins
+     * on the advert) — a deliberate approximation of "the tab the user is on",
+     * strictly narrower than the bundle-global fallback it replaces.
+     *
+     * @inner
+     * @param   {function} onDead - Legacy acquisition to run when the adopted
+     *   channel never delivers (the init's `_startLegacyAcquisition`).
+     * @returns {boolean} `true` when an advertised channel was adopted (bound
+     *   mode claimed; the handshake timer is armed).
+     */
+    function _adoptAdvertisedChannel(onDead) {
+        var ad = null;
+        try { ad = localStorage.getItem('__gina_last_tab_ch'); } catch (e) { ad = null; }
+        if (!ad || !setupBoundChannel(ad)) return false;
+        setTimeout(function () {
+            // Proven live (a data frame arrived) or re-claimed by another mode.
+            if (source !== 'broadcast' || _bcLatest !== null) return;
+            try { if (_boundChannel) _boundChannel.close(); } catch (e) {}
+            _boundChannel = null;
+            if (_serverLogsEs) {
+                try { _serverLogsEs.close(); } catch (e) {}
+                _serverLogsEs = null;
+            }
+            source = null;
+            if (typeof onDead === 'function') onDead();
+        }, ADOPT_HANDSHAKE_MS);
+        return true;
+    }
+
+    /**
+     * Render the footer data-source mode badge (#B231).
+     *
+     * Surfaces WHICH kind of channel feeds the data tabs, so a degraded mode
+     * is visible instead of silent:
+     *  - `bound`  — per-tab statusbar channel (#INS15): page-scoped, immune to
+     *    other tabs' / background renders.
+     *  - `agent`  — explicit `?target=` bundle stream (standalone mode).
+     *  - `global` — legacy fallback (opener/localStorage polling + the passive
+     *    bundle-wide `/_gina/agent` SSE): ANY request to the bundle can
+     *    overwrite the data tabs — warn-tinted, and the tooltip points at the
+     *    statusbar link that yields bound mode.
+     *
+     * Called from `pollData()` (every tick + every bound-channel apply) and at
+     * the end of the init acquisition, so a mode transition (e.g. an adopted
+     * channel handing over to the legacy fallback) surfaces within one tick.
+     *
+     * @inner
+     */
+    function updateSourceModeBadge() {
+        var el = qs('#bm-source-mode');
+        if (!el) return;
+        var mode = null;
+        var cls  = 'bm-source-mode';
+        var tip  = '';
+        if (source === 'agent') {
+            mode = 'agent';
+            tip  = 'Data from the ?target= bundle stream (/_gina/agent).';
+        } else if (source === 'broadcast') {
+            mode = 'bound';
+            tip  = 'Data bound to one page tab (statusbar channel). Other tabs and background requests cannot overwrite it.';
+        } else if (source === 'localStorage' || (source && typeof source === 'object')) {
+            mode = 'global';
+            cls += ' bm-source-mode-warn';
+            tip  = 'Bundle-global fallback: any tab or background request to this bundle can overwrite the data tabs. Open the Inspector from the page statusbar link to get bound (per-tab) mode.';
+        }
+        if (mode === null) {
+            el.hidden = true;
+            return;
+        }
+        el.hidden = false;
+        el.textContent = mode;
+        el.className = cls;
+        el.title = tip;
+    }
+
     // ── Settings — environment info + memory gauge ────────────────────────
 
     /**
@@ -3816,6 +3919,7 @@
      */
     function pollData() {
         try {
+            updateSourceModeBadge();
             var gd;
             if (source === 'agent') {
                 // Agent mode — data is pushed via SSE; nothing to poll.
@@ -5698,10 +5802,31 @@
             // it severs window.opener). Server logs still arrive via the SSE.
             var _boundCh = (typeof URLSearchParams !== 'undefined')
                 ? new URLSearchParams(window.location.search).get('ch') : null;
-            if (setupBoundChannel(_boundCh)) {
+            if (setupBoundChannel(_boundCh)
+                // #B231 — no usable ?ch=: adopt the statusbar's advertised tab
+                // channel (bound mode) instead of the bundle-global fallback; a
+                // dead advert hands over to _startLegacyAcquisition via the
+                // liveness-handshake timer inside _adoptAdvertisedChannel().
+                || _adoptAdvertisedChannel(_startLegacyAcquisition)) {
                 qs('#bm-no-source').classList.add('hidden');
                 tryServerLogs();   // server logs only; data via the bound channel
             } else {
+                _startLegacyAcquisition();
+            }
+            updateSourceModeBadge();
+
+            /**
+             * Legacy bundle-global acquisition — opener/localStorage polling +
+             * the passive `/_gina/agent` SSE (+ engine.io + the "No source"
+             * connect form). Runs when neither an explicit `?ch=` nor an
+             * adopted advertised channel yields bound mode — and again from
+             * `_adoptAdvertisedChannel`'s handshake timer when an adopted
+             * channel turns out dead (#B231). Body unchanged from the
+             * pre-#B231 inline `else` block; only the connect-form wiring
+             * moved into the nested `_wireConnectForm()` below.
+             * @inner
+             */
+            function _startLegacyAcquisition() {
                 var ok = tryOpener() || tryLocalStorage();
                 if (!ok) {
                     hideLoader();
@@ -5709,6 +5834,18 @@
                     qs('#bm-dot').className = 'bm-dot err';
                     qs('#bm-label').textContent = 'No source';
                 }
+
+                _wireConnectForm();
+
+                tryEngineIO();
+                // Subscribe to /_gina/agent in parallel with opener polling. Opener
+                // polling alone misses SPA (pushState) and XHR renders because
+                // those paths never rewrite window.__ginaData. The passive agent
+                // stream delivers pushed data + log frames from those renders.
+                // It also supersedes tryServerLogs() (same `event: log` frames).
+                var _passiveAgentActive = tryAgentPassive();
+                if (!_passiveAgentActive) tryServerLogs();
+                updateSourceModeBadge();
 
                 /**
                  * Manual connect form on the "No source" overlay.
@@ -5723,38 +5860,31 @@
                  *
                  * @inner
                  */
-                var connectForm = qs('#bm-connect-form');
-                if (connectForm) {
-                    connectForm.addEventListener('submit', function (ev) {
-                        ev.preventDefault();
-                        var urlInput = qs('#bm-connect-url');
-                        var raw = (urlInput.value || '').trim();
-                        if (!raw) return;
-                        // Normalise: add scheme if missing, strip trailing slash
-                        if (!/^https?:\/\//i.test(raw)) raw = 'http://' + raw;
-                        raw = raw.replace(/\/+$/, '');
-                        // Navigate with ?target= to activate agent mode
-                        var loc = window.location.pathname + '?target=' + encodeURIComponent(raw);
-                        // #INS9b — append the optional inspector key (?key=) for an
-                        // auth-gated agent endpoint. Kept in the URL only (ephemeral);
-                        // never persisted to localStorage.
-                        var keyInput = qs('#bm-connect-key');
-                        var keyRaw = keyInput ? (keyInput.value || '').trim() : '';
-                        if (keyRaw) {
-                            loc += '&key=' + encodeURIComponent(keyRaw);
-                        }
-                        window.location.href = loc;
-                    });
+                function _wireConnectForm() {
+                    var connectForm = qs('#bm-connect-form');
+                    if (connectForm) {
+                        connectForm.addEventListener('submit', function (ev) {
+                            ev.preventDefault();
+                            var urlInput = qs('#bm-connect-url');
+                            var raw = (urlInput.value || '').trim();
+                            if (!raw) return;
+                            // Normalise: add scheme if missing, strip trailing slash
+                            if (!/^https?:\/\//i.test(raw)) raw = 'http://' + raw;
+                            raw = raw.replace(/\/+$/, '');
+                            // Navigate with ?target= to activate agent mode
+                            var loc = window.location.pathname + '?target=' + encodeURIComponent(raw);
+                            // #INS9b — append the optional inspector key (?key=) for an
+                            // auth-gated agent endpoint. Kept in the URL only (ephemeral);
+                            // never persisted to localStorage.
+                            var keyInput = qs('#bm-connect-key');
+                            var keyRaw = keyInput ? (keyInput.value || '').trim() : '';
+                            if (keyRaw) {
+                                loc += '&key=' + encodeURIComponent(keyRaw);
+                            }
+                            window.location.href = loc;
+                        });
+                    }
                 }
-
-                tryEngineIO();
-                // Subscribe to /_gina/agent in parallel with opener polling. Opener
-                // polling alone misses SPA (pushState) and XHR renders because
-                // those paths never rewrite window.__ginaData. The passive agent
-                // stream delivers pushed data + log frames from those renders.
-                // It also supersedes tryServerLogs() (same `event: log` frames).
-                var _passiveAgentActive = tryAgentPassive();
-                if (!_passiveAgentActive) tryServerLogs();
             }
         }
 

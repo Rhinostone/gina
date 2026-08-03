@@ -9709,3 +9709,339 @@ describe('86 - #B225: refresh-button SSE guard (bound mode) + derive-from-truth 
         assert.equal(treeEl.innerHTML, 'RENDERED_CARDS', 'the repaint lands in #tree-query (#B222 invariant preserved)');
     });
 });
+
+describe('87 - #B231: ?ch=-less Inspector adopts the statusbar-advertised tab channel; source-mode badge', function() {
+
+    var INSPECTOR_87 = path.join(BM_DIR, 'inspector.js');
+    var INDEX_87     = path.join(BM_DIR, 'index.html');
+    var CSS_87       = path.join(BM_DIR, 'inspector.css');
+    var SBAR_87      = path.join(BM_DIR, '..', 'html', 'statusbar.html');
+    var SRC_INSP_87  = path.join(FW, 'core/asset/plugin/src/vendor/gina/inspector/js/inspector.js');
+    var SRC_SBAR_87  = path.join(FW, 'core/asset/plugin/src/vendor/gina/inspector/html/statusbar.html');
+    var SRC_INDEX_87 = path.join(FW, 'core/asset/plugin/src/vendor/gina/inspector/html/index.html');
+
+    var _src87, _sbar87;
+    function getSrc87()  { return _src87  || (_src87  = fs.readFileSync(INSPECTOR_87, 'utf8')); }
+    function getSbar87() { return _sbar87 || (_sbar87 = fs.readFileSync(SBAR_87, 'utf8')); }
+
+    /**
+     * Brace-matched extraction of a function's shipped bytes (§84 pattern:
+     * started-flag walker; safe here because neither extracted body carries a
+     * brace inside a string/regex literal). Throws on not-found / duplicate
+     * decl / unbalanced braces so a silent mis-extraction cannot vacuously pass.
+     */
+    function extractFn87(src, decl) {
+        var i = src.indexOf(decl);
+        if (i < 0) throw new Error('decl not found: ' + decl);
+        if (src.indexOf(decl, i + 1) > -1) throw new Error('decl not unique: ' + decl);
+        var depth = 0, started = false, j = i;
+        for (; j < src.length; j++) {
+            var c = src[j];
+            if (c === '{') { depth++; started = true; }
+            else if (c === '}') {
+                depth--;
+                if (started && depth === 0) { j++; break; }
+            }
+        }
+        if (!started || depth !== 0) throw new Error('unbalanced braces for: ' + decl);
+        return src.slice(i, j);
+    }
+
+    it('extraction control: a bogus declaration throws (the walker can fail)', function() {
+        assert.throws(function() { extractFn87(getSrc87(), 'function _noSuchFunction87('); },
+            /decl not found/);
+    });
+
+    // ── statusbar.html (sender side) ──────────────────────────────────────
+
+    it('statusbar advertises the tab channel id inside _ginaPublish, before the postMessage', function() {
+        var s = getSbar87();
+        var decl = s.indexOf('function _ginaPublish() {');
+        assert.ok(decl > -1, '_ginaPublish declaration must exist');
+        var endAnchor = s.indexOf('// A freshly-opened Inspector', decl);
+        assert.ok(endAnchor > decl, 'end anchor (request-reply comment) must follow _ginaPublish');
+        var body = s.slice(decl, endAnchor);
+        var adv  = body.indexOf("localStorage.setItem('__gina_last_tab_ch', _ginaTabId)");
+        var post = body.indexOf("postMessage({ type: 'data', payload: window.__ginaData })");
+        assert.ok(adv > -1,  'expected the advert write (code form) inside _ginaPublish');
+        assert.ok(post > adv, 'the advert write must precede the channel publish');
+    });
+
+    it('statusbar advert write is try/catch-guarded (storage-blocked browsers must not break publish)', function() {
+        var s = getSbar87();
+        assert.match(s, /try \{ localStorage\.setItem\('__gina_last_tab_ch', _ginaTabId\); \} catch \(e\) \{\}/);
+    });
+
+    // ── inspector.js — source pins ────────────────────────────────────────
+
+    it('declares the ADOPT_HANDSHAKE_MS liveness window', function() {
+        assert.match(getSrc87(), /var ADOPT_HANDSHAKE_MS = 1500;/);
+    });
+
+    it('defines _adoptAdvertisedChannel(onDead) reading the advert via getItem and binding through setupBoundChannel', function() {
+        var body = extractFn87(getSrc87(), 'function _adoptAdvertisedChannel(onDead)');
+        assert.ok(body.indexOf("localStorage.getItem('__gina_last_tab_ch')") > -1,
+            'expected the advert read (code form)');
+        assert.ok(body.indexOf('setupBoundChannel(ad)') > -1,
+            'expected the bind through setupBoundChannel');
+        assert.ok(body.indexOf('ADOPT_HANDSHAKE_MS') > -1,
+            'expected the handshake timer to use the named window constant');
+    });
+
+    it('handshake teardown closes the bound channel AND the logs stream, nulls source, then runs onDead', function() {
+        var body = extractFn87(getSrc87(), 'function _adoptAdvertisedChannel(onDead)');
+        var liveGuard = body.indexOf("source !== 'broadcast' || _bcLatest !== null");
+        var closeB    = body.indexOf('_boundChannel.close()');
+        var closeL    = body.indexOf('_serverLogsEs.close()');
+        var nullSrc   = body.indexOf('source = null;');
+        var dead      = body.indexOf('onDead()');
+        assert.ok(liveGuard > -1, 'expected the proven-live / re-claimed early return');
+        assert.ok(closeB > liveGuard, 'bound-channel close after the live guard');
+        assert.ok(closeL > closeB,   'logs-stream close after the bound-channel close');
+        assert.ok(nullSrc > closeL,  'source reset after both closes');
+        assert.ok(dead > nullSrc,    'onDead runs last (the legacy acquisition takes over)');
+    });
+
+    it('init dispatch: adopt is the second arm of the bound-mode OR; the else delegates to _startLegacyAcquisition', function() {
+        var s = getSrc87();
+        var a = s.indexOf('var isAgent = tryAgent()');
+        assert.ok(a > -1, 'init anchor must exist');
+        var end = s.indexOf('── Persist window geometry', a);
+        assert.ok(end > a, 'end anchor (geometry comment) must follow the acquisition block');
+        var blk = s.slice(a, end);
+        var setup    = blk.indexOf('setupBoundChannel(_boundCh)');
+        var adoptArm = blk.indexOf('|| _adoptAdvertisedChannel(_startLegacyAcquisition)');
+        var elseCall = blk.indexOf('_startLegacyAcquisition();');
+        var legDecl  = blk.indexOf('function _startLegacyAcquisition()');
+        assert.ok(setup > -1, 'explicit ?ch= bind stays the first arm');
+        assert.ok(adoptArm > setup, 'the adopt arm follows the explicit bind in the same OR');
+        assert.ok(elseCall > adoptArm, 'the legacy else delegates to _startLegacyAcquisition');
+        assert.ok(legDecl > elseCall, 'the legacy body is the hoisted declaration below the dispatch');
+        // Subtract: the pre-#B231 inline else body is gone; its first statement
+        // now lives inside the hoisted function.
+        assert.ok(!/else\s*\{\s*\n\s*var ok = tryOpener/.test(blk),
+            'the legacy body must no longer be inlined in the else');
+        var legBody = extractFn87(s, 'function _startLegacyAcquisition()');
+        assert.ok(legBody.indexOf('var ok = tryOpener() || tryLocalStorage();') > -1,
+            'the legacy body opens with the opener/localStorage acquisition, unchanged');
+        assert.ok(legBody.indexOf('var _passiveAgentActive = tryAgentPassive();') > -1,
+            'the passive agent subscription stays in the legacy body');
+    });
+
+    it('pollData refreshes the source-mode badge at the top of every tick', function() {
+        var s = getSrc87();
+        var pd = s.indexOf('function pollData() {');
+        assert.ok(pd > -1);
+        var gd = s.indexOf('var gd;', pd);
+        var badge = s.indexOf('updateSourceModeBadge();', pd);
+        assert.ok(badge > pd && badge < gd,
+            'updateSourceModeBadge() must run before the source branches (covers every mode incl. early returns)');
+    });
+
+    // ── behavioral: _adoptAdvertisedChannel (extracted shipped bytes) ─────
+
+    function driveAdopt(opts) {
+        var fnSrc = extractFn87(getSrc87(), 'function _adoptAdvertisedChannel(onDead)');
+        var timers = [];
+        var log = { setupCalls: [], boundClosed: 0, logsClosed: 0, onDead: 0 };
+        var harness = new Function('deps', [
+            'var localStorage = deps.localStorage;',
+            'var setupBoundChannel = deps.setupBoundChannel;',
+            'var setTimeout = deps.setTimeout;',
+            'var ADOPT_HANDSHAKE_MS = 1500;',
+            'var source = deps.source;',
+            'var _bcLatest = deps.bcLatest;',
+            'var _boundChannel = deps.boundChannel;',
+            'var _serverLogsEs = deps.serverLogsEs;',
+            fnSrc,
+            'return {',
+            '    adopt: _adoptAdvertisedChannel,',
+            '    state: function () { return { source: source, boundChannel: _boundChannel, serverLogsEs: _serverLogsEs }; },',
+            '    set: {',
+            '        source: function (v) { source = v; },',
+            '        bcLatest: function (v) { _bcLatest = v; },',
+            '        boundChannel: function (v) { _boundChannel = v; },',
+            '        serverLogsEs: function (v) { _serverLogsEs = v; }',
+            '    }',
+            '};'
+        ].join('\n'));
+        var api = harness({
+            localStorage: opts.localStorage,
+            setupBoundChannel: function (ch) { log.setupCalls.push(ch); return opts.setupReturns; },
+            setTimeout: function (fn, ms) { timers.push({ fn: fn, ms: ms }); return timers.length; },
+            source: null,
+            bcLatest: null,
+            boundChannel: null,
+            serverLogsEs: null
+        });
+        return { api: api, timers: timers, log: log };
+    }
+
+    it('no advert -> false, setupBoundChannel never called, no timer armed', function() {
+        var d = driveAdopt({ localStorage: { getItem: function () { return null; } }, setupReturns: true });
+        var onDead = 0;
+        assert.strictEqual(d.api.adopt(function () { onDead++; }), false);
+        assert.equal(d.log.setupCalls.length, 0, 'must not bind without an advert');
+        assert.equal(d.timers.length, 0, 'no handshake timer without a bind');
+        assert.equal(onDead, 0);
+    });
+
+    it('storage read throwing -> false (blocked-storage browsers)', function() {
+        var d = driveAdopt({ localStorage: { getItem: function () { throw new Error('denied'); } }, setupReturns: true });
+        assert.strictEqual(d.api.adopt(function () {}), false);
+        assert.equal(d.log.setupCalls.length, 0);
+    });
+
+    it('advert present but the bind fails -> false, no timer', function() {
+        var d = driveAdopt({ localStorage: { getItem: function () { return 'gtabc'; } }, setupReturns: false });
+        assert.strictEqual(d.api.adopt(function () {}), false);
+        assert.deepEqual(d.log.setupCalls, ['gtabc'], 'the advertised id is what gets bound');
+        assert.equal(d.timers.length, 0);
+    });
+
+    it('adopt success arms exactly one handshake timer at ADOPT_HANDSHAKE_MS', function() {
+        var d = driveAdopt({ localStorage: { getItem: function () { return 'gtabc'; } }, setupReturns: true });
+        assert.strictEqual(d.api.adopt(function () {}), true);
+        assert.equal(d.timers.length, 1, 'exactly one timer');
+        assert.equal(d.timers[0].ms, 1500, 'armed at the named window');
+    });
+
+    it('dead advert: timer fires with no data -> both streams closed, source nulled, onDead runs once', function() {
+        var d = driveAdopt({ localStorage: { getItem: function () { return 'gtabc'; } }, setupReturns: true });
+        var onDead = 0;
+        assert.strictEqual(d.api.adopt(function () { onDead++; }), true);
+        var boundClosed = 0, logsClosed = 0;
+        d.api.set.source('broadcast');
+        d.api.set.bcLatest(null);
+        d.api.set.boundChannel({ close: function () { boundClosed++; } });
+        d.api.set.serverLogsEs({ close: function () { logsClosed++; } });
+        d.timers[0].fn();
+        assert.equal(boundClosed, 1, 'bound channel closed');
+        assert.equal(logsClosed, 1, 'the /_gina/logs stream the adopt branch opened is closed too (no double log delivery after fallback)');
+        assert.strictEqual(d.api.state().source, null, 'source released for the legacy acquisition');
+        assert.strictEqual(d.api.state().boundChannel, null);
+        assert.strictEqual(d.api.state().serverLogsEs, null);
+        assert.equal(onDead, 1, 'legacy acquisition handed over exactly once');
+    });
+
+    it('live advert: a data frame arrived before the timer -> no teardown, no fallback', function() {
+        var d = driveAdopt({ localStorage: { getItem: function () { return 'gtabc'; } }, setupReturns: true });
+        var onDead = 0;
+        d.api.adopt(function () { onDead++; });
+        var closed = 0;
+        d.api.set.source('broadcast');
+        d.api.set.bcLatest({ user: {} });
+        d.api.set.boundChannel({ close: function () { closed++; } });
+        d.timers[0].fn();
+        assert.equal(closed, 0, 'a proven-live channel is never torn down');
+        assert.equal(onDead, 0);
+        assert.strictEqual(d.api.state().source, 'broadcast');
+    });
+
+    it('re-claimed source: timer fires after another mode took over -> no-op', function() {
+        var d = driveAdopt({ localStorage: { getItem: function () { return 'gtabc'; } }, setupReturns: true });
+        var onDead = 0;
+        d.api.adopt(function () { onDead++; });
+        d.api.set.source('agent');
+        d.api.set.bcLatest(null);
+        var closed = 0;
+        d.api.set.boundChannel({ close: function () { closed++; } });
+        d.timers[0].fn();
+        assert.equal(closed, 0);
+        assert.equal(onDead, 0);
+    });
+
+    it('teardown with no logs stream open does not throw and still hands over', function() {
+        var d = driveAdopt({ localStorage: { getItem: function () { return 'gtabc'; } }, setupReturns: true });
+        var onDead = 0;
+        d.api.adopt(function () { onDead++; });
+        d.api.set.source('broadcast');
+        d.api.set.bcLatest(null);
+        d.api.set.boundChannel({ close: function () {} });
+        d.api.set.serverLogsEs(null);
+        assert.doesNotThrow(function () { d.timers[0].fn(); });
+        assert.equal(onDead, 1);
+    });
+
+    // ── behavioral: updateSourceModeBadge (extracted shipped bytes) ───────
+
+    function driveBadge(sourceValue, elPresent) {
+        var fnSrc = extractFn87(getSrc87(), 'function updateSourceModeBadge()');
+        var el = elPresent === false ? null
+            : { hidden: undefined, textContent: '', className: '', title: '' };
+        var harness = new Function('deps', [
+            'var qs = deps.qs;',
+            'var source = deps.source;',
+            fnSrc,
+            'return updateSourceModeBadge;'
+        ].join('\n'));
+        harness({ qs: function () { return el; }, source: sourceValue })();
+        return el;
+    }
+
+    it('broadcast -> "bound", no warn tint', function() {
+        var el = driveBadge('broadcast');
+        assert.strictEqual(el.hidden, false);
+        assert.strictEqual(el.textContent, 'bound');
+        assert.strictEqual(el.className, 'bm-source-mode');
+        assert.ok(el.title.length > 0, 'tooltip explains the mode');
+    });
+
+    it('agent -> "agent", no warn tint', function() {
+        var el = driveBadge('agent');
+        assert.strictEqual(el.textContent, 'agent');
+        assert.strictEqual(el.className, 'bm-source-mode');
+    });
+
+    it('localStorage fallback -> "global" with the warn tint and a pointer at the statusbar link', function() {
+        var el = driveBadge('localStorage');
+        assert.strictEqual(el.textContent, 'global');
+        assert.strictEqual(el.className, 'bm-source-mode bm-source-mode-warn');
+        assert.ok(/statusbar/.test(el.title), 'tooltip must tell the user how to reach bound mode');
+    });
+
+    it('opener (a Window object) -> "global" with the warn tint (the passive bundle-wide SSE runs in that mode too)', function() {
+        var el = driveBadge({ location: {} });
+        assert.strictEqual(el.textContent, 'global');
+        assert.ok(/bm-source-mode-warn/.test(el.className));
+    });
+
+    it('no source -> badge hidden; absent element -> no throw', function() {
+        var el = driveBadge(null);
+        assert.strictEqual(el.hidden, true);
+        assert.doesNotThrow(function () { driveBadge('broadcast', false); });
+    });
+
+    // ── markup + css pins ─────────────────────────────────────────────────
+
+    it('index.html carries the badge span inside the footer target, before the health dot', function() {
+        var html = fs.readFileSync(INDEX_87, 'utf8');
+        var target = html.indexOf('class="bm-target"');
+        var badge  = html.indexOf('id="bm-source-mode"', target);
+        var dot    = html.indexOf('id="bm-dot"', target);
+        assert.ok(target > -1, 'footer target div must exist');
+        assert.ok(badge > target, 'badge span inside the target div');
+        assert.ok(dot > badge, 'badge renders before the health dot');
+    });
+
+    it('inspector.css styles the badge and its warn tint', function() {
+        var css = fs.readFileSync(CSS_87, 'utf8');
+        assert.ok(css.indexOf('.bm-source-mode') > -1, 'expected .bm-source-mode in the compiled css');
+        assert.ok(css.indexOf('.bm-source-mode-warn') > -1, 'expected the warn modifier in the compiled css');
+    });
+
+    // ── src -> dist fidelity (these three are the free subtract at the
+    //    src-fixed/dist-stale midstate: red until the build copies) ────────
+
+    it('inspector.js dist is the verbatim src copy', function() {
+        assert.strictEqual(fs.readFileSync(INSPECTOR_87, 'utf8'), fs.readFileSync(SRC_INSP_87, 'utf8'));
+    });
+
+    it('statusbar.html dist is the verbatim src copy', function() {
+        assert.strictEqual(fs.readFileSync(SBAR_87, 'utf8'), fs.readFileSync(SRC_SBAR_87, 'utf8'));
+    });
+
+    it('index.html dist is the verbatim src copy', function() {
+        assert.strictEqual(fs.readFileSync(INDEX_87, 'utf8'), fs.readFileSync(SRC_INDEX_87, 'utf8'));
+    });
+});

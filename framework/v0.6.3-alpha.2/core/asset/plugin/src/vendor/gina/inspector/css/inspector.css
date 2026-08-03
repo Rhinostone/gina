@@ -231,6 +231,25 @@ input:checked ~ .bm-toggle-track::after {
   background: var(--err);
 }
 
+/* Data-source mode badge (#B231) — footer pill naming the active channel kind
+   (bound / agent / global); warn-tinted when the data tabs run bundle-global */
+.bm-source-mode {
+  font-size: 9px;
+  line-height: 1;
+  padding: 2px 5px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+  cursor: help;
+}
+.bm-source-mode.bm-source-mode-warn {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+
 /* ── Refresh button (in target area, after bundle@env) ───────────────────── */
 .bm-refresh-btn {
   display: flex;
