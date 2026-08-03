@@ -148,6 +148,84 @@ function Couchbase(conn, infos) {
     };
 
     /**
+     * #B243 — guards the assembled N1QL parameter list against values the
+     * Couchbase SDK cannot serialize. This defends against a PROCESS ABORT,
+     * not a normal validation failure.
+     *
+     * The SDK maps `JSON.stringify` over the parameter list. For a `function`,
+     * a `symbol`, or an `undefined`, `JSON.stringify` returns the VALUE
+     * `undefined` rather than a string; the native binding coerces that to the
+     * empty string, and the C++ core's JSON parse of `""` throws
+     * `tao::pegtl::parse_error` on an internal thread, reaching
+     * `std::terminate()` and then `abort()`. That kills the whole bundle — no
+     * `try/catch`, `uncaughtException` or `unhandledRejection` can intercept
+     * it, so the request cannot even fail with a 500. Measured against a live
+     * cluster on SDK 4.1.3 and 4.7.1 (4.2.0+ maps a bare `undefined` to null,
+     * but still aborts on functions and symbols).
+     *
+     * Reachable WITHOUT any misuse of the SDK: the cursor-style assembly branch
+     * fills `queryParams[i]` for every `i < params.length` while guarding only
+     * `undefined`, so a caller that under-supplies one argument AND passes a
+     * trailing callback puts the CALLBACK itself into a parameter slot. The
+     * arity check at the top of the query method cannot catch that shape — it
+     * only fires when the LAST argument is not a function.
+     *
+     * Scope: `typeof` covers every value `JSON.stringify` renders as
+     * `undefined` EXCEPT an object whose own `toJSON()` returns undefined,
+     * which is left unguarded deliberately — detecting it would cost a full
+     * `JSON.stringify` per parameter on every query, and no realistic call site
+     * produces it.
+     *
+     * @param {Array|object} queryParams - Assembled parameter list: a positional array, or a named map.
+     * @param {string} entityName - Entity the query belongs to (message only).
+     * @param {string} name - Query method name (message only).
+     * @param {string} source - Path of the backing `.sql` file (message only).
+     * @param {Array} [params] - Declared placeholders, used for the arity hint.
+     * @returns {TypeError|null} A ready-to-surface error, or `null` when every parameter is serializable.
+     * @private
+     *
+     * @example
+     * var err = getUnserializableParamError(['a', undefined], 'invoice', 'getByRef', src, ['$1','$2']);
+     * if (err) { return cb(err); } // never reaches the SDK, so the process survives
+     */
+    var getUnserializableParamError = function(queryParams, entityName, name, source, params) {
+        if ( !queryParams || typeof(queryParams) != 'object' ) {
+            return null;
+        }
+
+        var isPositional = Array.isArray(queryParams)
+            , keys        = isPositional ? null : Object.keys(queryParams)
+            , len         = isPositional ? queryParams.length : keys.length
+            , declared    = ( params && params.length ) ? params.length : 0
+        ;
+
+        for (var i = 0; i < len; ++i) {
+            var key  = isPositional ? i : keys[i]
+                , type = typeof(queryParams[key])
+            ;
+
+            if ( type != 'undefined' && type != 'function' && type != 'symbol' ) {
+                continue;
+            }
+
+            var label = isPositional ? ('$' + (i + 1)) : ('$' + key);
+            var hint  = ( type == 'function' )
+                ? 'A callback landed in a parameter slot: the query declares ' + declared
+                    + ' parameter(s), so every one of them must be passed BEFORE the callback.'
+                : 'Pass `null` for an intentionally empty parameter — `null` serializes correctly.';
+
+            var _err = new TypeError('[N1QL][ ' + entityName + '#' + name + '() ] parameter ' + label
+                + ' is a `' + type + '`, which the Couchbase SDK cannot serialize: dispatching it would '
+                + 'abort the process instead of raising an error. ' + hint
+                + ' Please refer to [ ' + source + ' ]');
+            _err.code = 'GINA_COUCHBASE_UNSERIALIZABLE_PARAM';
+            return _err;
+        }
+
+        return null;
+    };
+
+    /**
      * Runs EXPLAIN on a N1QL statement asynchronously and caches the
      * extracted indexes. Patches `queryEntry.indexes` in-place once
      * the EXPLAIN result is available.
@@ -792,6 +870,22 @@ function Couchbase(conn, infos) {
                     if ( query.indexOf('$scope') > -1 ) {
                         query = query.replace(/\$scope/g, "'" + (infos.scope || process.env.NODE_SCOPE) + "'");
                     }
+                    // #B243 — refuse a parameter the SDK cannot serialize BEFORE dispatch.
+                    // This is the single site where `queryOptions.parameters` is assigned,
+                    // so both assembly branches above (and any future one) are covered by
+                    // this one gate. It has to run here: once the value reaches the SDK the
+                    // failure is an uncatchable `abort()`, so there is no downstream
+                    // recovery point. Surfacing matches the missing-context precedent at
+                    // the top of this method — callback when the caller passed one, throw
+                    // otherwise — which turns a bundle-killing crash into an ordinary 500.
+                    var _unserializableErr = getUnserializableParamError(queryParams, entityName, name, source, params);
+                    if (_unserializableErr) {
+                        if (_mainCallback) {
+                            return _mainCallback(_unserializableErr);
+                        }
+                        throw _unserializableErr;
+                    }
+
                     queryOptions.parameters = queryParams;
 
                     // JUNE 2021 patch
