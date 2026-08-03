@@ -24,14 +24,14 @@
  * SCOPE — what this fix does NOT cover (measured pre-vs-post on the real
  * bytes, patched copies): it closes THIS crash site, not every `$`. A `$`
  * token sitting in an ARRAY rule's FIRST argument and naming no field —
- * `isInList: ['$100','$200']` — still throws, one site further on, at
- * `checkFieldAgainstRules`' `d[<token>].value` (#B239, and that one is not
- * DOM-dependent, so it bites the client too); pre-fix it threw `…of null`
- * from here, post-fix it throws `…of undefined` from there. The same `$` in
- * a LATER array element (`['100','$200']`) DOES become clean, because only
- * args[0] is scanned downstream — that placement threw pre-fix and validates
- * now. Real cross-field references, non-matching values and `$`-free rule
- * sets are byte-identical across the fix.
+ * `isInList: ['$100','$200']` — KEPT throwing, one site further on, at
+ * `checkFieldAgainstRules`' `d[<token>].value` (#B239, not DOM-dependent, so
+ * it bit the client too), until its own two-clause guard landed — that site
+ * is owned by test/lib/validator-array-rule-dollar.test.js now. The same `$`
+ * in a LATER array element (`['100','$200']`) became clean HERE, because only
+ * args[0] is scanned downstream — that placement threw pre-#B234 and
+ * validates since. Real cross-field references, non-matching values and
+ * `$`-free rule sets are byte-identical across the fix.
  *
  * Red-first buckets (pre-fix bytes):
  *   MUST-RED  — §01.2 (the guarded gate is absent), §02.1/§02.2/§02.3

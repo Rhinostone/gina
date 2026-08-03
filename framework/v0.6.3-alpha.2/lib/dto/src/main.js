@@ -52,14 +52,18 @@
  * The runtime pipe still enforces TYPE (isInteger/isNumber) + enum + length + format
  * + required.
  *
- * ## The `$` guard (#DTO2 — measured)
+ * ## The `$` guard (#DTO2 — measured; rationale updated with #B239)
  * `toRules()` compiles no `$` of its own (see above), but a `$` can still reach the
  * emitted rules through AUTHORED content — an enum value (`dto.enum(['$100'])`), a
- * field NAME, or a date mask. The engine stringifies the whole rules object and, on
- * ANY `$` in it, takes a client-only branch that dereferences the null server-side
- * `$fields` (`validate()` -> `$fields.count()`), throwing a raw TypeError from ABOVE
- * its own try/catch. So `toRules()` REJECTS a `$` anywhere in its output rather than
- * hand the engine a rules object that cannot be evaluated server-side.
+ * field NAME, or a date mask. `$` is the validation engine's RESERVED cross-field
+ * reference sigil, so whether an authored `$` survives as a literal depends on a
+ * runtime field-name COLLISION: a token naming a sibling field is consumed upstream
+ * as a reference (substituted + quoted — #B240 — so the literal can never match),
+ * while a token naming no field stays literal only since #B239 (before that it
+ * crashed the whole pass; earlier still, ANY leftover `$` crashed server-side —
+ * #B127/#B234). Deterministic literal semantics are impossible to guarantee for a
+ * `$`, so `toRules()` REJECTS one anywhere in its output at build/boot rather than
+ * let a DTO validate differently depending on which field names exist beside it.
  * `toJsonSchema()` is deliberately NOT guarded — a `$` is perfectly valid in a JSON
  * Schema enum, so a currency-style DTO still documents (and still serves as a
  * `param.responseDto`); only the runtime-validation projection is constrained.
@@ -426,7 +430,8 @@ DtoObject.prototype.toJsonSchema = function (dialect, opts) {
  * rather than emit a `$` (see the `$` guard in the module header).
  *
  * @throws {Error} when an authored enum value / field name / date mask puts a `$` in
- *                 the emitted rules — server-fatal in the validator engine.
+ *                 the emitted rules — the engine would reinterpret it
+ *                 collision-dependently (reserved sigil; see the module header).
  * @returns {object}
  */
 DtoObject.prototype.toRules = function () {
@@ -434,10 +439,12 @@ DtoObject.prototype.toRules = function () {
     for (var f in this._shape) {
         rules[f] = this._shape[f].toFieldRules();
     }
-    // #DTO2 — a `$` ANYWHERE in the stringified rules sends the engine down its
-    // client-only dynamic-rules branch, which derefs the null server-side `$fields`
-    // and throws from above its own try/catch. Fail at build/boot with a message that
-    // names the culprit, never at request time with a raw TypeError.
+    // #DTO2 — `$` is the engine's reserved cross-field sigil: whether an authored
+    // `$` stays literal depends on a runtime field-name collision (a colliding
+    // token is substituted + quoted upstream — #B240 — so the literal can never
+    // match; a non-colliding one stays literal only since #B239). Fail at
+    // build/boot with a message that names the culprit, never validate
+    // collision-dependently at request time.
     if ( /\$/.test(JSON.stringify(rules)) ) {
         // NOTE: every `$` below is followed by a SPACE, deliberately. A message carrying
         // the sequence `$` + backtick/quote/digit is a String.replace() dollar-pattern

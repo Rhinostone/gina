@@ -18364,6 +18364,24 @@ function ValidatorPlugin(rules, data, formId, culture) {
 
 
         var re = null, flags = null, args = null;
+        /**
+         * Apply every rule declared for one field to the FormValidator instance `d`.
+         *
+         * Array-form rules (`isInList: [...]`) get their FIRST argument scanned for
+         * `$`-prefixed tokens; a token resolving to a real field (a `d` key with a
+         * defined `.value`) is substituted with that value, anything else stays
+         * LITERAL (#B239 — the blind deref crashed on unknown names and spliced
+         * "undefined" on engine-method-name collisions). Later elements are never
+         * scanned. Cross-field refs inside array rules are consumed upstream by
+         * getDynamisedRules loop 1 (quoted — #B240), so in practice only leftover
+         * non-field tokens reach the scan here.
+         *
+         * @inner
+         * @param {string} field - field name (key into `rules`, `fields` and `d`)
+         * @param {object} rules - parsed rule set for the whole form
+         * @param {object} fields - collected field values
+         * @returns {void} verdicts land on `d[field]` / `d.error`
+         */
         var checkFieldAgainstRules = function(field, rules, fields) {
             // ignore field if used as a _case_field
 
@@ -18462,7 +18480,25 @@ function ValidatorPlugin(rules, data, formId, culture) {
                         if ( /\$[\-\w\[\]]*/.test(args[0]) ) {
                             var foundVariables = args[0].match(/\$[\-\w\[\]]*/g);
                             for (var v = 0, vLen = foundVariables.length; v < vLen; ++v) {
-                                args[0] = args[0].replace( foundVariables[v], d[foundVariables[v].replace('$', '')].value )
+                                // #B239 — the deref used to be blind, throwing
+                                // `TypeError: Cannot read properties of undefined` on
+                                // BOTH paths for any token naming no field (`d` is the
+                                // FormValidator field map on the client AND the server),
+                                // and splicing the string "undefined" for a token whose
+                                // name collides with an engine METHOD (isValid, toData —
+                                // defined keys with no `.value`). A token that does not
+                                // resolve to a real field now stays LITERAL, so strict
+                                // comparison applies. Cross-field refs inside array
+                                // rules remain owned by #B240 (upstream loop-1 quoting).
+                                // was: args[0] = args[0].replace( foundVariables[v], d[foundVariables[v].replace('$', '')].value )
+                                var _refName = foundVariables[v].replace('$', '');
+                                if (
+                                    typeof(d[_refName]) == 'undefined'
+                                    || typeof(d[_refName].value) == 'undefined'
+                                ) {
+                                    continue;
+                                }
+                                args[0] = args[0].replace( foundVariables[v], d[_refName].value );
                             }
                         }
                         d[field][rule].apply(d[field], args);
