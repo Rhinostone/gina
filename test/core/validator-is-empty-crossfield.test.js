@@ -165,6 +165,15 @@ function isCondition(rule) {
 // reproduce the isRequired-first-defeats-the-mask condition: an empty host with NO isRequired
 // passes untested; an empty host WITH isRequired is evaluated (which is where the dangling operator
 // bites). Returns { formValid, gateRan }; throws (pre-fix) when a rule method throws.
+//
+// #B233 note — this replica deliberately keeps the isRequired-gated self-pass, because that is the
+// engine state in which the reported abort was REACHABLE and is what the §04 subtracts contrast.
+// The shipped engine no longer behaves this way: `is` joined the #B78 contract, so an empty host
+// self-passes UNCONDITIONALLY and never reaches the condition at all. That closes this crash path a
+// second time for an empty host — it does NOT retire either fix pinned here, both of which stay
+// reachable with a NON-empty host: the root getCastedValue quoting still governs an empty
+// REFERENCED field (§01/§02/§05, where the host is filled), and the is() grammar guard still
+// governs a residually-unparseable condition such as a "NaN"-valued operand (§03/§04).
 function runWholeFormPass(dynamisedRules, fields, evalFn) {
     var formValid = true;
     for (var field in dynamisedRules) {

@@ -3038,7 +3038,11 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
         'isStringMaxLength': 'Should not be more than %s characters',
         'isJsonWebToken': 'Must be a valid JSON Web Token',
         'query': 'Must be a valid response',
-        'isApiError': 'Condition not satisfied',
+        // #B233 rider - dropped: `isApiError` is not a rule, so nothing ever consulted this
+        // label. The API-error path assigns the SERVER's message straight onto the error
+        // object (main.js `errorObject[f].isApiError = result.fields[f]`) and never calls
+        // replace(), so the entry only read as a translatable key that silently did nothing.
+        //'isApiError': 'Condition not satisfied',
         'isInList': 'Must be one of: %s'
     };
     /**
@@ -4052,19 +4056,20 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
             var errors      = self[this['name']]['errors'] || {};
             local.data[this.name] = self[this.name].value;
 
-            if (
-                typeof(errors['isRequired']) == 'undefined'
-                && this.value == ''
-                && !/^false$/i.test(this.value)
-                && this.value != 0
-                ||
-                !errors['isRequired']
-                && this.value == ''
-                && !/^false$/i.test(this.value)
-                && this.value != 0
-            ) {
-                isValid = true;
-            } else if (!errors['isRequired'] && typeof(this.value) == 'string' && this.value == '') {
+            // #B233 - an empty value is adjudicated by isRequired alone: bypass on empty so a
+            // required+empty field records only isRequired, not a second 'Condition not
+            // satisfied'. This REVERSES a twice-declined exclusion (#B78 left `is` untouched,
+            // #B82 re-declined it) on measurement: the old bypass was gated on
+            // !errors['isRequired'] — i.e. disabled exactly when #B78 wants it applied — while
+            // optional+empty already self-passed through it; and on required+empty the condition
+            // is verdict-irrelevant (form validity is getErrors().count() and isRequired has
+            // already recorded its error), so only the message list changes.
+            // #B199 - strict: only the literal empty string is "empty". 0, false and null are
+            // VALUES here and still evaluate the condition.
+            // was: a two-disjunct guard whose arms were both DEAD (`x == '' && x != 0` has no
+            // witness — `x == ''` forces ToNumber(x) === 0 for non-strings and x === '' for
+            // strings), followed by the isRequired-gated string-only bypass described above.
+            if ( this.value === '' ) {
                 isValid = true;
             }
 
@@ -4205,7 +4210,8 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
                 //delete errors['stack'];
             }
 
-            this.valid = isValid;
+            // #B78 - keep .valid consistent with a surviving isRequired error.
+            this.valid = isValid && !errors['isRequired'];
             if ( errors.count() > 0 )
                 this['errors'] = errors;
 
