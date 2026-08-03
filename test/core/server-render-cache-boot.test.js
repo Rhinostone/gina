@@ -78,9 +78,17 @@ describe('02 - gna.js RC4 boot block (validate + F4 enable-gate + store build)',
         assert.ok(rcStart > -1 && rcEnd > rcStart, 'RC4 block present');
     });
 
-    it('reads the resolved server.cache and calls validateConfig with the routing map + bundle', function() {
+    it('reads the resolved server.cache and calls validateConfig with the routing map + bundle + the #B238 context', function() {
         assert.match(rcBlock, /config\.getInstance\(\)\[gna\.core\.startingApp\]\[env\]\.server\.cache/);
-        assert.match(rcBlock, /lib\.RenderCache\.validateConfig\(\s*_rcServerCache\s*,\s*_rcRouting\s*\|\|\s*\{\}\s*,\s*gna\.core\.startingApp\s*\)/);
+        // #B238 — the call carries { hidePoweredBy, cacheEnabled } so the disclosure
+        // warn can fire; both values derive from the RESOLVED conf tree.
+        assert.match(rcBlock, /lib\.RenderCache\.validateConfig\(\s*_rcServerCache\s*,\s*_rcRouting\s*\|\|\s*\{\}\s*,\s*gna\.core\.startingApp\s*,\s*\{\s*hidePoweredBy:\s*_rcHidePoweredBy\s*,\s*cacheEnabled:\s*_rcEnabled\s*\}\s*\)/);
+    });
+
+    it('#B238: _rcHidePoweredBy reads the RESOLVED conf hidePoweredBy, try-guarded like _rcServerCache', function() {
+        assert.match(rcBlock, /_rcHidePoweredBy\s*=\s*\(\s*config\.getInstance\(\)\[gna\.core\.startingApp\]\[env\]\.server\.hidePoweredBy\s*===\s*true\s*\)/);
+        // The guarded read defaults false on any conf-shape surprise — never throws boot.
+        assert.match(rcBlock, /catch\s*\(rcHpbErr\)\s*\{\s*_rcHidePoweredBy\s*=\s*false;\s*\}/);
     });
 
     it('F4: derives _rcEnabled from server.cache.enable === "true"', function() {

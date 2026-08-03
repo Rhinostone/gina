@@ -1516,3 +1516,82 @@ describe('13 - #B130 statics: renonceCspHeaders + swapNonces (pure, real module)
     });
 
 });
+
+describe('14 - #B238 resolveCacheName + the cache.name warns (pure, real module)', function () {
+    var rcn = RenderCache.resolveCacheName;
+    var vc  = RenderCache.validateConfig;
+
+    function warns(sc, ctx) { return vc(sc, {}, null, ctx).warnings; }
+
+    it('a valid configured name is returned verbatim', function () {
+        assert.equal(rcn({ name: 'cache' }), 'cache');
+        assert.equal(rcn({ name: 'gina-cache' }), 'gina-cache');
+        assert.equal(rcn({ name: 'edge.cache_2' }), 'edge.cache_2');
+        assert.equal(rcn({ name: 'a'.repeat(64) }), 'a'.repeat(64), '64 chars is the inclusive cap');
+    });
+
+    it('absent / null / non-string → the default (never throws)', function () {
+        assert.equal(rcn({}), 'gina-cache');
+        assert.equal(rcn(null), 'gina-cache');
+        assert.equal(rcn(undefined), 'gina-cache');
+        assert.equal(rcn({ name: 42 }), 'gina-cache');
+        assert.equal(rcn({ name: null }), 'gina-cache');
+    });
+
+    it('an invalid name falls back to the default — validated, never sanitized', function () {
+        assert.equal(rcn({ name: 'bad name!' }), 'gina-cache', 'space + punctuation');
+        assert.equal(rcn({ name: '1cache' }), 'gina-cache', 'must start with a letter');
+        assert.equal(rcn({ name: '-cache' }), 'gina-cache', 'no leading separator');
+        assert.equal(rcn({ name: 'a'.repeat(65) }), 'gina-cache', '65 chars exceeds the cap');
+        assert.equal(rcn({ name: '' }), 'gina-cache', 'empty string');
+        // The invalid value must NEVER be partially cleaned into the wire — a name
+        // the operator did not write is worse than the default.
+        assert.notEqual(rcn({ name: 'bad name!' }), 'badname', 'no sanitize-and-ship');
+    });
+
+    it('an invalid name is named loudly by validateConfig (unconditional warn)', function () {
+        var w = warns({ name: 'bad name!' });
+        assert.equal(w.length, 1);
+        assert.match(w[0], /invalid server\.cache\.name/);
+        assert.match(w[0], /gina-cache/, 'the warn names the fallback');
+        assert.equal(warns({ name: 'cache' }).length, 0, 'a valid name warns nothing');
+        assert.equal(warns({}).length, 0, 'an absent name warns nothing without context');
+    });
+
+    it('#B238 disclosure warn: fires ONLY on hidePoweredBy + cacheEnabled + no valid name', function () {
+        var w = warns({}, { hidePoweredBy: true, cacheEnabled: true });
+        assert.equal(w.length, 1);
+        assert.match(w[0], /hidePoweredBy is set but the Cache-Status identifier/);
+        assert.match(w[0], /"gina-cache"/, 'the warn hands the silence exit');
+        // The three negative arms — each single condition missing kills the warn:
+        assert.equal(warns({}, { hidePoweredBy: true,  cacheEnabled: false }).length, 0, 'disabled cache emits no Cache-Status — no noise');
+        assert.equal(warns({}, { hidePoweredBy: false, cacheEnabled: true  }).length, 0, 'no declared intent — no nag');
+        assert.equal(warns({}).length, 0, 'no context (pre-#B238 caller) — back-compat');
+    });
+
+    it('#B238 disclosure warn: any validly-set name silences it — including the explicit default', function () {
+        assert.equal(warns({ name: 'cache' },      { hidePoweredBy: true, cacheEnabled: true }).length, 0);
+        assert.equal(warns({ name: 'gina-cache' }, { hidePoweredBy: true, cacheEnabled: true }).length, 0,
+            'explicit "gina-cache" is the documented keep-the-wire silence path');
+    });
+
+    it('an INVALID name under hidePoweredBy + enabled fires BOTH warns (both true, both actionable)', function () {
+        var w = warns({ name: 'bad!' }, { hidePoweredBy: true, cacheEnabled: true });
+        assert.equal(w.length, 2);
+        assert.match(w[0], /invalid server\.cache\.name/);
+        assert.match(w[1], /hidePoweredBy is set but/);
+    });
+
+    it('the context arg never disturbs the existing checks (redis matrix unchanged)', function () {
+        var out = vc(
+            { type: 'redis', store: 'r1', ttl: 60 },
+            { home: { cache: { type: 'redis', ttl: 60 } } },
+            null,
+            { hidePoweredBy: true, cacheEnabled: true }
+        );
+        assert.equal(out.fatal, null);
+        assert.equal(out.redisConfigured, true);
+        assert.equal(out.warnings.length, 1, 'only the #B238 disclosure warn — no redis noise');
+        assert.match(out.warnings[0], /hidePoweredBy is set but/);
+    });
+});

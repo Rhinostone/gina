@@ -300,6 +300,11 @@
         "store": {
           "type": "string",
           "description": "Required for `redis`: the name of a `connectors.json` entry ({ \"<name>\": { \"connector\": \"redis\", \"host\": …, \"port\": … } }) providing the L2 connection. Ignored for memory / fs."
+        },
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,63}$",
+          "description": "Optional RFC 9211 Cache-Status identifier for this bundle's render/output cache (default `gina-cache`). Grammar is a conservative RFC 8941 token subset: a letter, then up to 63 of [A-Za-z0-9._-]. An invalid value is ignored with a boot warn. When `server.hidePoweredBy` is true and the cache is enabled, leaving it unset logs a boot warn naming the disclosure — set any token (e.g. `cache`) to close it, or explicitly `gina-cache` to keep the default wire and silence the warn."
         }
       }
     },

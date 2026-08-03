@@ -119,3 +119,23 @@ the Isaac engine when absent on most installs).
 The plugin is safe to register more than once — `removeHeader` is
 idempotent (no-op when the header is already absent), so a second
 call has no effect.
+
+## What this does NOT cover (#B238)
+
+`server.hidePoweredBy` suppresses the `X-Powered-By` header — nothing
+else. Two other response surfaces can still name the framework:
+
+- **`Cache-Status` identifier** — when the render/output cache is
+  enabled, every GET carries `Cache-Status: gina-cache; …` (RFC 9211).
+  The identifier never changes implicitly (it is a documented-stable
+  wire value); instead, a boot warn fires when `server.hidePoweredBy`
+  is true, the cache is enabled, and no `server.cache.name` is set.
+  Set any RFC 8941 token there (e.g. `"cache"`) to close the
+  disclosure, or explicitly `"gina-cache"` to keep the wire and
+  silence the warn.
+- **`Vary: X-Gina-Navigate`** — routes with `negotiate: true` emit it
+  so shared caches key fragment vs full-page responses correctly.
+  This is caching-correctness metadata, not a banner: suppressing or
+  renaming it would corrupt intermediary caches / break the client
+  contract, so it is not configurable. Routes without `negotiate`
+  never emit it.

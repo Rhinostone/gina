@@ -2135,7 +2135,11 @@ function ServerEngineClass(options) {
                 if ( request.method.toUpperCase() === 'GET' ) {
                     var cacheStatus = null;
                     if ( String(server._cacheIsEnabled).toLowerCase() === 'true' ) {
-                        cacheStatus = 'gina-cache';
+                        // #B238 — identifier from the boot-resolved stamp (server.js
+                        // stamps `instance._cacheName` beside `_cacheIsEnabled`; was
+                        // the literal 'gina-cache'). Same value as the shared handle()
+                        // read's mints — the engines agree on the wire by construction.
+                        cacheStatus = server._cacheName;
                     }
 
                     // Importing cache handler (render/output cache goes through the strategy dispatcher)

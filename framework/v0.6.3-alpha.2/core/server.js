@@ -2047,6 +2047,17 @@ function Server(options) {
             if ( typeof(instance._cacheIsEnabled) == 'undefined' ) {
                 instance._cacheIsEnabled = self.conf[self.appName][self.env].server.cache.enable;
             }
+            // #B238 — the Cache-Status identifier, resolved ONCE from the post-fold
+            // server.cache (`name` when valid, else `gina-cache`) and stamped on the
+            // engine instance both engines read (isaac: `server._cacheName`; the
+            // engine-agnostic hit/miss mints: `self.instance._cacheName`). One
+            // resolution, three readers — the identifier cannot disagree across
+            // engines or hit/miss outcomes. Unconditional beside the sibling
+            // scalars above, so the mint sites read it unguarded (same trust as
+            // `_cacheIsEnabled`).
+            if ( typeof(instance._cacheName) == 'undefined' ) {
+                instance._cacheName = lib.RenderCache.resolveCacheName(self.conf[self.appName][self.env].server.cache);
+            }
 
             // #B115 — publish the engine so the form-validator's server-side `query`
             // rule can hand its hand-built controller the LIVE instance (one engine
@@ -6473,7 +6484,9 @@ function Server(options) {
         }
         // #RC5 — ONE header string, set AND logged from the same var (the prior dual
         // construction at setHeader + console.info was a drift hazard).
-        var _cs = 'gina-cache; hit'
+        // #B238 — identifier from the boot-resolved stamp (was the literal
+        // 'gina-cache'); default unchanged when server.cache.name is unset.
+        var _cs = self.instance._cacheName + '; hit'
             + (_remaining !== null ? '; ttl=' + _remaining : '')
             + (source ? '; detail=' + source : '');
         res.setHeader('Cache-Status', _cs);
@@ -6583,7 +6596,8 @@ function Server(options) {
             // deliberately NOT claimed — whether the render's writeCache stores is not
             // knowable here, and headers are flushed before it settles.
             if ( !res.headersSent ) {
-                res.setHeader('Cache-Status', 'gina-cache; fwd=uri-miss');
+                // #B238 — identifier from the boot-resolved stamp (was the literal 'gina-cache').
+                res.setHeader('Cache-Status', self.instance._cacheName + '; fwd=uri-miss');
             }
             return false; // miss → render normally
         }

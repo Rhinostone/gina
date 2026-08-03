@@ -144,6 +144,16 @@
     // refuses boot (a non-expiring L2 key is orphaned on a release-namespace change):
     //   "type": "redis",
     //   "store": "cacheRedis"   // connectors.json: { "cacheRedis": { "connector": "redis", "host": "127.0.0.1", "port": 6379 } }
+    // #B238 — optional `name`: the RFC 9211 Cache-Status identifier this bundle's
+    // render/output cache reports on the wire (default "gina-cache"). A letter, then
+    // up to 63 of [A-Za-z0-9._-] (a conservative RFC 8941 token subset); an invalid
+    // value is ignored with a boot warn. When `server.hidePoweredBy` is true and the
+    // cache is enabled, leaving `name` unset logs a boot warn (the wire still names
+    // the framework) — set any token (e.g. "cache") to close the disclosure, or
+    // explicitly "gina-cache" to keep the default wire and silence the warn.
+    // Deliberately NOT declared here: a template-declared default would read as
+    // operator-set and mute that warn framework-wide.
+    //   "name": "cache",
     "type": "memory"
   },
   // #CSRF1 — session-cookie defaults applied by gina.plugins.Session(expressSession).

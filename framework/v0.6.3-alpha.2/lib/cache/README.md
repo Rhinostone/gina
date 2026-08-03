@@ -116,9 +116,17 @@ Every GET response carries a `Cache-Status` header indicating cache outcome:
 
 | Value | Meaning |
 |-------|---------|
-| `gina-cache; uri-miss` | No cached entry for this URL |
+| `gina-cache; fwd=uri-miss` | No cached entry for this URL (RFC 9211 §2.2 form) |
 | `gina-cache; hit; ttl=NNN` | Hit — `NNN` seconds remaining (absolute TTL) |
 | `gina-cache; hit; ttl=NNN; max-age=MMM` | Hit — `NNN` seconds in current idle window, `MMM` seconds until absolute ceiling |
+
+`gina-cache` is the default identifier — `server.cache.name` (settings.json
+`cache` block) replaces it with an operator-chosen RFC 8941 token (a letter,
+then up to 63 of `[A-Za-z0-9._-]`); every parameter after it is unchanged.
+When `server.hidePoweredBy` is true and the cache is enabled, leaving `name`
+unset logs a boot warn (the wire still names the framework); set any token
+(e.g. `cache`) to close the disclosure, or explicitly `gina-cache` to keep
+the default wire and silence the warn.
 
 ---
 

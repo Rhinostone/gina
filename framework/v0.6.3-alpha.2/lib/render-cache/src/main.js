@@ -171,6 +171,14 @@ var _l2ErrorWarned = false;
 // a typo that silently disabled caching (#B114) — validateConfig names it loudly.
 var _RC_STRATEGIES = /^(memory|fs|redis)$/i;
 
+// #B238 — accepted `server.cache.name` grammar (the RFC 9211 Cache-Status
+// identifier): a conservative RFC 8941 Token subset — a letter, then up to 63
+// of [A-Za-z0-9._-]. Same charset as resolveReleaseToken's sanitizer, but this
+// one VALIDATES rather than sanitizes: an identifier the operator did not
+// write must never reach the wire, so an invalid value falls back to the
+// default and validateConfig names it at boot.
+var _RC_NAME_RE = /^[A-Za-z][A-Za-z0-9._-]{0,63}$/;
+
 /**
  * Once-per-process L2 failure warn. Fail-open must stay silent per-operation
  * (no log spam during an outage — the store's client `error` listener already
@@ -913,22 +921,36 @@ function RenderCache(options) {
  *   - an unknown `cache.type` (bundle-wide or per-route) — the fold made the config
  *     non-silent; this names the typo (#B114);
  *   - a redis route with no effective ttl but WITH `invalidateOnEvents` — the legit
- *     invalidate-only pattern, still orphaned on a namespace rotation.
+ *     invalidate-only pattern, still orphaned on a namespace rotation;
+ *   - an invalid `server.cache.name` (#B238) — ignored, the Cache-Status identifier
+ *     stays `gina-cache` (see {@link RenderCache.resolveCacheName});
+ *   - `context.hidePoweredBy` + `context.cacheEnabled` with no validly-set name
+ *     (#B238) — the operator declared hide-the-stack intent but every cache-enabled
+ *     GET still names the framework in Cache-Status. Warn-not-flip is deliberate:
+ *     the identifier is a documented-stable wire value (0.5.18 promised
+ *     `gina-cache; hit` grep-stability), so it never changes without an explicit
+ *     operator choice — the warn hands them both one-line exits.
  *
  * @memberof RenderCache
  * @static
- * @param {object}  serverCache - Merged `server.cache` (type/store/ttl/sliding/maxAge/…).
+ * @param {object}  serverCache - Merged `server.cache` (type/store/ttl/sliding/maxAge/name/…).
  * @param {object}  routing     - The bundle routing map (`{ ruleName: { cache, bundle, … } }`).
  * @param {string}  [bundle]    - When set, per-route checks skip routes of another bundle.
+ * @param {object}  [context]   - Caller-supplied boot context for the #B238 disclosure
+ *                                warn: `{ hidePoweredBy: boolean, cacheEnabled: boolean }`
+ *                                (both must be `true` for it to fire). Omitting the
+ *                                argument disables only that warn — every other check
+ *                                is unchanged (back-compat with pre-#B238 callers).
  * @returns {{ fatal: (string|null), warnings: string[], redisConfigured: boolean }}
  *
  * @example
- * var v = RenderCache.validateConfig(serverCache, gna.getConfig('routing'), bundle);
+ * var v = RenderCache.validateConfig(serverCache, gna.getConfig('routing'), bundle,
+ *     { hidePoweredBy: hpb, cacheEnabled: enabled });
  * v.warnings.forEach(function (w) { console.warn('[render-cache] ' + w); });
  * if (v.fatal) { console.emerg('[render-cache] ' + v.fatal); process.exit(1); }
  * if (v.redisConfigured) { process.gina._renderCacheStore = lib.RenderCacheStore(serverCache.store); }
  */
-RenderCache.validateConfig = function(serverCache, routing, bundle) {
+RenderCache.validateConfig = function(serverCache, routing, bundle, context) {
     var out = { fatal: null, warnings: [], redisConfigured: false };
     serverCache = serverCache || {};
     routing     = routing || {};
@@ -936,6 +958,20 @@ RenderCache.validateConfig = function(serverCache, routing, bundle) {
     var bundleType = (typeof(serverCache.type) === 'string') ? serverCache.type : '';
     if ( bundleType.length > 0 && !_RC_STRATEGIES.test(bundleType) ) {
         out.warnings.push('unknown server.cache.type `' + bundleType + '` (expected memory|fs|redis) — this bundle-wide default is ignored; routes inheriting it are NOT cached');
+    }
+
+    // #B238 — `server.cache.name` (the Cache-Status identifier) sanity + disclosure.
+    var _declaredName = serverCache.name;
+    var _nameIsSet    = ( typeof(_declaredName) === 'string' && _RC_NAME_RE.test(_declaredName) );
+    if ( typeof(_declaredName) !== 'undefined' && !_nameIsSet ) {
+        out.warnings.push('invalid server.cache.name `' + String(_declaredName) + '` — must be a letter followed by up to 63 of [A-Za-z0-9._-] (a conservative RFC 8941 token subset); ignored, the Cache-Status identifier stays `gina-cache`');
+    }
+    // Gated on the caller context: cacheEnabled (a disabled cache emits no
+    // Cache-Status — no disclosure, no noise) and hidePoweredBy (no declared
+    // intent, no nag). An explicit `"name": "gina-cache"` counts as validly
+    // set — the documented silence path for keeping the default wire.
+    if ( context && context.hidePoweredBy === true && context.cacheEnabled === true && !_nameIsSet ) {
+        out.warnings.push('server.hidePoweredBy is set but the Cache-Status identifier still names the framework (`gina-cache`) — set server.cache.name (any token, e.g. "cache") to close the disclosure, or explicitly "gina-cache" to keep the current wire and silence this warning');
     }
 
     for (var name in routing) {
@@ -988,6 +1024,43 @@ RenderCache.validateConfig = function(serverCache, routing, bundle) {
     }
 
     return out;
+};
+
+/**
+ * #B238 — resolve the Cache-Status response-header identifier for a bundle (pure, static).
+ *
+ * RFC 9211 §2 leaves the cache identifier to the deployment (a free-form
+ * structured-field Token). gina's default is `gina-cache`; an operator picks
+ * their own via `server.cache.name` (the settings.json `cache` block — rides
+ * the same #B114 fold as `type`/`store`, so an env.json `server.cache.name`
+ * wins over it like every sibling key). An invalid value is IGNORED here
+ * (default returned) and named loudly by {@link RenderCache.validateConfig}
+ * at boot — never sanitized into a name the operator did not write.
+ *
+ * Accepted grammar is a deliberate STRICT SUBSET of the RFC 8941 Token
+ * (a letter, then up to 63 of `[A-Za-z0-9._-]`) — every accepted value is a
+ * valid sf-token, and the charset matches the release-namespace sanitizer
+ * (`resolveReleaseToken`), keeping the two token surfaces aligned.
+ *
+ * Resolved ONCE at boot (server.js stamps `instance._cacheName` beside the
+ * sibling cache scalars) and read by all three Cache-Status mint sites —
+ * both engines, hit and miss — so the identifier can never disagree across
+ * engines or outcomes.
+ *
+ * @memberof RenderCache
+ * @static
+ * @param {object} [serverCache] - Merged `server.cache` (the #B114 post-fold block).
+ * @returns {string} The identifier to mint (`serverCache.name` when valid, else `'gina-cache'`).
+ *
+ * @example
+ * RenderCache.resolveCacheName({ name: 'cache' });      // 'cache'
+ * RenderCache.resolveCacheName({ name: 'bad name!' });  // 'gina-cache' (validateConfig warns at boot)
+ * RenderCache.resolveCacheName({});                     // 'gina-cache'
+ * RenderCache.resolveCacheName(null);                   // 'gina-cache'
+ */
+RenderCache.resolveCacheName = function(serverCache) {
+    var name = ( serverCache ) ? serverCache.name : null;
+    return ( typeof(name) === 'string' && _RC_NAME_RE.test(name) ) ? name : 'gina-cache';
 };
 
 /**

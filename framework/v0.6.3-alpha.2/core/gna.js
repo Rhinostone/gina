@@ -1494,7 +1494,14 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
                                         // noise for an inert bundle).
                                         var _rcEnabled = String(_rcServerCache.enable).toLowerCase() === 'true';
                                         var _rcRouting = (typeof gna.getConfig === 'function') ? gna.getConfig('routing') : null;
-                                        var _rcCheck = lib.RenderCache.validateConfig(_rcServerCache, _rcRouting || {}, gna.core.startingApp);
+                                        // #B238 — feed the disclosure-warn context from the RESOLVED conf
+                                        // tree (the same `server.hidePoweredBy` source the engine-agnostic
+                                        // X-Powered-By gate reads), guarded like `_rcServerCache` above.
+                                        var _rcHidePoweredBy = false;
+                                        try {
+                                            _rcHidePoweredBy = ( config.getInstance()[gna.core.startingApp][env].server.hidePoweredBy === true );
+                                        } catch (rcHpbErr) { _rcHidePoweredBy = false; }
+                                        var _rcCheck = lib.RenderCache.validateConfig(_rcServerCache, _rcRouting || {}, gna.core.startingApp, { hidePoweredBy: _rcHidePoweredBy, cacheEnabled: _rcEnabled });
                                         for (var _rcW = 0; _rcW < _rcCheck.warnings.length; _rcW++) {
                                             console.warn('[render-cache] ' + _rcCheck.warnings[_rcW]);
                                         }

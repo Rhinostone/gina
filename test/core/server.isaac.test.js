@@ -3108,6 +3108,15 @@ describe('17 - #RC5 Cache-Status detail + RFC miss form + stats L2 fold — sour
         assert.ok(s.indexOf("+= '; uri-miss'") < 0, 'the bare uri-miss append must not return');
     });
 
+    it('#B238: the identifier seeds from the boot-resolved stamp, never a literal', function() {
+        var s = getSrc();
+        // The seeding reads the server.js-stamped scalar (sibling of _cacheIsEnabled).
+        assert.match(s, /cacheStatus\s*=\s*server\._cacheName;/);
+        // Window-independent negative: the literal seeding is globally gone (the
+        // assignment shape — comments name the old value without this prefix form).
+        assert.ok(s.indexOf("cacheStatus = 'gina-cache'") < 0, 'the literal seeding must not return');
+    });
+
     it('/_gina/cache/stats folds store.health() as an ADDITIVE l2 field, after the admin gate', function() {
         var s = getSrc();
         assert.match(s, /cacheStatsPayload\.l2\s*=\s*process\.gina\._renderCacheStore\.health\(\)/);
@@ -3127,8 +3136,11 @@ describe('17b - #RC5 isaac cacheStatus build — pure-logic replica', function()
     // Faithful replica of the isaac pre-routing read's cacheStatus construction
     // (server.isaac.js hit path: '; hit' + ttl/max-age + '; detail=' append) and
     // the miss form. `now` is injected so the arithmetic is deterministic.
-    function buildHitStatus(cachedContentObj, now) {
-        var cacheStatus = 'gina-cache';
+    // #B238 — the real seeding reads the boot-resolved `server._cacheName` stamp;
+    // `cacheName` injects it here, with `|| 'gina-cache'` compressing the
+    // resolveCacheName default into the replica's one seam (default arms unchanged).
+    function buildHitStatus(cachedContentObj, now, cacheName) {
+        var cacheStatus = cacheName || 'gina-cache';
         cacheStatus += '; hit';
         var cacheNow = now;
         if ( cachedContentObj.sliding === true ) {
@@ -3154,8 +3166,8 @@ describe('17b - #RC5 isaac cacheStatus build — pure-logic replica', function()
         return cacheStatus;
     }
 
-    function buildMissStatus() {
-        var cacheStatus = 'gina-cache';
+    function buildMissStatus(cacheName) {
+        var cacheStatus = cacheName || 'gina-cache';
         cacheStatus += '; fwd=uri-miss';
         return cacheStatus;
     }
@@ -3190,5 +3202,13 @@ describe('17b - #RC5 isaac cacheStatus build — pure-logic replica', function()
 
     it('the miss form is gina-cache; fwd=uri-miss', function() {
         assert.equal(buildMissStatus(), 'gina-cache; fwd=uri-miss');
+    });
+
+    it('#B238: a configured identifier is the only byte that moves — hit and miss', function() {
+        var now = Date.now();
+        var s = buildHitStatus({ fromMemory: true, ttl: 60, createdAt: new Date(now - 10000) }, now, 'cache');
+        assert.equal(s, 'cache; hit; ttl=50; detail=memory',
+            'identifier swapped, params byte-identical to the default wire');
+        assert.equal(buildMissStatus('cache'), 'cache; fwd=uri-miss');
     });
 });
