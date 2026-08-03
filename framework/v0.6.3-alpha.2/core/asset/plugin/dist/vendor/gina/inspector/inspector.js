@@ -2300,9 +2300,21 @@
                         // #tree-query (a child of the wrapper), after which
                         // every later renderTab('query') bailed on the missing
                         // container and the Query pane froze until reload.
-                        if (_lastQueries) {
+                        // #B225 — the queries derive from the live payload
+                        // exactly as renderTab('query') does (reveal swap
+                        // included), never from the module query cache: the
+                        // cache survives overlay eras that ended while the
+                        // Query tab was inactive, so a cached repaint after
+                        // the forced refetch resurrected dead queries and
+                        // rewrote the badge over the truthful one.
+                        var src = (_revealActive && _revealedData) ? _revealedData : ginaData;
+                        var u = (src && src.user) || {};
+                        var hasXhr = typeof u['data-xhr'] !== 'undefined';
+                        var queryData = hasXhr && u['data-xhr'] && u['data-xhr'].queries
+                            ? u['data-xhr'].queries : u.queries;
+                        if (queryData && queryData.length) {
                             var panel = qs('#tree-query');
-                            if (panel) panel.innerHTML = renderQueryContent(_lastQueries);
+                            if (panel) panel.innerHTML = renderQueryContent(queryData);
                         }
                     } catch (e) { _liveIndexes = { connectors: {} }; }
                 }
@@ -5474,10 +5486,20 @@
 
         // Query tab toolbar — filter and search handlers
         function rerenderQueries() {
-            if (!_lastQueries) return;
+            // #B225 — derive from the live payload exactly as renderTab('query')
+            // does (reveal swap included), never from the module query cache:
+            // the cache survives overlay eras that ended while the Query tab
+            // was inactive, so a cached repaint resurrects dead queries and
+            // rewrites the badge over the truthful one.
+            var src = (_revealActive && _revealedData) ? _revealedData : ginaData;
+            var u = (src && src.user) || {};
+            var hasXhr = typeof u['data-xhr'] !== 'undefined';
+            var queryData = hasXhr && u['data-xhr'] && u['data-xhr'].queries
+                ? u['data-xhr'].queries : u.queries;
+            if (!queryData || !queryData.length) return;
             var panel = qs('#tree-query');
             if (panel) {
-                panel.innerHTML = renderQueryContent(_lastQueries);
+                panel.innerHTML = renderQueryContent(queryData);
             }
         }
 
@@ -5622,7 +5644,13 @@
                 }
 
                 // Reopen the passive /_gina/agent stream if it has closed.
-                if (source !== 'agent'
+                // #B225 — never in bound mode: a broadcast-driven window takes
+                // its data from the statusbar publisher (#INS15), and a passive
+                // stream opened here applies bundle-wide payloads over the
+                // page-scoped ones (the measured badge blink at every later XHR
+                // overlay); a later _noteLivePid could also retro-arm the leak
+                // on bound applies.
+                if (source !== 'agent' && source !== 'broadcast'
                     && (!_passiveAgentEs || _passiveAgentEs.readyState === 2)) {
                     try { if (_passiveAgentEs) _passiveAgentEs.close(); } catch (e) {}
                     _passiveAgentEs = null;

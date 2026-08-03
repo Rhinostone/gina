@@ -2343,3 +2343,167 @@ describe('31 - #B139: the content preload cache dies with the open it warmed', f
             'gina.min.js must carry the _contentUrl stamp (property names survive SIMPLE minification)');
     });
 });
+
+
+// ── 32 — #B225: preload-consumed opens set the dev toolbar overlay ─────────────────
+
+// A cold click routes through the popin XHR loaded handler, which calls
+// updateToolbar(result) under GINA_ENV_IS_DEV before dispatching the body — so a
+// cold open surfaces the popin's rendered data (its XHR overlay era) in the dev
+// tools. A preload-consumed open (#B54) bypassed that handler entirely:
+// consumePreload dispatched the cached body straight to handleLoadedBody, so a
+// warmed open never set the overlay and the popin's queries/data stayed invisible
+// to the Inspector (#B225 — measured on BOTH consume branches: ready + adopted
+// in-flight). The fix mirrors the cold path's dev gate on both branches,
+// immediately before each handleLoadedBody dispatch. The placement is
+// consumePreload-only by design: the cold path also routes through
+// handleLoadedBody, so gating inside the dispatcher would double-fire the
+// overlay on cold opens (single-set measured).
+
+describe('32 - #B225: preload-consumed opens set the dev toolbar overlay', function () {
+
+    /** Started-flag brace walker (same shape as inspector.test.js §84/§85 —
+     *  no braces inside string literals in the popin functions walked here). */
+    function extractFn32(src, decl) {
+        var i = src.indexOf(decl);
+        if (i < 0) throw new Error('decl not found: ' + decl);
+        if (src.indexOf(decl, i + 1) > -1) throw new Error('decl not unique: ' + decl);
+        var depth = 0, started = false, j = i;
+        for (; j < src.length; j++) {
+            var c = src[j];
+            if (c === '{') { depth++; started = true; }
+            else if (c === '}') {
+                depth--;
+                if (started && depth === 0) { j++; break; }
+            }
+        }
+        if (!started || depth !== 0) throw new Error('unbalanced braces for: ' + decl);
+        return src.slice(i, j);
+    }
+
+    /** Active lines only — negative pins must not trip on prose naming a symbol. */
+    function stripComments32(block) {
+        return block.split('\n').filter(function (l) {
+            return !/^\s*(\/\/|\*|\/\*)/.test(l);
+        }).join('\n');
+    }
+
+    /** Executes the SHIPPED consumePreload bytes (no replica) with a recording
+     *  scope; log entries are ['toolbar'|'loaded', body] in call order. */
+    function driveConsume(src, opts) {
+        var fnText = extractFn32(src, 'function consumePreload(');
+        var log = [];
+        var runner = new Function(
+            'preloadCache', 'preloadWaiters', 'showLoadingShell',
+            'ensurePopinDialog', 'handleLoadedBody', 'GINA_ENV_IS_DEV', 'updateToolbar',
+            'return (' + fnText + ');'
+        );
+        var fn = runner(
+            opts.cache, opts.waiters || {},
+            function () { log.push(['shell']); },
+            function () { return { el: true }; },
+            function (body) { log.push(['loaded', body]); },
+            opts.dev,
+            function (body) { log.push(['toolbar', body]); }
+        );
+        return { fn: fn, log: log };
+    }
+
+    // --- behavioral (extracted real bytes) ---
+
+    it('ready-branch consume sets the toolbar overlay from the body BEFORE dispatching (dev on)', function () {
+        var d = driveConsume(getPopinSrc(), { cache: { '/u': 'BODY' }, dev: true });
+        assert.equal(d.fn('/u', { options: {} }), true, 'ready slot must be consumed');
+        assert.deepEqual(d.log, [['toolbar', 'BODY'], ['loaded', 'BODY']],
+            'the dev overlay must be set from the consumed body, before handleLoadedBody (the cold-path parity #B225 adds)');
+    });
+
+    it('adopted in-flight consume: the waiter sets the overlay when the body arrives', function () {
+        var waiters = {};
+        var d = driveConsume(getPopinSrc(), { cache: { '/u': null }, waiters: waiters, dev: true });
+        assert.equal(d.fn('/u', { options: {} }, function () { d.log.push(['miss']); }), true,
+            'in-flight slot must be adopted');
+        assert.equal((waiters['/u'] || []).length, 1, 'a waiter must be parked on the in-flight slot');
+        waiters['/u'][0]('BODY');
+        assert.deepEqual(d.log, [['toolbar', 'BODY'], ['loaded', 'BODY']],
+            'the adopted body must set the dev overlay before its dispatch, exactly like the ready branch');
+    });
+
+    it('the set is dev-only: GINA_ENV_IS_DEV false leaves both branches overlay-free', function () {
+        var waiters = {};
+        var d = driveConsume(getPopinSrc(), { cache: { '/r': 'B1', '/a': null }, waiters: waiters, dev: false });
+        d.fn('/r', { options: {} });
+        d.fn('/a', { options: {} });
+        waiters['/a'][0]('B2');
+        assert.deepEqual(d.log, [['loaded', 'B1'], ['loaded', 'B2']],
+            'production consumes must dispatch without ever touching the toolbar');
+    });
+
+    it('a failed adopted preload runs onMiss and never touches the toolbar (no-regression arm)', function () {
+        var waiters = {};
+        var d = driveConsume(getPopinSrc(), { cache: { '/u': null }, waiters: waiters, dev: true });
+        d.fn('/u', { options: {} }, function () { d.log.push(['miss']); });
+        waiters['/u'][0](null);
+        assert.deepEqual(d.log, [['miss']],
+            'a null body routes to the caller click-time load only — no overlay, no dispatch');
+    });
+
+    it('a never-warmed slot still returns false (consume protocol untouched)', function () {
+        var d = driveConsume(getPopinSrc(), { cache: {}, dev: true });
+        assert.equal(d.fn('/x', { options: {} }), false, 'undefined slot -> caller loads itself');
+        assert.deepEqual(d.log, [], 'nothing may fire on a miss');
+    });
+
+    // --- source pins (contiguous spans — an insertion into either seam breaks them) ---
+
+    it('source: the ready branch gates updateToolbar(body) on GINA_ENV_IS_DEV immediately before its dispatch', function () {
+        assert.match(getPopinSrc(),
+            /var \$el = ensurePopinDialog\(\$popin\);\n\s*if \(GINA_ENV_IS_DEV\) \{ updateToolbar\(body\); \}\n\s*handleLoadedBody\(body, \$popin, \$el\);/,
+            'expected the dev-gated overlay set between ensurePopinDialog and the ready-branch dispatch');
+    });
+
+    it('source: the adopted-in-flight waiter carries the same dev-gated set', function () {
+        assert.match(getPopinSrc(),
+            /\$popin\._contentUrl = url;\n\s*if \(GINA_ENV_IS_DEV\) \{ updateToolbar\(body\); \}\n\s*handleLoadedBody\(body, \$popin, ensurePopinDialog\(\$popin\)\);/,
+            'expected the dev-gated overlay set between the waiter\'s _contentUrl stamp and its dispatch');
+    });
+
+    it('source: exactly two dev-gated sets live in consumePreload — and handleLoadedBody has none (single-set rule)', function () {
+        var blk = extractFn32(getPopinSrc(), 'function consumePreload(');
+        var gates = blk.match(/if \(GINA_ENV_IS_DEV\) \{ updateToolbar\(body\); \}/g) || [];
+        assert.equal(gates.length, 2, 'one dev-gated set per consume branch, no more');
+        var hl = extractFn32(getPopinSrc(), 'function handleLoadedBody(');
+        assert.ok(stripComments32(hl).indexOf('updateToolbar') < 0,
+            'handleLoadedBody must NOT set the overlay — the cold path already sets it in the XHR loaded handler; a set in the shared dispatcher would double-fire');
+    });
+
+    // --- dist fidelity (RED on a stale dist — rebuild if these fail) ---
+
+    it('dist gina.js carries both dev-gated sets (rebuild guard)', function () {
+        var dist = getDistSrc();
+        assert.match(dist,
+            /var \$el = ensurePopinDialog\(\$popin\);\n\s*if \(GINA_ENV_IS_DEV\) \{ updateToolbar\(body\); \}\n\s*handleLoadedBody\(body, \$popin, \$el\);/,
+            'gina.js must carry the ready-branch set — rebuild the plugin bundle');
+        assert.match(dist,
+            /\$popin\._contentUrl = url;\n\s*if \(GINA_ENV_IS_DEV\) \{ updateToolbar\(body\); \}\n\s*handleLoadedBody\(body, \$popin, ensurePopinDialog\(\$popin\)\);/,
+            'gina.js must carry the adopted-branch set — rebuild the plugin bundle');
+    });
+
+    it('served gina.min.js carries both dev-gated sets (minify-surviving shapes, wrap-agnostic)', function () {
+        // GINA_ENV_IS_DEV is an implicit global, so SIMPLE minification keeps the
+        // name; locals are renamed, so both shapes anchor on it plus the
+        // _contentUrl property. Validated both directions against the real
+        // artifacts: each pattern 0 on the pre-fix bundle, 1 on the rebuilt one
+        // (Closure folds the adopted waiter into a comma expression — the
+        // [,;] separators and \s* boundaries keep the pins wrap-agnostic).
+        var min = getDistMinSrc();
+        var ready = min.match(/_contentUrl\s*=\s*[$\w]+\s*[,;]\s*(?:var\s+)?[$\w]+\s*=\s*[$\w]+\(\s*[$\w]+\s*\)\s*[,;]\s*GINA_ENV_IS_DEV\s*&&\s*[$\w]+\(\s*[$\w]+\s*\)/g) || [];
+        assert.equal(ready.length, 1,
+            'the ready-branch dev-gated set must survive minification — rebuild the plugin bundle');
+        var adopted = min.match(/_contentUrl\s*=\s*[$\w]+\s*[,;]\s*GINA_ENV_IS_DEV\s*&&\s*[$\w]+\(\s*[$\w]+\s*\)\s*[,;]\s*[$\w]+\(\s*[$\w]+\s*,\s*[$\w]+\s*,\s*[$\w]+\(\s*[$\w]+\s*\)\s*\)/g) || [];
+        assert.equal(adopted.length, 1,
+            'the adopted-branch dev-gated set must survive minification — rebuild the plugin bundle');
+        assert.ok((min.match(/GINA_ENV_IS_DEV/g) || []).length >= 9,
+            'the dev-gate count must include the two consume sites (7 pre-fix, 9 post)');
+    });
+});

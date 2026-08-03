@@ -9455,8 +9455,8 @@ describe('85 - fetchLiveIndexes success re-render targets #tree-query, never the
         var blk = extractFn85(getSrc85(), 'function fetchLiveIndexes()');
         var re = blk.indexOf("qs('#tree-query')");
         assert.ok(re > -1, 'the re-render must query #tree-query (the container renderTab owns)');
-        assert.ok(blk.indexOf('renderQueryContent(_lastQueries)', re) > re,
-            'the #tree-query lookup must feed the renderQueryContent re-render');
+        assert.ok(blk.indexOf('renderQueryContent(', re) > re,
+            'the #tree-query lookup must feed the renderQueryContent re-render (#B225 realigned: the argument now derives from the live payload — pinned in §86)');
     });
 
     it('fetchLiveIndexes never touches the scroll-area wrapper', function() {
@@ -9479,13 +9479,17 @@ describe('85 - fetchLiveIndexes success re-render targets #tree-query, never the
         var tabEl  = { querySelector: function (sel) { return sel === '.bm-scroll-area' ? wrapEl : null; } };
         var doc = { getElementById: function (id) { return id === 'tab-query' ? tabEl : null; } };
         var qsFake = function (sel) { return sel === '#tree-query' ? treeEl : null; };
-        var runner = new Function('xhr', 'document', 'qs', 'renderQueryContent', '_lastQueries',
+        // #B225 realigned: the onload now derives its queries from the live
+        // payload (ginaData + the reveal swap) instead of the module cache —
+        // the scope bindings follow (the eval-harness-gains-a-dependency rule).
+        var runner = new Function('xhr', 'document', 'qs', 'renderQueryContent', 'ginaData', '_revealActive', '_revealedData',
             "var _liveIndexes = null; var _liveIndexesFetching = true; var __on = (" + onload.replace(/^xhr\.onload = /, '') + "); __on(); return { liveIndexes: _liveIndexes, fetching: _liveIndexesFetching };");
         var out = runner(
             { status: 200, responseText: '{"connectors":{}}' },
             doc, qsFake,
             function () { return 'RENDERED_CARDS'; },
-            [ { type: 'SQL', statement: 'SELECT 1', indexes: null } ]
+            { user: { queries: [ { type: 'SQL', statement: 'SELECT 1', indexes: null } ] } },
+            false, null
         );
         assert.strictEqual(out.fetching, false, 'onload must clear the fetching flag');
         assert.deepStrictEqual(out.liveIndexes, { connectors: {} }, 'onload must cache the parsed index payload');
@@ -9502,4 +9506,206 @@ describe('85 - fetchLiveIndexes success re-render targets #tree-query, never the
         assert.strictEqual(dist, src, 'dist/vendor/gina/inspector/inspector.js must be the verbatim src copy');
     });
 
+});
+
+
+// ── 86 — #B225: ⟳ bound-mode SSE guard + derive-from-truth query re-renders ────────
+
+describe('86 - #B225: refresh-button SSE guard (bound mode) + derive-from-truth query re-renders', function() {
+
+    // Three mechanisms, one operator-visible symptom (the Query badge blinking
+    // page-count → xhr-count → page-count on a popin open, with the XHR payload
+    // never rendering):
+    //   (b) the ⟳ refresh handler re-opened the passive /_gina/agent SSE stream
+    //       even in a BOUND window (source === 'broadcast'), whose data comes
+    //       from the statusbar publisher (#INS15) — the leaked stream then
+    //       applied bundle-wide payloads over the page-scoped ones (the
+    //       measured badge blink at every later XHR overlay);
+    //   (c) rerenderQueries() and the live-index success re-render repainted
+    //       from the module query cache, which renderQueryContent's empty path
+    //       never clears and which survives overlay eras that end while the
+    //       Query tab is inactive — so a ⟳ resurrected dead queries and
+    //       rewrote the badge (measured 3→7).
+    // Fix (a) — the popin preload-consume overlay set — is popin.test.js §32.
+    // All reads here target the DIST copy (BM_DIR): these pins watch the served
+    // artifact, so they stay red between a src fix and the dist copy (#B222's
+    // mid-state evidence pattern).
+
+    var INSPECTOR_86 = path.join(BM_DIR, 'inspector.js');
+    var _src86;
+    function getSrc86() { return _src86 || (_src86 = fs.readFileSync(INSPECTOR_86, 'utf8')); }
+
+    /** Same started-flag brace walker as §84/§85. */
+    function extractFn86(src, decl) {
+        var i = src.indexOf(decl);
+        if (i < 0) throw new Error('decl not found: ' + decl);
+        if (src.indexOf(decl, i + 1) > -1) throw new Error('decl not unique: ' + decl);
+        var depth = 0, started = false, j = i;
+        for (; j < src.length; j++) {
+            var c = src[j];
+            if (c === '{') { depth++; started = true; }
+            else if (c === '}') {
+                depth--;
+                if (started && depth === 0) { j++; break; }
+            }
+        }
+        if (!started || depth !== 0) throw new Error('unbalanced braces for: ' + decl);
+        return src.slice(i, j);
+    }
+
+    /** Active lines only — negative pins must not trip on prose naming a symbol. */
+    function stripComments86(block) {
+        return block.split('\n').filter(function (l) {
+            return !/^\s*(\/\/|\*|\/\*)/.test(l);
+        }).join('\n');
+    }
+
+    // ── (b) the ⟳ reopen gate ─────────────────────────────────────────────
+
+    it('source: the ⟳ reopen gate skips bound-mode windows too (whole-expression pin)', function() {
+        assert.match(getSrc86(),
+            /if \(source !== 'agent' && source !== 'broadcast'\n\s*&& \(!_passiveAgentEs \|\| _passiveAgentEs\.readyState === 2\)\) \{/,
+            'the passive-SSE reopen must be gated on source !== \'agent\' AND source !== \'broadcast\' — a bound window takes its data from the statusbar publisher (#INS15)');
+    });
+
+    /** Executes the SHIPPED ⟳ click listener bytes with a recording scope;
+     *  returns the tryAgentPassive call args. */
+    function driveRefresh(src, sourceVal) {
+        var decl = "refreshBtn.addEventListener('click', function (ev) {";
+        var block = extractFn86(src, decl);
+        var fnText = block.slice(block.indexOf('function'));
+        var tryCalls = [];
+        var btn = {
+            classList: { add: function () {}, remove: function () {} },
+            addEventListener: function () {}, removeEventListener: function () {}
+        };
+        var runner = new Function(
+            'ev', 'lastGdStr', 'refreshBtn', 'pollData',
+            '_liveIndexes', '_liveIndexesFetching', 'fetchLiveIndexes',
+            '_revealActive', 'source', '_passiveAgentEs', 'tryAgentPassive', '_channelBase',
+            'var __fn = (' + fnText + '); __fn(ev);'
+        );
+        runner({ shiftKey: false }, '', btn, function () {},
+            null, false, function () {},
+            false, sourceVal, null, function (base) { tryCalls.push(base); }, null);
+        return tryCalls;
+    }
+
+    it('behavioral: a broadcast-sourced window\'s ⟳ never reopens the passive agent stream (real bytes)', function() {
+        var calls = driveRefresh(getSrc86(), 'broadcast');
+        assert.equal(calls.length, 0,
+            'bound mode must not open /_gina/agent on ⟳ — the leaked stream applies bundle-wide payloads over the page-scoped statusbar ones (the measured badge blink)');
+    });
+
+    it('behavioral: a self-polling window (source null) still reopens the stream on ⟳ — and stays on the followed bundle', function() {
+        var calls = driveRefresh(getSrc86(), null);
+        assert.equal(calls.length, 1, 'the self-polling reopen path must survive the new gate');
+        assert.strictEqual(calls[0], undefined,
+            'a null _channelBase must map to undefined (#B205 — tryAgentPassive re-derives its default)');
+    });
+
+    it('behavioral: agent mode stays excluded (pre-existing gate, control)', function() {
+        assert.equal(driveRefresh(getSrc86(), 'agent').length, 0,
+            'agent mode already has its own stream — the ⟳ must not open a second one');
+    });
+
+    // ── (c) derive-from-truth query re-renders ────────────────────────────
+
+    it('source: rerenderQueries derives from the live payload (renderTab preference), never the module query cache', function() {
+        var blk = extractFn86(getSrc86(), 'function rerenderQueries()');
+        assert.ok(blk.indexOf("(_revealActive && _revealedData) ? _revealedData : ginaData") > -1,
+            'rerenderQueries must start from the reveal-aware payload source, exactly like renderTab');
+        assert.match(blk, /u\['data-xhr'\] && u\['data-xhr'\]\.queries\s*\n?\s*\? u\['data-xhr'\]\.queries : u\.queries/,
+            'rerenderQueries must apply renderTab(\'query\')\'s own data-xhr-first preference');
+        assert.ok(stripComments86(blk).indexOf('_lastQueries') < 0,
+            'rerenderQueries must not read the module query cache — it survives eras that end while the Query tab is inactive');
+    });
+
+    it('source: the live-index success re-render derives from the live payload too', function() {
+        var blk = extractFn86(getSrc86(), 'function fetchLiveIndexes()');
+        assert.ok(blk.indexOf("(_revealActive && _revealedData) ? _revealedData : ginaData") > -1,
+            'the ⟳-forced live-index re-render must derive from the reveal-aware payload source');
+        assert.match(blk, /u\['data-xhr'\] && u\['data-xhr'\]\.queries\s*\n?\s*\? u\['data-xhr'\]\.queries : u\.queries/,
+            'the live-index re-render must apply renderTab(\'query\')\'s own data-xhr-first preference');
+        assert.ok(stripComments86(blk).indexOf('_lastQueries') < 0,
+            'the live-index re-render must not read the module query cache (#B225 — the ⟳ badge rewrite 3→7)');
+    });
+
+    /** Executes the SHIPPED rerenderQueries bytes. The stale-cache binding is
+     *  provided so the PRE-fix bytes run too (red-first stays semantic, never a
+     *  harness ReferenceError); post-fix bytes simply never read it. */
+    function driveRerender(src, opts) {
+        var fnText = extractFn86(src, 'function rerenderQueries()');
+        var rendered = [];
+        var panel = { innerHTML: '' };
+        var runner = new Function(
+            '_lastQueries', '_revealActive', '_revealedData', 'ginaData', 'qs', 'renderQueryContent',
+            'var __fn = (' + fnText + '); __fn();'
+        );
+        runner(opts.cache, opts.revealActive || false, opts.revealed || null, opts.ginaData,
+            function (sel) { return sel === '#tree-query' ? panel : null; },
+            function (q) { rendered.push(q); return 'RENDERED'; });
+        return { rendered: rendered, panel: panel };
+    }
+
+    var STALE = [{ statement: 'STALE' }];
+
+    it('behavioral: rerenderQueries paints the payload-derived queries, never the cached ones (real bytes)', function() {
+        var LIVE = [{ statement: 'LIVE' }];
+        var out = driveRerender(getSrc86(), { cache: STALE, ginaData: { user: { queries: LIVE } } });
+        assert.equal(out.rendered.length, 1, 'one repaint');
+        assert.strictEqual(out.rendered[0], LIVE,
+            'the repaint must use the live payload queries (pre-fix bytes painted the stale cache)');
+        assert.equal(out.panel.innerHTML, 'RENDERED', 'the repaint lands in #tree-query');
+    });
+
+    it('behavioral: a dead-era cache no longer repaints — empty truth bails', function() {
+        var out = driveRerender(getSrc86(), { cache: STALE, ginaData: { user: {} } });
+        assert.equal(out.rendered.length, 0,
+            'no live queries -> no repaint (pre-fix bytes resurrected the stale cache here)');
+        assert.equal(out.panel.innerHTML, '', 'the pane is left to renderTab');
+    });
+
+    it('behavioral: an active data-xhr era wins (renderTab parity)', function() {
+        var PAGE = [{ statement: 'P1' }], XHRQ = [{ statement: 'X1' }, { statement: 'X2' }];
+        var out = driveRerender(getSrc86(), {
+            cache: STALE,
+            ginaData: { user: { 'data-xhr': { queries: XHRQ }, queries: PAGE } }
+        });
+        assert.strictEqual(out.rendered[0], XHRQ,
+            'while an XHR overlay era is active its queries must win, exactly like renderTab(\'query\')');
+    });
+
+    it('behavioral: an active reveal still wins over the redacted payload (reveal fidelity)', function() {
+        var RED = [{ statement: 'REDACTED' }], REV = [{ statement: 'REVEALED' }];
+        var out = driveRerender(getSrc86(), {
+            cache: STALE, revealActive: true, revealed: { user: { queries: REV } },
+            ginaData: { user: { queries: RED } }
+        });
+        assert.strictEqual(out.rendered[0], REV,
+            'reveal mode must keep painting the unredacted payload (renderTab\'s source swap, mirrored)');
+    });
+
+    it('behavioral: the live-index success re-render paints derived queries into #tree-query (real bytes)', function() {
+        var LIVE = [{ statement: 'LIVE', indexes: null }];
+        var fnBlk = extractFn86(getSrc86(), 'function fetchLiveIndexes()');
+        var onload = extractFn86(fnBlk, 'xhr.onload = function()');
+        var rendered = [];
+        var treeEl = { innerHTML: '' };
+        var runner = new Function(
+            'xhr', 'qs', 'renderQueryContent',
+            '_lastQueries', '_revealActive', '_revealedData', 'ginaData',
+            "var _liveIndexes = null; var _liveIndexesFetching = true; var __on = (" + onload.replace(/^xhr\.onload = /, '') + "); __on(); return { liveIndexes: _liveIndexes, fetching: _liveIndexesFetching };");
+        var out = runner(
+            { status: 200, responseText: '{"connectors":{}}' },
+            function (sel) { return sel === '#tree-query' ? treeEl : null; },
+            function (q) { rendered.push(q); return 'RENDERED_CARDS'; },
+            STALE, false, null, { user: { queries: LIVE } }
+        );
+        assert.strictEqual(out.fetching, false, 'onload must clear the fetching flag');
+        assert.equal(rendered.length, 1, 'one repaint on success');
+        assert.strictEqual(rendered[0], LIVE,
+            'the ⟳-forced re-render must paint the live payload queries (pre-fix bytes painted the stale cache — the measured badge rewrite 3→7)');
+        assert.equal(treeEl.innerHTML, 'RENDERED_CARDS', 'the repaint lands in #tree-query (#B222 invariant preserved)');
+    });
 });

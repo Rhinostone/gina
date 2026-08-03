@@ -676,6 +676,13 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
          *                                 return true (handled — caller must NOT also load).
          *   - never warmed (undefined) -> return false so the caller loads itself.
          *
+         * Dev toolbar (#B225): both consume branches mirror the cold-click
+         * loaded path's dev gate — GINA_ENV_IS_DEV sets the toolbar overlay
+         * from the body right before the dispatch — so a warmed open surfaces
+         * its rendered data exactly like a cold one. The set lives here and
+         * NOT in handleLoadedBody: the cold path routes through the dispatcher
+         * too, so a set there would double-fire the overlay.
+         *
          * @inner
          * @param {string} url - the resolved popin URL.
          * @param {object} $popin - the registered popin.
@@ -707,6 +714,7 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
                         // clear the (repopulated) slot: the completion writes the
                         // cache back even after this adoption consumed the body.
                         $popin._contentUrl = url;
+                        if (GINA_ENV_IS_DEV) { updateToolbar(body); }
                         handleLoadedBody(body, $popin, ensurePopinDialog($popin));
                     }
                 });
@@ -719,6 +727,7 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
             // the NEXT open render this open's generation).
             $popin._contentUrl = url;
             var $el = ensurePopinDialog($popin);
+            if (GINA_ENV_IS_DEV) { updateToolbar(body); }
             handleLoadedBody(body, $popin, $el);
             return true;
         }
