@@ -2197,6 +2197,7 @@ function Merge() {
      * merge({ a: 1 }, { a: 9 }, true)    // { a: 9 }
      * merge([1, 2],   [3, 4])            // [1, 2, 3, 4]
      * merge([1, 2],   [3, 4], true)      // [3, 4]
+     * merge({ a: [null, 'x'] }, { a: [null, 'x'] })  // { a: [null, 'x'] } — null elements are preserved (#B226)
      */
     var browse = function (_target, _source) {
 
@@ -2401,8 +2402,25 @@ function Merge() {
         return target;
     };
 
-    // Will not merge functions items: this is normal
-    // Merging arrays is OK, but merging collections is still experimental
+    /**
+     * Merge two arrays. Will not merge function items: this is normal.
+     * Merging plain arrays is OK, merging collections is still experimental.
+     *
+     * `null` elements are VALUES and are preserved (#B226): `typeof null ==
+     * 'object'`, so the object-exclusion guards below each carry an explicit
+     * null exception — without it a no-override merge silently dropped `null`
+     * from arrays (while `''` / `false` / `0` survived), which stripped the
+     * first slot of positional argument arrays such as the documented
+     * validator rule `"setFlash": [null, "message"]` on the client-side
+     * rules path.
+     *
+     * @inner
+     * @private
+     * @param {Array} options  - Source array (merged INTO target)
+     * @param {Array} target   - Target array (wins on conflicts unless `override`)
+     * @param {boolean} override - `true` lets `options` win / replace
+     * @returns {Array|undefined} the merged array
+     */
     var mergeArray = function(options, target, override) {
         newTarget = [];
 
@@ -2507,7 +2525,12 @@ function Merge() {
             // ok, but don't merge objects
             a = 0;
             for (; a < target.length; ++a ) {
-                if ( typeof(target[a]) != 'object' && newTarget.indexOf(target[a]) == -1 ) {
+                // #B226 — typeof null == 'object': a null element is a value
+                // (e.g. the first slot of a positional rule-argument array),
+                // not a collection item to exclude; this rebuild dropped it
+                // while '' / false / 0 survived
+                // was: if ( typeof(target[a]) != 'object' && newTarget.indexOf(target[a]) == -1 ) {
+                if ( ( typeof(target[a]) != 'object' || target[a] === null ) && newTarget.indexOf(target[a]) == -1 ) {
                     newTarget.push(target[a]);
                 }
             }
@@ -2592,7 +2615,11 @@ function Merge() {
                     localKeyComparison = ownPropertyNames;
                     if ( target.indexOf(options[a]) > -1 && override) {
                         target.splice(target.indexOf(options[a]), 1, options[a])
-                    } else if ( typeof(newTarget[a]) == 'undefined' && typeof(options[a]) == 'object' ) {
+                    // #B226 — a null source element must not enter the index-merge:
+                    // `for (var k in null)` is a no-op, so null used to surface as
+                    // `{}` here; let it fall through to the primitive push below
+                    // was: } else if ( typeof(newTarget[a]) == 'undefined' && typeof(options[a]) == 'object' ) {
+                    } else if ( typeof(newTarget[a]) == 'undefined' && typeof(options[a]) == 'object' && options[a] != null ) {
                         // merge using index
                         newTarget = target;
 
@@ -2637,7 +2664,9 @@ function Merge() {
                                newTarget[a] = target[a]
                         }
                         // array with string key
-                        else if (newTarget.indexOf(options[a]) == -1 && typeof(options[a]) != 'object') {
+                        // #B226 — same typeof-null exception as the rebuild above
+                        // was: else if (newTarget.indexOf(options[a]) == -1 && typeof(options[a]) != 'object') {
+                        else if (newTarget.indexOf(options[a]) == -1 && ( typeof(options[a]) != 'object' || options[a] === null )) {
                             newTarget.push(options[a]);
                         }
                         // collection without keyComparison
