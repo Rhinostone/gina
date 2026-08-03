@@ -1,0 +1,3 @@
+kind: Changed
+body: 'Replaced the transitive `object-assign` dependency (`engine.io` → `cors` → `object-assign@4.1.1`, dormant since 2017) with `@socketregistry/object-assign` via npm overrides — a maintained two-line re-export of the native `Object.assign`. Supply-chain hygiene with zero runtime change (the replaced package already delegated to the native implementation at require time on any modern runtime), applied to the framework install tree alongside the existing `ws` override.'
+time: 2026-08-03T03:04:58+01:00

@@ -131,6 +131,7 @@
     "typescript": "^7.0.2"
   },
   "overrides": {
-    "ws": "^8.21.0"
+    "ws": "^8.21.0",
+    "object-assign": "npm:@socketregistry/object-assign@^1.0.5"
   }
 }
