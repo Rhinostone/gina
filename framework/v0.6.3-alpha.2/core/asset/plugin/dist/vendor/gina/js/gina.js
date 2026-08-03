@@ -14423,6 +14423,25 @@ function ValidatorPlugin(rules, data, formId, culture) {
         Object.defineProperty($el, 'value', descriptor);
     }
 
+    /**
+     * addLiveForInput
+     * Wires one form control for live checking: registers the gina event
+     * name(s) the control's validation handler consumes, plus the handler
+     * itself (field pass + whole-form silent pass -> updateSubmitTriggerState).
+     * Text-like controls register change./keyup./focusin./focusout.<id>;
+     * radios and checkboxes register changed.<id> (dispatched by their
+     * update relays); a radio ALSO registers change.<id> (#B228) because the
+     * form-level change proxy is the only dispatcher that fires on a user
+     * pick and it only dispatches names that are registered.
+     *
+     * @inner
+     * @param {object} $form - form instance record (`instance.$forms[id]` shape: `.rules`, `.target`)
+     * @param {object} $el - control to wire (DOMObject)
+     * @param {number} liveCheckTimer - shared debounce timer handle
+     * @param {boolean} [isOtherTagAllowed=false] - admit non-input/textarea tags (selects, FACEs)
+     *
+     * @returns {undefined}
+     * */
     var addLiveForInput = function($form, $el, liveCheckTimer, isOtherTagAllowed) {
 
         if (typeof(isOtherTagAllowed) == 'undefined' ) {
@@ -14494,6 +14513,23 @@ function ValidatorPlugin(rules, data, formId, culture) {
                     if ( typeof(gina.events[_evt]) == 'undefined' ) {
                         eventsList[_e] = _evt;
                         ++_e;
+                    }
+                    // #B228 -- a RADIO also listens on the proxy-dispatched name: the
+                    // form-level change proxy dispatches `change.<id>` only when that
+                    // exact name is registered, and nothing else fires on a user pick
+                    // (the click proxy short-circuits into updateRadio, which never
+                    // dispatches; the bare-id relay has no live trigger) -- so the
+                    // `changed.<id>` registration above was consume-only dead wiring
+                    // on the pick path and the submit trigger kept its bind-time
+                    // state forever. The handler's radio arm has accepted
+                    // `change.`-typed events all along; checkboxes stay on their
+                    // working relay (change proxy -> updateCheckBox -> `changed.<id>`).
+                    if ( /^radio$/i.test($el.type) ) {
+                        _evt = 'change.'+$el.id;
+                        if ( typeof(gina.events[_evt]) == 'undefined' ) {
+                            eventsList[_e] = _evt;
+                            ++_e;
+                        }
                     }
                 }
 
