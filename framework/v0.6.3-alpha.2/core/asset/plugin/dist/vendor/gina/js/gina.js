@@ -18612,6 +18612,7 @@ function ValidatorPlugin(rules, data, formId, culture) {
             var localRuleObj = null, skipTest = null;
             var localFieldType  = null;
             var caseValueBackup = null; // #B229 — see the `caseName == field` arm below
+            var baseValueBackup = null; // #B230 — see the base-rule restore below
 
             //console.debug('parsing ', fields, $fields, rules);
             if ( typeof(rules) != 'undefined' ) {
@@ -19036,10 +19037,39 @@ function ValidatorPlugin(rules, data, formId, culture) {
                         continue;
                     }
 
+                    // #B230 — a `_case_` driver's entry in `allFields` IS the case
+                    // VALUE every later reader consumes: the scan block above
+                    // re-reads it on every subsequent field iteration (a missing
+                    // entry re-seeds from `$allFields[name].value` — a radio
+                    // group's FIRST member regardless of `.checked`), and the
+                    // direct-case block below reads it in THIS iteration. Site
+                    // 3/3's adjudication deletes it (checkFieldAgainstRules ends
+                    // every applied rule with `delete fields[field]` on the
+                    // object it is handed), so a non-last driver's conditions
+                    // matched a value the user never picked on later scans and
+                    // matched nothing (`undefined`) in its own direct-case pass.
+                    // Back the entry up and restore it after the check — gated
+                    // on the field driving a `_case_` in the live `rules` OR in
+                    // the pass-entry clone `allRules`: inside a direct-case
+                    // recursion `rules` is the condition's own rule set (no
+                    // `_case_` keys), so `hasCase` alone is blind there
+                    // (measured — the union is load-bearing). Non-driver fields
+                    // keep the delete untouched: the pull-in gate, the
+                    // direct-case exclude injection and the async-`query`
+                    // re-validation input all read those absences today.
+                    baseValueBackup = allFields[field];
                     // check each field against rule only if rule exists 3/3
                     if ( typeof(rules[field]) != 'undefined' ) {
                         //checkFieldAgainstRules(field, rules, fields);
                         checkFieldAgainstRules(field, rules, allFields);
+                    }
+                    // #B230 restore — see the block comment above
+                    if (
+                        ( hasCase || typeof(allRules['_case_' + field]) != 'undefined' )
+                        && typeof(baseValueBackup) != 'undefined'
+                        && typeof(allFields[field]) == 'undefined'
+                    ) {
+                        allFields[field] = baseValueBackup;
                     }
 
                     if (hasCase) {
