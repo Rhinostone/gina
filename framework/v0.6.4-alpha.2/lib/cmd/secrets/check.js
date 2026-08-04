@@ -27,14 +27,34 @@ var CmdHelper = require('./../helper');
  *
  * `--scope=<s>`: enumerate the *effective* keys for that scope by read-only
  * overlaying the sibling `config_<s>/` dirs over the base (see `secrets:scan`).
- * `--env-file=<path>`: validate against a `.env`-style file's vars instead of
- * the live `process.env` — e.g. a decrypted SOPS export or a CI-exported env.
+ * `--env-file=<path>`: stand in for the live `process.env` — e.g. a decrypted
+ * SOPS export or a CI-exported env. It occupies the *environment tier*, which
+ * outranks the file tier below, so an explicit file still wins.
+ *
+ * Two tiers, because the runtime has two. Since the file backend shipped, a
+ * bundle may declare `settings.secrets.file`, and `core/config.js` resolves
+ * placeholders against the environment first and those files second. Checking
+ * the environment alone therefore reported `UNSET` for a key the bundle would
+ * have started with — a false alarm on the very gate that exists to prevent
+ * surprises. This command now resolves the bundle's declared chain with the
+ * same `whisper` dictionary the runtime uses and consults it as the lower
+ * tier, so the two sides cannot disagree about what a file means (they share
+ * `lib/secrets`'s parser) nor about where it lives (they share the token
+ * substitution).
  *
  * Caveat: without `--env-file` this checks the env of THIS CLI process, not a
  * detached bundle's runtime/container environment. Real value: a CI step that
  * exports (or decrypts) the scope's secrets and runs `secrets:check --scope=…
  * --env-file=…` before shipping. It cannot introspect an already-running
  * bundle's env.
+ *
+ * Second caveat, and the reason the report names its assumptions: `${scope}`
+ * and `${env}` are *launch-time* values. The runtime reads `NODE_SCOPE` /
+ * `NODE_ENV` from whatever started the bundle; this process can only see
+ * `--scope` / `--env` or the project defaults. When a declared path embeds a
+ * token this command cannot resolve, it says so and skips the file tier
+ * rather than statting a literally-named path — which can only make the gate
+ * stricter than the runtime, never laxer.
  *
  * @class Check
  * @constructor
@@ -46,10 +66,21 @@ var CmdHelper = require('./../helper');
  * @param {object} cmd - The cmd dispatcher object (lib/cmd/index.js)
  */
 function Check(opt, cmd) {
-    var self = { format: 'text', anyUnset: false, scopeName: null, envFile: null, envMap: null };
+    var self = { format: 'text', anyUnset: false, scopeName: null, envName: null, envFile: null, envMap: null };
 
     var secrets = lib.secrets;
     var merge   = lib.merge;
+
+    /**
+     * Matches any `${…}` token the substitution pass did not resolve. Mirrors
+     * the guard in `lib/secrets/src/main.js` so this command rejects exactly
+     * what the runtime would reject.
+     *
+     * @inner
+     * @constant
+     * @type {RegExp}
+     */
+    var UNRESOLVED_TOKEN = /\$\{[^}]*\}/;
 
     /**
      * Config files are JSON. The loader globs every `.json` in a config
@@ -92,6 +123,11 @@ function Check(opt, cmd) {
         // leaves them in argv for getParams — same path bundle:* --scope uses).
         self.scopeName = (self.params && self.params.scope) ? self.params.scope : null;
         self.envFile   = (self.params && self.params['env-file']) ? self.params['env-file'] : null;
+        // `--env` is not one of the task prefixes CmdHelper re-applies to
+        // `defaultEnv` (it does that only for start/stop/restart/build/deploy),
+        // so read it off params exactly as --scope is read above. It is needed
+        // because a project declares `homedir` per bundle AND per env.
+        self.envName   = (self.params && self.params.env) ? self.params.env : (self.defaultEnv || null);
         if (self.envFile) {
             self.envMap = loadEnvFile(_(self.envFile, true));
             if (self.envMap === null) {
@@ -175,6 +211,187 @@ function Check(opt, cmd) {
      */
     var loadEnvFile = function (filePath) {
         return secrets.parseEnvFile(filePath);
+    };
+
+    /**
+     * Reads one named config file with the `--scope` overlay applied, using
+     * the same merge direction as `collectKeysFromConfigDir` (scope wins,
+     * base back-fills, `override=false` stated explicitly).
+     *
+     * @inner
+     * @private
+     * @param {string} absDir - Absolute base config directory
+     * @param {string} name - File name, e.g. `settings.json`
+     * @returns {object|null}
+     */
+    var readScopedConfig = function (absDir, name) {
+        var base  = readJsonSafe(_(absDir + '/' + name, true));
+        var scope = self.scopeName
+            ? readJsonSafe(_(absDir + '_' + self.scopeName + '/' + name, true))
+            : null;
+        if (!scope) return base;
+        return merge(JSON.clone(scope), base || {}, false);
+    };
+
+    /**
+     * The effective `settings.json` for a bundle — `shared/config/` first with
+     * the bundle's own on top. That direction mirrors the loader, which does
+     * `merge(sharedMain, jsonFile, true)` (`core/config.js`): the bundle's own
+     * file wins on a conflicting key. Both sides get the `--scope` overlay.
+     *
+     * @inner
+     * @private
+     * @param {string} projectPath
+     * @param {object|null} manifest
+     * @param {string} bundleName
+     * @returns {object|null}
+     */
+    var readEffectiveSettings = function (projectPath, manifest, bundleName) {
+        var bundleSrc = resolveBundleSrc(manifest, bundleName);
+        var shared    = readScopedConfig(_(projectPath + '/shared/config', true), 'settings.json');
+        var own       = readScopedConfig(_(projectPath + '/' + bundleSrc + '/config', true), 'settings.json');
+        if (!shared) return own;
+        if (!own) return shared;
+        return merge(JSON.clone(shared), own, true);
+    };
+
+    /**
+     * Rebuilds the subset of the runtime's substitution dictionary that a
+     * secrets-file path may legitimately use. Deliberately partial: only keys
+     * whose value this process can derive to the *same string* the runtime
+     * derives are included.
+     *
+     * A key is set only when its value is a non-empty string. That is not
+     * defensive tidiness — it is the contract. An absent key leaves its token
+     * verbatim, which the caller then rejects loudly; an **empty** value is
+     * substituted silently, so `${scope}` with `scope: ''` would collapse
+     * `<home>/<scope>/secrets.env` to the base path and read the wrong file
+     * without a word.
+     *
+     * `homedir` is read from the project's own `env.json` (`<bundle>.<env>`),
+     * falling back to the framework template's `~/.<projectName>` — the same
+     * two sources, in the same order, as `core/config.js`. It is emphatically
+     * NOT `projects.json`'s `homedir` field: that is a CLI-level concept the
+     * config loader never reads, and using it here would put this command on a
+     * different path from the bundle it is meant to be validating.
+     *
+     * @inner
+     * @private
+     * @param {string} projectPath
+     * @param {string} bundleName
+     * @returns {Object<string,string>}
+     */
+    var buildReps = function (projectPath, bundleName) {
+        var reps = {};
+        var put  = function (key, value) {
+            if (typeof value === 'string' && value !== '') reps[key] = value;
+        };
+
+        put('projectName', self.projectName);
+        // `${project}` is the project's PATH, not its name (getPath('project')).
+        put('project', projectPath);
+        put('projectPath', projectPath);
+        put('executionPath', projectPath);
+        put('root', projectPath);
+        put('bundle', bundleName);
+        put('frameworkDir', (typeof getEnvVar === 'function') ? getEnvVar('GINA_FRAMEWORK_DIR') : null);
+        put('scope', self.scopeName);
+        put('env', self.envName);
+
+        var declared = null;
+        var envData  = readJsonSafe(_(projectPath + '/env.json', true));
+        if (envData && envData[bundleName] && envData[bundleName][self.envName]) {
+            declared = envData[bundleName][self.envName].homedir;
+        }
+        // `~` is expanded by whisper's own OS pass, not by `_()`, so the
+        // template default is handed over verbatim exactly as the loader does.
+        put('homedir', (typeof declared === 'string' && declared !== '')
+            ? declared
+            : '~/.' + self.projectName);
+
+        return reps;
+    };
+
+    /**
+     * Resolves a bundle's declared `settings.secrets.file` chain and layers the
+     * readable files into one map, later entries winning — the same ordering
+     * `lib/secrets/backends/file.js` applies.
+     *
+     * Validation mirrors `secrets.selectBackend` so this command accepts and
+     * rejects exactly what a boot would: a non-string or empty entry, a
+     * `${secret:…}` placeholder (unresolvable by definition — the backend that
+     * would resolve it is the one being built), and any token the dictionary
+     * did not know.
+     *
+     * @inner
+     * @private
+     * @param {string} projectPath
+     * @param {object|null} manifest
+     * @param {string} bundleName
+     * @returns {{declared:boolean, layers:Array<{path:string, found:boolean, keys:number}>, map:(object|null), origin:(object|null), errors:string[]}}
+     */
+    var resolveSecretsFileChain = function (projectPath, manifest, bundleName) {
+        var out = { declared: false, layers: [], map: null, origin: null, errors: [] };
+
+        var settings = readEffectiveSettings(projectPath, manifest, bundleName);
+        var declared = (settings && settings.secrets && typeof settings.secrets === 'object')
+            ? settings.secrets.file
+            : undefined;
+        if (typeof declared === 'undefined' || declared === null) return out;
+
+        var raw = Array.isArray(declared) ? declared : [declared];
+        if (!raw.length) return out;
+        out.declared = true;
+
+        for (var i = 0; i < raw.length; i++) {
+            if (typeof raw[i] !== 'string' || raw[i] === '') {
+                out.errors.push('`settings.secrets.file` must be a non-empty string or an array of them');
+                return out;
+            }
+            if (raw[i].indexOf('${secret:') > -1) {
+                out.errors.push('`settings.secrets.file` cannot contain a `${secret:…}` placeholder');
+                return out;
+            }
+        }
+
+        var resolved;
+        try {
+            resolved = whisper(buildReps(projectPath, bundleName), JSON.clone(raw));
+        } catch (whisperErr) {
+            out.errors.push('could not substitute tokens in `settings.secrets.file`: ' + whisperErr.message);
+            return out;
+        }
+
+        var map    = Object.create(null);
+        var origin = Object.create(null);
+        for (var p = 0; p < resolved.length; p++) {
+            var path = resolved[p];
+            if (UNRESOLVED_TOKEN.test(path)) {
+                // Skip the whole tier rather than stat a literally-named path.
+                // Under-reading can only make this gate stricter than the
+                // runtime; guessing could make it laxer, which is the failure
+                // this command exists to prevent.
+                out.errors.push('unresolved token in `' + path + '`'
+                    + ' — pass --scope/--env if it names one, since the runtime'
+                    + ' reads those from whatever launches the bundle');
+                return out;
+            }
+            var layerMap = secrets.parseEnvFile(path);
+            out.layers.push({
+                path  : path,
+                found : layerMap !== null,
+                keys  : layerMap === null ? 0 : Object.keys(layerMap).length
+            });
+            if (layerMap === null) continue;   // absent file: contributes nothing, not an error
+            for (var key in layerMap) {
+                map[key]    = layerMap[key];   // later path wins
+                origin[key] = path;
+            }
+        }
+
+        out.map    = map;
+        out.origin = origin;
+        return out;
     };
 
     /**
@@ -290,25 +507,49 @@ function Check(opt, cmd) {
     };
 
     /**
-     * Returns true when the key resolves to a non-empty string in the active
-     * env source — the exact condition under which the env backend resolves
-     * successfully. The source is the `--env-file` map when given, otherwise
-     * the live `process.env`.
+     * Resolves one key across both tiers in the runtime's order: the
+     * environment first, the declared file chain second. "Set" stays the env
+     * backend's fail-closed rule at every tier — a non-empty string — so an
+     * `UNSET` here is still precisely a key that would throw at bundle start.
+     *
+     * The environment tier is the `--env-file` map when one was given,
+     * otherwise the live `process.env`. Because that tier outranks the files,
+     * an explicit `--env-file` still wins over a declared chain, which is what
+     * it means to stand in for the environment.
+     *
+     * Naming the winning source is the point of the return shape: `SET` alone
+     * cannot tell an operator whether the value came from the environment they
+     * are about to deploy with or from a plaintext file sitting on this disk —
+     * and those have very different consequences.
      *
      * @inner
      * @private
      * @param {string} key
-     * @returns {boolean}
+     * @param {object|null} chain - Resolved chain from `resolveSecretsFileChain`
+     * @returns {{set:boolean, source:(string|null), from:(string|null)}}
      */
-    var isEnvSet = function (key) {
+    var lookupSecret = function (key, chain) {
         var source = self.envMap || process.env;
-        return typeof source[key] === 'string' && source[key] !== '';
+        if (typeof source[key] === 'string' && source[key] !== '') {
+            return { set: true, source: self.envFile ? 'env-file' : 'env', from: self.envFile || null };
+        }
+        if (chain && chain.map) {
+            var value = chain.map[key];
+            if (typeof value === 'string' && value !== '') {
+                return { set: true, source: 'file', from: chain.origin[key] };
+            }
+        }
+        return { set: false, source: null, from: null };
     };
 
     /**
      * Builds a check report for one bundle: every required key with its
-     * `SET`/`UNSET` status against the current `process.env`. Flips
+     * `SET`/`UNSET` status against both tiers, plus the resolved
+     * `settings.secrets.file` chain that formed the lower one. Flips
      * `self.anyUnset` when a key is missing.
+     *
+     * The chain is resolved per bundle, not per project: `settings.json` is a
+     * per-bundle file and a declared path may embed `${bundle}`.
      *
      * @inner
      * @private
@@ -316,7 +557,7 @@ function Check(opt, cmd) {
      * @param {object|null} manifest
      * @param {string} bundleName
      * @param {object} sharedKeys - Pre-computed shared key set
-     * @returns {{bundle:string, totalKeys:number, set:number, unset:number, keys:Array<{key:string, set:boolean}>}}
+     * @returns {{bundle:string, totalKeys:number, set:number, unset:number, keys:Array<{key:string, set:boolean, source:(string|null), from:(string|null)}>, secretsFile:object}}
      */
     var checkBundle = function (projectPath, manifest, bundleName, sharedKeys) {
         var keySet = Object.create(null);
@@ -326,20 +567,29 @@ function Check(opt, cmd) {
         var bundleSrc = resolveBundleSrc(manifest, bundleName);
         collectKeysFromConfigDir(_(projectPath + '/' + bundleSrc + '/config', true), keySet);
 
+        var chain = resolveSecretsFileChain(projectPath, manifest, bundleName);
+
         var keys     = Object.keys(keySet).sort();
         var statuses = [];
         var setCount = 0;
         for (var k = 0; k < keys.length; k++) {
-            var ok = isEnvSet(keys[k]);
-            if (ok) { setCount++; } else { self.anyUnset = true; }
-            statuses.push({ key: keys[k], set: ok });
+            var hit = lookupSecret(keys[k], chain);
+            if (hit.set) { setCount++; } else { self.anyUnset = true; }
+            statuses.push({ key: keys[k], set: hit.set, source: hit.source, from: hit.from });
         }
         return {
             bundle    : bundleName,
             totalKeys : keys.length,
             set       : setCount,
             unset     : keys.length - setCount,
-            keys      : statuses
+            keys      : statuses,
+            secretsFile : {
+                declared     : chain.declared,
+                assumedScope : self.scopeName || null,
+                assumedEnv   : self.envName || null,
+                layers       : chain.layers,
+                errors       : chain.errors
+            }
         };
     };
 
@@ -458,6 +708,7 @@ function Check(opt, cmd) {
      */
     var emitTextBundle = function (br) {
         console.log('  ' + br.bundle + ':');
+        emitTextChain(br.secretsFile);
         if (br.totalKeys === 0) {
             console.log('    No ${secret:KEY} placeholders found in config.');
             return;
@@ -467,9 +718,68 @@ function Check(opt, cmd) {
             if (br.keys[w].key.length > width) width = br.keys[w].key.length;
         }
         for (var k = 0; k < br.keys.length; k++) {
-            console.log('      ' + padRight(br.keys[k].key, width) + '   ' + (br.keys[k].set ? 'SET' : 'UNSET'));
+            console.log('      ' + padRight(br.keys[k].key, width) + '   '
+                + padRight(br.keys[k].set ? 'SET' : 'UNSET', 5) + '   '
+                + sourceLabel(br.keys[k], br.secretsFile));
         }
         console.log('    (' + br.totalKeys + ' required: ' + br.set + ' set, ' + br.unset + ' unset)');
+    };
+
+    /**
+     * Renders the resolved `settings.secrets.file` block for one bundle, and
+     * nothing at all when the bundle declares no chain — an undeclared bundle
+     * behaves exactly as before the file tier existed, and its report should
+     * look that way too.
+     *
+     * The assumed scope/env line is not decoration: those are launch-time
+     * values this process cannot read, so the report has to say which ones it
+     * substituted or a reader cannot tell whether the paths below are the ones
+     * their bundle will actually open.
+     *
+     * @inner
+     * @private
+     * @param {object} sf - The `secretsFile` block from `checkBundle`
+     */
+    var emitTextChain = function (sf) {
+        if (!sf || !sf.declared) return;
+
+        var assumed = [];
+        if (sf.assumedScope) assumed.push('scope=' + sf.assumedScope);
+        if (sf.assumedEnv) assumed.push('env=' + sf.assumedEnv);
+        console.log('    settings.secrets.file'
+            + (assumed.length ? ' (assuming ' + assumed.join(', ') + ')' : '') + ':');
+
+        for (var e = 0; e < sf.errors.length; e++) {
+            console.log('      ! ' + sf.errors[e]);
+        }
+        if (sf.errors.length) {
+            console.log('      ! file tier skipped — keys below are checked against the environment only');
+            return;
+        }
+        for (var i = 0; i < sf.layers.length; i++) {
+            console.log('      [' + (i + 1) + '] ' + sf.layers[i].path + '   '
+                + (sf.layers[i].found ? 'loaded (' + sf.layers[i].keys + ' keys)' : 'ABSENT'));
+        }
+    };
+
+    /**
+     * Names the tier a key was satisfied from. An empty label for `UNSET`
+     * keeps the column honest — there is no source to name.
+     *
+     * @inner
+     * @private
+     * @param {object} entry - One `{key, set, source, from}` status
+     * @param {object} sf - The `secretsFile` block, for layer numbering
+     * @returns {string}
+     */
+    var sourceLabel = function (entry, sf) {
+        if (!entry.set) return '';
+        if (entry.source !== 'file') return entry.source;
+        var layers = (sf && sf.layers) ? sf.layers : [];
+        for (var i = 0; i < layers.length; i++) {
+            if (layers[i].path === entry.from) return 'file[' + (i + 1) + ']';
+        }
+        return 'file';
     };
 
     /**

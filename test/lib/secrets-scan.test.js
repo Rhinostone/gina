@@ -543,9 +543,94 @@ describe('09 - scope overlay + env-file', function () {
         });
     });
 
-    it('check.js reads --env-file from self.params, defines loadEnvFile, and switches the env source', function () {
+    it('check.js reads --env-file from self.params and defines loadEnvFile', function () {
         assert.match(checkSrc, /self\.envFile\s*=\s*\(self\.params\s*&&\s*self\.params\[['"]env-file['"]\]\)/);
         assert.match(checkSrc, /var\s+loadEnvFile\s*=\s*function/);
-        assert.match(checkSrc, /self\.envMap\s*\|\|\s*process\.env/);
+    });
+
+    // ---- two-tier lookup (env over file), matching backends/file.js ---------
+
+    it('check.js consults the environment tier BEFORE the file tier', function () {
+        var lookup = checkSrc.slice(checkSrc.indexOf('var lookupSecret'));
+        assert.ok(lookup.length > 0, 'lookupSecret must exist');
+        var envAt  = lookup.indexOf('source[key]');
+        var fileAt = lookup.indexOf('chain.map[key]');
+        assert.ok(envAt > -1, 'environment tier must be present');
+        assert.ok(fileAt > -1, 'file tier must be present');
+        assert.ok(envAt < fileAt, 'environment must be read before the file chain');
+    });
+
+    it('check.js builds the file chain with the shared whisper + secrets.parseEnvFile (no second resolver)', function () {
+        assert.match(checkSrc, /whisper\(\s*buildReps\(/);
+        assert.match(checkSrc, /secrets\.parseEnvFile\(\s*path\s*\)/);
+    });
+
+    it('check.js never sources ${homedir} from projects.json (the field the config loader never reads)', function () {
+        assert.doesNotMatch(checkSrc, /self\.projectHomedir/);
+        assert.doesNotMatch(checkSrc, /getCoreEnv\s*\(/);
+        // It must read the project's own env.json instead.
+        assert.match(checkSrc, /env\.json/);
+    });
+
+    it('check.js skips the file tier on an unresolved token rather than statting a literal path', function () {
+        assert.match(checkSrc, /UNRESOLVED_TOKEN\.test\(\s*path\s*\)/);
+        assert.match(checkSrc, /unresolved token in/);
+    });
+
+    it('check.js only seeds a reps key from a NON-EMPTY string (an empty one substitutes silently)', function () {
+        // Guards the measured whisper behaviour: an absent key leaves its token
+        // verbatim (caught loudly downstream), but an empty-string value IS
+        // substituted, collapsing `<home>/${scope}/f.env` to `<home>//f.env`.
+        assert.match(checkSrc, /typeof\s+value\s*===\s*['"]string['"]\s*&&\s*value\s*!==\s*['"]{2}/);
+    });
+
+    it('arguments.json declares --env (needed to pick the env block homedir is read from)', function () {
+        assert.ok(argsArr.indexOf('--env') > -1, 'expected --env in arguments.json');
+    });
+
+    // ---- behavioural: real lib/secrets parser, real files -------------------
+
+    it('layering a real chain: later entry wins, absent file contributes nothing', function () {
+        var dir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'gina-secrets-chain-'));
+        try {
+            var base  = path.join(dir, 'base.env');
+            var scope = path.join(dir, 'scope.env');
+            fs.writeFileSync(base,  'SHARED=from-base\nONLY_BASE=b\n');
+            fs.writeFileSync(scope, 'SHARED=from-scope\nONLY_SCOPE=s\n');
+
+            // Replica of resolveSecretsFileChain's layering loop.
+            var paths  = [base, scope, path.join(dir, 'missing.env')];
+            var map    = Object.create(null);
+            var layers = [];
+            paths.forEach(function (p) {
+                var m = secrets.parseEnvFile(p);
+                layers.push({ path: p, found: m !== null });
+                if (m === null) return;
+                for (var k in m) map[k] = m[k];
+            });
+
+            assert.equal(map.SHARED, 'from-scope');      // later entry wins
+            assert.equal(map.ONLY_BASE, 'b');            // earlier entry back-fills
+            assert.equal(map.ONLY_SCOPE, 's');
+            assert.deepStrictEqual(layers.map(function (l) { return l.found; }), [true, true, false]);
+        } finally {
+            fs.rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    it('two-tier resolution: env wins over file, file fills a gap, neither → UNSET', function () {
+        // Replica of lookupSecret with both tiers populated.
+        var envTier  = { IN_BOTH: 'from-env', ONLY_ENV: 'e', EMPTY_IN_ENV: '' };
+        var fileTier = { IN_BOTH: 'from-file', ONLY_FILE: 'f', EMPTY_IN_ENV: 'rescued' };
+        function lookup(key) {
+            if (typeof envTier[key] === 'string' && envTier[key] !== '') return 'env';
+            if (typeof fileTier[key] === 'string' && fileTier[key] !== '') return 'file';
+            return null;
+        }
+        assert.equal(lookup('IN_BOTH'), 'env');            // environment outranks the file
+        assert.equal(lookup('ONLY_ENV'), 'env');
+        assert.equal(lookup('ONLY_FILE'), 'file');         // file fills the gap
+        assert.equal(lookup('EMPTY_IN_ENV'), 'file');      // empty env value is NOT "set"
+        assert.equal(lookup('NOWHERE'), null);             // still fail-closed
     });
 });
