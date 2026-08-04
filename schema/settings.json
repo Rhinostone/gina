@@ -183,6 +183,20 @@
         }
       }
     },
+    "secrets": {
+      "type": "object",
+      "description": "Where `${secret:KEY}` placeholders in this bundle's JSON configs are resolved from. Omit the block entirely and resolution behaves exactly as it always has: the framework environment first, then process.env, failing closed when a key is unset or empty. Declaring it adds a lower-precedence file tier; it never removes or reorders the environment tiers above it.",
+      "additionalProperties": false,
+      "properties": {
+        "file": {
+          "type": ["string", "array", "null"],
+          "items": { "type": "string", "minLength": 1 },
+          "minLength": 1,
+          "description": "One `.env`-style file path, or an array of them, layered UNDERNEATH the environment. Written with the ordinary config tokens, e.g. [\"${homedir}/secrets.env\", \"${homedir}/${scope}/secrets.env\"]. The environment always wins: every production delivery mechanism (a Kubernetes envFrom secretRef, an ECS task secret, `sops exec-env`, a CI export) arrives through the environment, so a file that won could let a stale plaintext copy baked into an image silently shadow the credential the platform injected while the bundle looked healthy. As a fallback it can only ever fill a gap. Within the array, LATER entries win over earlier ones, so a shared base file and a per-scope file combine. A declared file that does not exist contributes nothing and is not an error — a project may ship a base file and add the per-scope one only on some targets. Resolution stays fail-closed when a key is in neither tier. Boot refuses on a non-string or empty entry, on a `${secret:…}` placeholder (the backend that would resolve it is the one being built), and on any `${…}` token the substitution pass did not know — unknown tokens are preserved verbatim by design, so a typo would otherwise become a silent lookup for a literally-named file that never exists. NOT a secrets-management integration: it does not decrypt, and pointed at ciphertext it yields ciphertext silently. For SOPS, Vault or a KMS keep decrypting at the container entrypoint so values land in the environment, which this tier already prefers. Files are layered once per config-load cycle, so editing one after the bundle has started changes nothing until a restart.",
+          "default": null
+        }
+      }
+    },
     "server": {
       "type": "object",
       "description": "HTTP server engine and protocol configuration.",
