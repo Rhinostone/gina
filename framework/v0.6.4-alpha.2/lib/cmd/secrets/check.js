@@ -128,6 +128,14 @@ function Check(opt, cmd) {
         // so read it off params exactly as --scope is read above. It is needed
         // because a project declares `homedir` per bundle AND per env.
         self.envName   = (self.params && self.params.env) ? self.params.env : (self.defaultEnv || null);
+        // The scope a declared `secrets.file` path is resolved WITH is a
+        // separate concern from `self.scopeName`, which selects the read-only
+        // `config_<scope>/` overlay. Defaulting `scopeName` itself would start
+        // applying that overlay to every bare `scan`/`check` — a behaviour
+        // change nobody asked for — so the assumed scope lives in its own slot
+        // and falls back to the project default, matching what the runtime
+        // would use when no launcher overrides NODE_SCOPE.
+        self.scopeAssumed = self.scopeName || self.defaultScope || null;
         if (self.envFile) {
             self.envMap = loadEnvFile(_(self.envFile, true));
             if (self.envMap === null) {
@@ -278,16 +286,30 @@ function Check(opt, cmd) {
      * @inner
      * @private
      * @param {string} projectPath
+     * @param {object|null} manifest - The project manifest, for the version tokens
      * @param {string} bundleName
      * @returns {Object<string,string>}
      */
-    var buildReps = function (projectPath, bundleName) {
+    var buildReps = function (projectPath, manifest, bundleName) {
         var reps = {};
         var put  = function (key, value) {
             if (typeof value === 'string' && value !== '') reps[key] = value;
         };
 
-        put('projectName', self.projectName);
+        // Resolve the name from the PATH rather than trusting `self.projectName`:
+        // the no-argument form iterates every registered project, and on that
+        // branch `self.projectName` is undefined by definition. Using it there
+        // built `~/.undefined` — a real, stat-able, wrong path that reported
+        // every layer ABSENT instead of failing loudly.
+        var projectName = self.projectName;
+        for (var pn in (self.projects || {})) {
+            if (self.projects[pn] && self.projects[pn].path === projectPath) {
+                projectName = pn;
+                break;
+            }
+        }
+
+        put('projectName', projectName);
         // `${project}` is the project's PATH, not its name (getPath('project')).
         put('project', projectPath);
         put('projectPath', projectPath);
@@ -295,8 +317,22 @@ function Check(opt, cmd) {
         put('root', projectPath);
         put('bundle', bundleName);
         put('frameworkDir', (typeof getEnvVar === 'function') ? getEnvVar('GINA_FRAMEWORK_DIR') : null);
-        put('scope', self.scopeName);
+        put('scope', self.scopeAssumed);
         put('env', self.envName);
+
+        // Version tokens. The runtime gets these without listing them in the
+        // bundle-config dictionary: `core/template/conf/env.json` declares
+        // `projectVersion` / `projectVersionMajor` as per-bundle scalars, the
+        // env-loading pass resolves them from the manifest, and the scalar
+        // harvest then copies them into the dictionary that substitutes config.
+        // Omitting them here made a path like `${homedir}/v${projectVersionMajor}/…`
+        // unresolvable on this side while the bundle booted from it fine —
+        // the file tier would be skipped and its keys reported UNSET, which is
+        // the false alarm this command exists to prevent.
+        if (manifest && typeof manifest.version === 'string' && manifest.version !== '') {
+            put('projectVersion', manifest.version);
+            put('projectVersionMajor', manifest.version.split(/\./g)[0]);
+        }
 
         var declared = null;
         var envData  = readJsonSafe(_(projectPath + '/env.json', true));
@@ -307,7 +343,7 @@ function Check(opt, cmd) {
         // template default is handed over verbatim exactly as the loader does.
         put('homedir', (typeof declared === 'string' && declared !== '')
             ? declared
-            : '~/.' + self.projectName);
+            : (projectName ? '~/.' + projectName : null));
 
         return reps;
     };
@@ -356,7 +392,7 @@ function Check(opt, cmd) {
 
         var resolved;
         try {
-            resolved = whisper(buildReps(projectPath, bundleName), JSON.clone(raw));
+            resolved = whisper(buildReps(projectPath, manifest, bundleName), JSON.clone(raw));
         } catch (whisperErr) {
             out.errors.push('could not substitute tokens in `settings.secrets.file`: ' + whisperErr.message);
             return out;
@@ -585,7 +621,7 @@ function Check(opt, cmd) {
             keys      : statuses,
             secretsFile : {
                 declared     : chain.declared,
-                assumedScope : self.scopeName || null,
+                assumedScope : self.scopeAssumed || null,
                 assumedEnv   : self.envName || null,
                 layers       : chain.layers,
                 errors       : chain.errors

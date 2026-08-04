@@ -588,6 +588,63 @@ describe('09 - scope overlay + env-file', function () {
         assert.ok(argsArr.indexOf('--env') > -1, 'expected --env in arguments.json');
     });
 
+    // ---- #B266: reps must carry every token a real chain uses ---------------
+
+    it('check.js seeds the version tokens from the manifest (a ${projectVersionMajor} path must resolve)', function () {
+        assert.match(checkSrc, /put\(\s*['"]projectVersion['"]\s*,\s*manifest\.version\s*\)/);
+        assert.match(checkSrc, /put\(\s*['"]projectVersionMajor['"]\s*,\s*manifest\.version\.split/);
+    });
+
+    it('check.js resolves ${scope} from an ASSUMED scope, not from the overlay flag alone', function () {
+        // scopeAssumed falls back to the project default...
+        assert.match(checkSrc, /self\.scopeAssumed\s*=\s*self\.scopeName\s*\|\|\s*self\.defaultScope/);
+        assert.match(checkSrc, /put\(\s*['"]scope['"]\s*,\s*self\.scopeAssumed\s*\)/);
+        // ...while scopeName itself stays explicit-only, so the config_<scope>/
+        // overlay is never applied by default (that would be a behaviour change).
+        assert.match(checkSrc, /self\.scopeName\s*=\s*\(self\.params\s*&&\s*self\.params\.scope\)\s*\?\s*self\.params\.scope\s*:\s*null/);
+    });
+
+    it('check.js derives the project name from the PATH, so the all-projects form cannot build ~/.undefined', function () {
+        assert.match(checkSrc, /self\.projects\[pn\]\.path\s*===\s*projectPath/);
+        assert.doesNotMatch(checkSrc, /['"]~\/\.['"]\s*\+\s*self\.projectName/);
+    });
+
+    it('a versioned + scoped chain resolves end to end (regression for the shape that skipped the tier)', function () {
+        // Replica of buildReps' seeding rules + the real substitution semantics.
+        var manifest = { version: '3.0.0-beta.1' };
+        var reps = {};
+        var put  = function (k, v) { if (typeof v === 'string' && v !== '') reps[k] = v; };
+        put('projectName', 'demoproject');
+        put('scope', null || 'local');                 // no --scope -> project default
+        put('projectVersion', manifest.version);
+        put('projectVersionMajor', manifest.version.split(/\./g)[0]);
+        put('homedir', '/home/u/.demoproject');
+
+        var chain = [
+            '${homedir}/v${projectVersionMajor}/credentials/secrets.env',
+            '${homedir}/v${projectVersionMajor}/credentials/${scope}/secrets.env'
+        ];
+        var out = chain.map(function (p) {
+            return p.replace(/\$\{(\w+)\}/g, function (s, k) {
+                return (reps[k] !== undefined) ? reps[k] : s;
+            });
+        });
+
+        assert.equal(out[0], '/home/u/.demoproject/v3/credentials/secrets.env');
+        assert.equal(out[1], '/home/u/.demoproject/v3/credentials/local/secrets.env');
+        out.forEach(function (p) {
+            assert.doesNotMatch(p, /\$\{[^}]*\}/, 'no token may survive: ' + p);
+        });
+    });
+
+    it('an underivable token still survives verbatim so the tier fails loudly (control for the test above)', function () {
+        var reps = { homedir: '/home/u/.demoproject' };   // no version, no scope
+        var out = '${homedir}/v${projectVersionMajor}/x.env'.replace(/\$\{(\w+)\}/g, function (s, k) {
+            return (reps[k] !== undefined) ? reps[k] : s;
+        });
+        assert.match(out, /\$\{projectVersionMajor\}/);   // must NOT silently vanish
+    });
+
     // ---- behavioural: real lib/secrets parser, real files -------------------
 
     it('layering a real chain: later entry wins, absent file contributes nothing', function () {
