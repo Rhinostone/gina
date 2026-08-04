@@ -53,6 +53,7 @@
  */
 
 var defaultBackend = require('./backends/env');
+var envFile        = require('./env-file');
 
 /**
  * Regex matching an entire `${secret:KEY}` placeholder. The capture group
@@ -281,5 +282,10 @@ module.exports = {
     resolve: resolve,
     getResolvedPaths: getResolvedPaths,
     getRequiredKeys: getRequiredKeys,
-    SECRET_RE: SECRET_RE
+    SECRET_RE: SECRET_RE,
+    // `.env`-style parsing, re-exported from ./env-file so that every reader
+    // of a given file agrees on what it means. See that module's header for
+    // why one implementation matters here.
+    parseEnv: envFile.parseEnv,
+    parseEnvFile: envFile.parseEnvFile
 };

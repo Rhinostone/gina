@@ -161,34 +161,20 @@ function Check(opt, cmd) {
      * surface the error). Used by `--env-file`: validate a scope's exported /
      * decrypted env (e.g. SOPS output) instead of the live `process.env`.
      *
+     * Delegates to `lib.secrets.parseEnvFile` rather than parsing here: this
+     * handler answers "would a bundle started here resolve its placeholders?",
+     * so it must read a file byte-for-byte the way the runtime resolver would.
+     * A second copy of the parser could drift on a quoted value or a CRLF line
+     * ending and report a clean bill of health for a file the runtime then
+     * read differently — the exact false-green this command exists to prevent.
+     *
      * @inner
      * @private
      * @param {string} filePath
      * @returns {Object<string,string>|null}
      */
     var loadEnvFile = function (filePath) {
-        var raw;
-        try {
-            raw = fs.readFileSync(filePath, 'utf8');
-        } catch (e) {
-            return null;
-        }
-        var map   = Object.create(null);
-        var lines = raw.split(/\r?\n/);
-        for (var i = 0; i < lines.length; i++) {
-            var line = lines[i].trim();
-            if (!line || /^#/.test(line)) continue;
-            line = line.replace(/^export\s+/, '');
-            var eq = line.indexOf('=');
-            if (eq < 0) continue;
-            var key = line.slice(0, eq).trim();
-            var val = line.slice(eq + 1).trim();
-            if ( /^".*"$/.test(val) || /^'.*'$/.test(val) ) {
-                val = val.slice(1, -1);
-            }
-            map[key] = val;
-        }
-        return map;
+        return secrets.parseEnvFile(filePath);
     };
 
     /**
