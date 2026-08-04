@@ -17,3 +17,11 @@ releases
 bundles
 logs
 tmp
+
+# Secrets — glob, never an exact name: `.env` alone matches neither
+# `secrets.env` nor `.env.production`. Commit an example instead.
+.env
+.env.*
+*.env
+!.env.example
+!*.example.env
