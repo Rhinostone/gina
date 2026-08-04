@@ -86,6 +86,31 @@ function runSubmitGuard($formNode, result, sendSpy) {
     }
 }
 
+// Replica of the #B246 click path (main.js clickProxyHandler). A trigger marked disabled is
+// INTERCEPTED and answered with a display-only reveal — errors rendered + first invalid field
+// focused — and the submit cycle (bindSubmitEl -> validate -> validate.<id> -> isValid() ->
+// send) is never entered. An enabled trigger falls through to the normal cycle.
+function runClickOnTrigger($formNode, $trigger, result, spies) {
+    var isDisabled = ( $trigger.getAttribute('disabled') != null && $trigger.getAttribute('disabled') != 'false' )
+                     || $trigger.getAttribute('aria-disabled') == 'true';
+    if (isDisabled) {
+        var errs = result['fields'] || result['error'];
+        displayFieldErrors($formNode, errs);
+        if (errs) {
+            for (var i = 0, len = $formNode.length; i < len; ++i) {
+                var f = $formNode[i], n = f.getAttribute('name');
+                if ( n && typeof(errs[n]) != 'undefined'
+                     && ( typeof(errs[n].count) != 'function' || errs[n].count() > 0 )
+                     && f.type != 'hidden' && typeof(f.focus) == 'function' ) { f.focus(); break; }
+            }
+        }
+        return 'intercepted';
+    }
+    spies.submitCycle();
+    runSubmitGuard($formNode, result, spies.send);
+    return 'submitted';
+}
+
 // minimal error-marker (the full handleErrorsDisplay renderer is locked by validator-aria-invalid)
 function displayFieldErrors($formNode, errs) {
     if (!errs) return;
@@ -131,15 +156,49 @@ describe('01 - invalid + live-check on: aria-disabled marker, native .disabled s
 });
 
 
-// 02 - operable invalid button: the click flows, the guard shows errors + focuses first invalid, no send
-describe('02 - operable invalid button runs the guard: errors shown, focus first invalid, NO send', function () {
-    it('an aria-disabled (not native-disabled) button still emits a click', function () {
+// 02 - a disabled trigger still RECEIVES the click (that is what aria-disabled buys over native
+//      disable, which emits nothing), but #B246 intercepts it: errors are revealed and focus
+//      moves, while the submit cycle is never entered. An enabled trigger is unaffected.
+describe('02 - disabled trigger: click received then intercepted — errors shown, focus first invalid, NO submit cycle', function () {
+    it('an aria-disabled (not native-disabled) button still emits a click, so the guard can answer it', function () {
         var ctx = makeForm('true', BUTTON);
         applySubmitTriggerState(ctx.form, ctx.trigger, false);
         var clicks = 0;
         ctx.trigger.addEventListener('click', function (e) { e.preventDefault(); clicks++; });
         ctx.trigger.dispatchEvent(new ctx.window.MouseEvent('click', { bubbles: true, cancelable: true }));
         assert.ok(clicks >= 1, 'an operable trigger fires the click that lets the form-level guard run');
+    });
+
+    it('#B246 - a click on a DISABLED trigger is intercepted: no submit cycle, no send', function () {
+        var ctx = makeForm('true', BUTTON);
+        applySubmitTriggerState(ctx.form, ctx.trigger, false); // invalid -> aria-disabled marker
+        var sent = [], cycles = 0;
+        var result = {
+            fields : { myField: { isRequired: 'Cannot be left empty' } },
+            data   : { myField: '' },
+            isValid: function () { return false; }
+        };
+        var outcome = runClickOnTrigger(ctx.form, ctx.trigger, result,
+            { send: function (d) { sent.push(d); }, submitCycle: function () { cycles++; } });
+
+        assert.equal(outcome, 'intercepted');
+        assert.equal(cycles, 0, 'the submit cycle is never entered from a disabled trigger');
+        assert.equal(sent.length, 0, 'nothing is sent');
+        assert.ok(ctx.field.parentNode.classList.contains('form-item-error'), 'errors are still revealed');
+        assert.equal(ctx.document.activeElement, ctx.field, 'focus still moves to the first invalid field');
+    });
+
+    it('#B246 control - an ENABLED trigger still runs the submit cycle and sends when valid', function () {
+        var ctx = makeForm('true', BUTTON);
+        applySubmitTriggerState(ctx.form, ctx.trigger, true); // valid -> marker cleared
+        var sent = [], cycles = 0;
+        var result = { fields: null, data: { myField: 'ok' }, isValid: function () { return true; } };
+        var outcome = runClickOnTrigger(ctx.form, ctx.trigger, result,
+            { send: function (d) { sent.push(d); }, submitCycle: function () { cycles++; } });
+
+        assert.equal(outcome, 'submitted');
+        assert.equal(cycles, 1, 'the submit cycle DOES run for an enabled trigger');
+        assert.equal(sent.length, 1, 'and a valid form sends (this control fails if the guard over-fires)');
     });
 
     it('the guard displays field errors, focuses the first invalid field, and does NOT send', function () {
@@ -272,8 +331,47 @@ describe('06 - source pins: updateSubmitTriggerState show/hide shape', function 
     });
 
     it('the rationale comment is pinned so the branch is not silently reverted to native disable', function () {
-        assert.match(mainSrc, /aria-disabled keeps the trigger operable/);
+        // #B246 re-pointed this pin: the comment used to read "aria-disabled keeps the
+        // trigger operable, so the click still runs validation". That is no longer true —
+        // the click is intercepted and the submit cycle is never entered.
+        assert.match(mainSrc, /trigger focusable and perceivable/);
         assert.match(mainSrc, /Tag-agnostic: setAttribute\/classList work for both/);
+    });
+
+    // --- #B246: a disabled trigger must not be able to reach the submit cycle ---
+
+    it('the disabled-trigger guard runs in clickProxyHandler BEFORE the submit dispatch', function () {
+        assert.match(mainSrc, /isTriggerDisabled\(\$el\)/, 'the click guard consults the disabled marker');
+        assert.match(mainSrc, /revealValidationState\(/, 'and routes to the display-only reveal');
+        // Scope the ordering check to clickProxyHandler's own body: `if (gina.events[_evt]) {`
+        // appears in six sibling proxy handlers ABOVE it, so a whole-file indexOf would
+        // anchor on the wrong dispatch and fail against correct code.
+        var cpStart = mainSrc.indexOf('var clickProxyHandler = function(event)');
+        assert.ok(cpStart > -1, 'clickProxyHandler exists');
+        var cpBody     = mainSrc.slice(cpStart);
+        var guardAt    = cpBody.indexOf('isTriggerDisabled($el)');
+        var dispatchAt = cpBody.indexOf('if (gina.events[_evt]) {');
+        assert.ok(guardAt > -1, 'the guard lives inside clickProxyHandler');
+        assert.ok(dispatchAt > -1, 'the submit dispatch lives inside clickProxyHandler');
+        assert.ok(guardAt < dispatchAt,
+            'the guard must precede the `submit.<id>` dispatch, or bindSubmitEl still runs');
+    });
+
+    it('isTriggerDisabled reads aria-disabled, not only the native property', function () {
+        assert.match(mainSrc, /var isTriggerDisabled = function\(\$el\)/);
+        assert.match(mainSrc, /\$el\.getAttribute\('aria-disabled'\) == 'true'/);
+    });
+
+    it('revealValidationState is display-only: it can never reach a send', function () {
+        var start = mainSrc.indexOf('var revealValidationState = function');
+        assert.ok(start > -1, 'revealValidationState exists');
+        var body = mainSrc.slice(start, mainSrc.indexOf('\n    };', start));
+        assert.ok(body.length > 0, 'body extracted');
+        assert.doesNotMatch(body, /triggerEvent/,
+            'no dispatch -> the validate.<id> guard (and its isValid() send gate) is unreachable');
+        assert.doesNotMatch(body, /\.send\(/, 'no direct send either');
+        assert.match(body, /handleErrorsDisplay\(/, 'but it DOES render the errors');
+        assert.match(body, /focusFirstInvalidField\(/, 'and focuses the first invalid field');
     });
 
     it('the real send gate stays isValid() in the validate.<id> guard', function () {

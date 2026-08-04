@@ -17544,6 +17544,29 @@ function ValidatorPlugin(rules, data, formId, culture) {
                         _evt = 'reset.'+_evt
                     }
 
+                    // #B246 — a disabled submit trigger must not run the submit cycle.
+                    // `updateSubmitTriggerState()` marks an invalid form's trigger with
+                    // `aria-disabled="true"` and never with native `disabled`, precisely so
+                    // the click still reaches us. Nothing READ that marker, so the trigger
+                    // stayed fully operable: a click ran the collect -> validate ->
+                    // `validate.<id>` chain and only the `isValid()` gate stopped the send.
+                    // The trigger was inert in appearance ONLY, and that also contradicted
+                    // the `aria-disabled` contract it advertises to assistive tech (which
+                    // requires the author to suppress the action).
+                    //
+                    // Intercept HERE — before the `submit.<id>` dispatch below — so
+                    // `bindSubmitEl`'s handler never runs, `isSubmitting` is never latched
+                    // and no send path is reachable. The click is still answered with a
+                    // display-only reveal, so the user learns WHY the trigger is disabled
+                    // (which is what the operable-trigger design was bought for).
+                    // Checked on the CLICKED element, not `$formInstance.submitTrigger`:
+                    // a form may carry several submit buttons and only one registers.
+                    if ( /^submit\./i.test(_evt) && isTriggerDisabled($el) ) {
+                        cancelEvent(event);
+                        revealValidationState( instance.$forms[$form.id] || $form );
+                        return false;
+                    }
+
                     if (gina.events[_evt]) {
                         cancelEvent(event);
 
@@ -18106,13 +18129,17 @@ function ValidatorPlugin(rules, data, formId, culture) {
         } else if ( document.getElementById($formInstance.submitTrigger) ) {
             // Represent the "invalid + live-check-on" state with aria-disabled + a class
             // INSTEAD of the native `disabled` property. A natively-disabled <button>
-            // emits no click event, so the form-level click -> validate -> show-all-errors
-            // -> focus-first guard (the `validate.<id>` listener) never fires: the button
-            // looks dead and gives zero feedback. aria-disabled keeps the trigger operable,
-            // so the click still runs validation (revealing every invalid field + focusing
-            // the first) while `isValid()` (the real gate) still blocks the send. Mirrors
-            // gina's own <a>-tag submit-trigger handling, which already uses aria-disabled
-            // in-flight. The show branch KEEPS clearing native `disabled` so a trigger
+            // emits no click event at all, so the click cannot be observed and the user
+            // gets no feedback about WHY the trigger is dead. aria-disabled keeps the
+            // trigger focusable and perceivable, and clickProxyHandler INTERCEPTS the
+            // click (#B246) to answer it with a display-only reveal: every invalid field
+            // is rendered and the first is focused, while the submit cycle is never
+            // entered. The trigger is therefore genuinely not operable — which is what
+            // the aria-disabled contract promises assistive tech, and what the earlier
+            // "keep it operable so the click can still validate" shape got wrong: it
+            // left the real submit path reachable from a control announced as disabled.
+            // Mirrors gina's own <a>-tag submit-trigger handling, which already uses
+            // aria-disabled in-flight. The show branch KEEPS clearing native `disabled` so a trigger
             // rendered `disabled` in markup still enables on valid / when live-check is off.
             // Tag-agnostic: setAttribute/classList work for both <button> and <a> submit
             // triggers. Consumers must style the [aria-disabled="true"] /
@@ -18132,6 +18159,117 @@ function ValidatorPlugin(rules, data, formId, culture) {
             }
         }
     }
+
+    /**
+     * isTriggerDisabled
+     *
+     * Tells whether a submit trigger is currently marked as disabled.
+     * `updateSubmitTriggerState()` marks an invalid form's trigger with
+     * `aria-disabled="true"` rather than the native `disabled` property, so a
+     * native-only check can never see it. The predicate shape mirrors the popin
+     * plugin's own trigger gate, so both subsystems agree on what "disabled"
+     * means for a trigger.
+     *
+     * @param {object} $el - candidate trigger (DOMObject)
+     *
+     * @returns {boolean} true when the trigger must not be operated
+     *
+     * @example
+     * isTriggerDisabled($button); // true while aria-disabled="true" is set
+     *
+     * @inner
+     */
+    var isTriggerDisabled = function($el) {
+        if ( !$el || typeof($el.getAttribute) != 'function' ) {
+            return false;
+        }
+        return (
+            $el.getAttribute('disabled') != null && $el.getAttribute('disabled') != 'false'
+            ||
+            $el.getAttribute('aria-disabled') == 'true'
+        );
+    };
+
+    /**
+     * focusFirstInvalidField
+     *
+     * Moves focus to the first field carrying an error, in DOM order, skipping
+     * hidden and unfocusable controls (#A11Y1) so assistive tech announces the
+     * accessible name + `aria-invalid` + the `aria-errormessage` text.
+     *
+     * NB. the `validate.<id>` guard keeps its own inline twin of this loop rather
+     * than calling here. That is DELIBERATE: the inline shape is locked by source
+     * pins in `test/core/validator-aria-invalid.test.js` (`_a11yErrs`, `_aField`),
+     * so collapsing the two would break pins unrelated to #B246. Keep the two in
+     * step if the focus rule ever changes.
+     *
+     * @param {object} $form - form target (DOMObject), not the instance
+     * @param {object} errors - error map keyed by field name
+     *
+     * @returns {boolean} true when a field was focused
+     *
+     * @example
+     * focusFirstInvalidField($form, result['fields'] || result['error']);
+     *
+     * @inner
+     */
+    var focusFirstInvalidField = function($form, errors) {
+        if ( !$form || !errors ) {
+            return false;
+        }
+        for (var i = 0, len = $form.length; i < len; ++i) {
+            var $field  = $form[i];
+            var name    = $field.getAttribute('name');
+            if (
+                name
+                && typeof(errors[name]) != 'undefined'
+                && ( typeof(errors[name].count) != 'function' || errors[name].count() > 0 )
+                && $field.type != 'hidden'
+                && typeof($field.focus) == 'function'
+            ) {
+                $field.focus();
+                return true;
+            }
+        }
+        return false;
+    };
+
+    /**
+     * revealValidationState
+     *
+     * Display-only validation pass, used when a DISABLED submit trigger is
+     * clicked (#B246). It runs the same collect + validate chain the submit path
+     * uses, but routes the result straight to the error renderer instead of
+     * dispatching `validate.<id>` — so `bindSubmitEl`'s handler never runs, the
+     * `isSubmitting` latch is never set and the `isValid()` send gate is never
+     * reached. No request can start from this path by construction.
+     *
+     * The trigger state is re-synced from the fresh result, which also self-heals
+     * a stale disabled marker on a form that has since become valid.
+     *
+     * @param {object} $formInstance - form instance (carries `.target` / `.rules`)
+     *
+     * @returns {void}
+     *
+     * @example
+     * revealValidationState(instance.$forms['myForm']);
+     *
+     * @inner
+     */
+    var revealValidationState = function($formInstance) {
+        if ( !$formInstance || !$formInstance.target ) {
+            return;
+        }
+        var $target         = $formInstance.target;
+        var validationInfo  = getFormValidationInfos($target, $formInstance.rules);
+
+        validate($target, validationInfo.fields, validationInfo.$fields, $formInstance.rules, function onDisabledTriggerReveal(result) {
+            var errors = result['fields'] || result['error'];
+            handleErrorsDisplay($target, errors, result['data']);
+            focusFirstInvalidField($target, errors);
+            updateSubmitTriggerState($formInstance, result.isValid());
+        });
+    };
 
     /**
      * getFormValidationInfos
