@@ -11343,9 +11343,14 @@ function ValidatorPlugin(rules, data, formId, culture) {
                 if (isErrorMessageHidden) {
                     // hide error messages
                     $children[c].className = $children[c].className +' hidden';
+                    // #A11Y5 — this hide fires when the field regains focus, and it does not
+                    // touch aria-invalid: a committed error stays asserted while its message
+                    // would otherwise leave the a11y tree. Clip it instead.
+                    clipErrorMessage($children[c]);
                 } else {
                     // display error messages
                     $children[c].className = $children[c].className.replace(/(\s+hidden|hidden)/, '');
+                    revealErrorMessage($children[c]);
                 }
                 break
             }
@@ -11444,6 +11449,7 @@ function ValidatorPlugin(rules, data, formId, culture) {
             }
             return _live;
         }
+        text = a11yDistinctText(_live, text);
         _live.textContent = text;
         return _live;
     };
@@ -11532,6 +11538,101 @@ function ValidatorPlugin(rules, data, formId, culture) {
      */
     var announceA11yStatus = function($form, text) {
         return announceA11yError($form, text);
+    };
+
+    /**
+     * a11yDistinctText — make a repeated announcement observably new.
+     *
+     * An `aria-live="polite"` region is announced when its content CHANGES, so re-writing
+     * byte-identical text is commonly not spoken at all. That is the normal case for a
+     * validation message: blurring a field that still fails the same rule produces exactly
+     * the same string, and the user heard nothing the second time. Appending a no-break
+     * space makes the node's content differ while leaving what is read out unchanged, and
+     * it self-cancels — the next identical announcement compares against the suffixed text,
+     * differs, and writes the clean string again.
+     *
+     * Lives outside `announceA11yError` deliberately: that function sits inside a fixed
+     * character window asserted by a source pin, and the rationale above does not fit in it.
+     *
+     * ⚠️ Unverified: that a screen reader actually re-announces as a result. The string
+     * demonstrably changes; no assistive-technology pass has been run to confirm the effect.
+     *
+     * @param   {object} $live - the live region node.
+     * @param   {string} text  - the announcement about to be written.
+     * @returns {string} `text`, suffixed only when it would otherwise be a no-op write.
+     *
+     * @example
+     * var next = a11yDistinctText($region, 'This field is required');
+     *
+     * @inner
+     */
+    var a11yDistinctText = function($live, text) {
+        if ( !$live || typeof(text) != 'string' ) {
+            return text;
+        }
+        return ( $live.textContent === text ) ? text + ' ' : text;
+    };
+
+    /**
+     * ERR_MSG_CLIP — inline declarations that hide an element from VIEW while leaving it
+     * in the accessibility tree.
+     *
+     * `display` carries `!important` because gina's own `.hidden` helper is
+     * `display: none !important`, and an inline `!important` is what outranks it (measured:
+     * a plain inline `display:block` loses to it). The class is deliberately left in place
+     * so consumer CSS keyed on `.hidden` keeps matching.
+     *
+     * @constant {string}
+     * @inner
+     */
+    var ERR_MSG_CLIP = 'display:block !important;position:absolute;width:1px;height:1px;'
+        + 'margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0;';
+
+    /**
+     * clipErrorMessage — hide a validation message visually, but keep it reachable.
+     *
+     * `.hidden` is `display: none !important`, which removes the node from the
+     * accessibility tree outright. That is the wrong tool wherever `aria-invalid="true"`
+     * stays asserted on the field, because the `aria-errormessage` association then points
+     * assistive tech at a target it cannot resolve — the field is announced invalid with no
+     * retrievable reason. Both hide paths that can coexist with an asserted `aria-invalid`
+     * (the focus-driven hide in `refreshWarning`, and the refresh re-create) clip instead.
+     *
+     * gina creates and owns this element, so replacing `style.cssText` wholesale is safe.
+     *
+     * @param   {object} $err - the `form-item-error-message` element.
+     * @returns {boolean} true when the clip was applied.
+     *
+     * @example
+     * clipErrorMessage($someMessageDiv);
+     *
+     * @inner
+     */
+    var clipErrorMessage = function($err) {
+        if ( !$err || typeof($err.style) == 'undefined' || !$err.style ) {
+            return false;
+        }
+        $err.style.cssText = ERR_MSG_CLIP;
+        return true;
+    };
+
+    /**
+     * revealErrorMessage — undo `clipErrorMessage`, restoring normal visual flow.
+     *
+     * @param   {object} $err - the `form-item-error-message` element.
+     * @returns {boolean} true when the clip was cleared.
+     *
+     * @example
+     * revealErrorMessage($someMessageDiv);
+     *
+     * @inner
+     */
+    var revealErrorMessage = function($err) {
+        if ( !$err || typeof($err.style) == 'undefined' || !$err.style ) {
+            return false;
+        }
+        $err.style.cssText = '';
+        return true;
     };
 
     /**
@@ -11829,6 +11930,14 @@ function ValidatorPlugin(rules, data, formId, culture) {
                         // global pass, so without this focus guard it re-shows the message mid-typing.
                         // On blur (field no longer active) the message is created shown (focusout commits).
                         $err.setAttribute('class', ( document.activeElement && document.activeElement.name == name ) ? 'form-item-error-message hidden' : 'form-item-error-message');
+                        // #A11Y5 — the branch below re-asserts aria-invalid="true" on this same
+                        // field, so when the message is hidden it must stay resolvable: clip it
+                        // out of view rather than out of the accessibility tree. Reads the class
+                        // just written instead of re-deriving the condition, so the ternary above
+                        // stays exactly as pinned.
+                        if ( /hidden/.test($err.className) ) {
+                            clipErrorMessage($err);
+                        }
 
                         // #A11Y1 (slice 2) — preserve the aria-errormessage wire we own across refresh.
                         if ( _ginaOwnsErrMsg && _ariaErrId ) {
@@ -18466,7 +18575,13 @@ function ValidatorPlugin(rules, data, formId, culture) {
                                 && typeof(_aField.focus) == 'function'
                             ) {
                                 _aField.focus();
-                                break;
+                                // #A11Y5 (V8) — kept in step with focusFirstInvalidField:
+                                // only stop once focus actually moved, since focus() is a
+                                // no-op on an unfocusable host that still passes the
+                                // typeof-function gate above.
+                                if ( typeof(document) === 'undefined' || !document || document.activeElement === _aField ) {
+                                    break;
+                                }
                             }
                         }
                     }
@@ -18996,7 +19111,15 @@ function ValidatorPlugin(rules, data, formId, culture) {
                 && typeof($field.focus) == 'function'
             ) {
                 $field.focus();
-                return true;
+                // #A11Y5 (V8) — `typeof focus == 'function'` is true for EVERY HTMLElement,
+                // a custom element with neither `tabindex` nor `delegatesFocus` included,
+                // whose focus() is a silent no-op (measured). Without confirming the move,
+                // the loop reported success and stopped on a control that never took focus,
+                // so a failed submit announced nothing. Confirming it is also what makes the
+                // "skips unfocusable controls" contract above true rather than aspirational.
+                if ( typeof(document) === 'undefined' || !document || document.activeElement === $field ) {
+                    return true;
+                }
             }
         }
         return false;
