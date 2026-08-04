@@ -53,6 +53,7 @@
  */
 
 var defaultBackend = require('./backends/env');
+var fileBackend    = require('./backends/file');
 var envFile        = require('./env-file');
 
 /**
@@ -278,10 +279,81 @@ function getRequiredKeys(config) {
     return Object.keys(keys).sort();
 }
 
+/**
+ * Select the backend a given bundle config should resolve through.
+ *
+ * Reads `content.settings.secrets.file` — one path or an array of paths,
+ * lowest precedence first. When the key is absent the default `process.env`
+ * backend is returned **unchanged**, so a config that does not opt in behaves
+ * exactly as it did before this seam existed.
+ *
+ * Reads `content.settings` and not `settings`: `core/config.js` binds
+ * `conf[bundle][env].settings` *before* the `${…}` substitution pass and
+ * `conf[bundle][env].content` *after* it, and the substitution returns a new
+ * object rather than mutating in place — so only the `content` copy has its
+ * `${homedir}` / `${scope}` tokens resolved. Reading the other one would hand
+ * the backend a literal `'${homedir}/secrets.env'` to open.
+ *
+ * @memberof module:lib/secrets
+ * @function selectBackend
+ * @param {object} config - The merged per-bundle config (`envConf[bundle][env]`)
+ * @returns {{resolve: function(string): string}} The env backend, or an env-over-file backend
+ * @throws {Error} If a declared path is not a non-empty string, still carries an
+ *   unsubstituted `${…}` token, or contains a `${secret:…}` placeholder.
+ *
+ * @example
+ * // settings.json:
+ * //   "secrets": { "file": ["${homedir}/secrets.env",
+ * //                         "${homedir}/${scope}/secrets.env"] }
+ * var backend = secrets.selectBackend(conf);
+ * secrets.resolve(conf, backend);
+ */
+function selectBackend(config) {
+    if (config === null || typeof config !== 'object') {
+        return defaultBackend;
+    }
+    var content  = config.content;
+    var settings = (content && typeof content === 'object') ? content.settings : null;
+    var declared = (settings && typeof settings === 'object' && settings.secrets)
+        ? settings.secrets.file
+        : undefined;
+
+    if (typeof declared === 'undefined' || declared === null) {
+        return defaultBackend;
+    }
+
+    var paths = Array.isArray(declared) ? declared : [declared];
+    if (!paths.length) {
+        return defaultBackend;
+    }
+
+    for (var i = 0; i < paths.length; i++) {
+        var p = paths[i];
+        if (typeof p !== 'string' || p === '') {
+            throw new Error('`settings.secrets.file` must be a non-empty string or an array of them');
+        }
+        // A secrets file cannot itself be named by a secret — the backend that
+        // would resolve the placeholder is the one being built.
+        if (p.indexOf('${secret:') > -1) {
+            throw new Error('`settings.secrets.file` cannot contain a `${secret:…}` placeholder');
+        }
+        // Fail loudly on a token the substitution pass did not know: unknown
+        // tokens are preserved verbatim by design, so a typo would otherwise
+        // become a silent lookup for a literally-named file that never exists,
+        // and every secret would fall through to a confusing fail-closed error.
+        if (/\$\{[^}]*\}/.test(p)) {
+            throw new Error('`settings.secrets.file` contains an unresolved `${…}` token: ' + p);
+        }
+    }
+
+    return fileBackend.build(paths);
+}
+
 module.exports = {
     resolve: resolve,
     getResolvedPaths: getResolvedPaths,
     getRequiredKeys: getRequiredKeys,
+    selectBackend: selectBackend,
     SECRET_RE: SECRET_RE,
     // `.env`-style parsing, re-exported from ./env-file so that every reader
     // of a given file agrees on what it means. See that module's header for

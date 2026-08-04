@@ -2953,12 +2953,28 @@ function Config(opt, contextResetNeeded) {
 
         // ${secret:KEY} placeholder substitution. Walks the merged config
         // for this bundle in place, replacing every string value that
-        // matches `^\${secret:KEY\}$` with the value resolved by the env
-        // backend. Runs once per bundle inside the config-load cycle;
-        // downstream reads (getConfig, getInstance) see the resolved
+        // matches `^\${secret:KEY\}$` with the value resolved by the
+        // selected backend. Runs once per bundle inside the config-load
+        // cycle; downstream reads (getConfig, getInstance) see the resolved
         // values. Fail-closed: backend throws on unset/empty values.
+        //
+        // The backend is the env-only default unless the bundle declares
+        // `settings.secrets.file`, in which case files are layered UNDER the
+        // environment (see lib/secrets/backends/file.js for why that way
+        // round). Selection is its own step so that an invalid `secrets`
+        // block reports as a config error rather than as a missing secret.
+        var secretsBackend;
         try {
-            secrets.resolve(self.envConf[bundle][env]);
+            secretsBackend = secrets.selectBackend(self.envConf[bundle][env]);
+        } catch (backendErr) {
+            console.debug(
+                '[CONFIG][loadBundleConfig] Invalid `settings.secrets` in `'
+                + bundle +'/'+ env +':'+ scope +'`: '+ backendErr.message
+            );
+            return callback(backendErr);
+        }
+        try {
+            secrets.resolve(self.envConf[bundle][env], secretsBackend);
         } catch (secretErr) {
             // #B42 — name the failing secret + config path at debug level so
             // operators can locate it. The user-facing message intentionally

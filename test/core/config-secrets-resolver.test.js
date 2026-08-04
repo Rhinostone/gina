@@ -473,8 +473,13 @@ describe('11 - source-inspection: lib/secrets wired into framework', function ()
     });
 
     it('core/config.js calls secrets.resolve(self.envConf[bundle][env]) post-merge', function () {
+        // Loosened from a literal indexOf: the call may now pass a backend as a
+        // second argument (`secrets.resolve(conf, secretsBackend)`) when the
+        // bundle declares `settings.secrets.file`. The pinned invariant is
+        // unchanged — config.js resolves the merged per-bundle config — and
+        // this pattern still matches the original single-argument form.
         assert.ok(
-            CONFIG_SRC.indexOf('secrets.resolve(self.envConf[bundle][env])') > -1,
+            /secrets\.resolve\(\s*self\.envConf\[bundle\]\[env\]\s*(?:,[^)]*)?\)/.test(CONFIG_SRC),
             'core/config.js must call secrets.resolve(self.envConf[bundle][env]) after the merge'
         );
     });
