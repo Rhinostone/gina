@@ -105,6 +105,11 @@ interface GinaExports {
      */
     filterArgs: typeof globalThis.filterArgs;
     /**
+     * Import `GINA_*` / `VENDOR_*` / `USER_*` keys from `process.env` into the framework
+     * environment (`process.gina`).
+     */
+    importEnvVars: typeof globalThis.importEnvVars;
+    /**
      * Resolve the log directory — `GINA_LOGDIR` / `LOGDIR` / prefix `var/log` with fallback to
      * `~/.gina/log`.
      */

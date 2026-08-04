@@ -126,9 +126,20 @@ describe('01 - core/server.js — read-path source pins (#RC4)', function() {
 
     it('F8/#RC5: ONE header string — built once into _cs (ttl + detail), set AND logged from it', function() {
         // The single-var build kills the prior setHeader-vs-console.info dual construction.
-        assert.match(serveBlock, /var\s+_cs\s*=\s*'gina-cache; hit'[\s\S]{0,160}?';\s*ttl='\s*\+\s*_remaining[\s\S]{0,160}?';\s*detail='\s*\+\s*source/);
+        // #B238 — the identifier comes from the boot-resolved stamp, not a literal.
+        assert.match(serveBlock, /var\s+_cs\s*=\s*self\.instance\._cacheName\s*\+\s*'; hit'[\s\S]{0,160}?';\s*ttl='\s*\+\s*_remaining[\s\S]{0,160}?';\s*detail='\s*\+\s*source/);
         assert.match(serveBlock, /res\.setHeader\('Cache-Status',\s*_cs\)/);
         assert.match(serveBlock, /\[200\]\['\s*\+\s*_cs\s*\+\s*'\]/);
+    });
+
+    it('#B238: the identifier is stamped ONCE at boot and the literals are globally gone', function() {
+        // Stamp site: resolveCacheName over the post-fold server.cache, onto the
+        // engine instance both engines read.
+        assert.match(SERVER_SRC, /instance\._cacheName\s*=\s*lib\.RenderCache\.resolveCacheName\(\s*self\.conf\[self\.appName\]\[self\.env\]\.server\.cache\s*\)/);
+        // Window-independent negatives (globally-zero code shapes — comments reference
+        // the old value without the quoted-prefix form, per the jsdoc-mention rule):
+        assert.ok(SERVER_SRC.indexOf("'gina-cache; hit'") < 0, 'the hit literal must not return');
+        assert.ok(SERVER_SRC.indexOf("'gina-cache; fwd=uri-miss'") < 0, 'the miss literal must not return');
     });
 
     it('#RC5: threads the hit tier — memory from the L1 loop, redis from the warm loop', function() {
@@ -139,11 +150,13 @@ describe('01 - core/server.js — read-path source pins (#RC4)', function() {
     });
 
     it('#RC5: a genuine both-tier miss emits the RFC 9211 form behind a headersSent guard', function() {
-        var missAt = tryBlock.indexOf("'gina-cache; fwd=uri-miss'");
+        // #B238 — the identifier is the boot-resolved stamp; the RFC form suffix is
+        // unchanged. The ordering anchor moves to the suffix literal accordingly.
+        var missAt = tryBlock.indexOf("'; fwd=uri-miss'");
         var warmAt = tryBlock.indexOf('await renderCache.warm');
         assert.ok(missAt > -1 && warmAt > -1 && missAt > warmAt,
             'the miss emission sits AFTER the L2 warm attempt — never on a gate return');
-        assert.match(tryBlock, /if\s*\(\s*!res\.headersSent\s*\)\s*\{\s*\n?\s*res\.setHeader\('Cache-Status',\s*'gina-cache; fwd=uri-miss'\)/);
+        assert.match(tryBlock, /if\s*\(\s*!res\.headersSent\s*\)\s*\{[\s\S]{0,220}?res\.setHeader\('Cache-Status',\s*self\.instance\._cacheName\s*\+\s*'; fwd=uri-miss'\)/);
     });
 
     it('#RC5: tryServe carries exactly ONE setHeader — the miss stamp (gate returns emit nothing)', function() {
@@ -199,6 +212,11 @@ describe('02 - read-path control flow — behavioural replica + subtract (#RC4)'
         var store        = ('store' in opts) ? opts.store : {};   // truthy = wired
         var serverCache  = opts.serverCache || {};
         var rc           = opts.rc;
+        // #B238 — models the boot-resolved `instance._cacheName` stamp (resolveCacheName
+        // over server.cache: configured name when valid, else the default). The real
+        // read sites consume the stamp unguarded; the `|| 'gina-cache'` here compresses
+        // resolve→stamp→read into the replica's one seam.
+        var cacheName    = opts.cacheName || 'gina-cache';
 
         function serve(req, res, hit, source) {
             var _isH2 = /http\/2/.test(protocol) && res.stream;
@@ -215,7 +233,7 @@ describe('02 - read-path control flow — behavioural replica + subtract (#RC4)'
             if ( hit.responseHeaders ) {
                 for (var h in hit.responseHeaders) { res.setHeader(h, hit.responseHeaders[h]); }
             }
-            var _cs = 'gina-cache; hit'
+            var _cs = cacheName + '; hit'
                 + (_remaining !== null ? '; ttl=' + _remaining : '')
                 + (source ? '; detail=' + source : '');
             res.setHeader('Cache-Status', _cs);
@@ -266,7 +284,7 @@ describe('02 - read-path control flow — behavioural replica + subtract (#RC4)'
             }
             if ( !_hit ) {
                 if ( !res.headersSent ) {
-                    res.setHeader('Cache-Status', 'gina-cache; fwd=uri-miss');
+                    res.setHeader('Cache-Status', cacheName + '; fwd=uri-miss');
                 }
                 return false;
             }
@@ -323,6 +341,25 @@ describe('02 - read-path control flow — behavioural replica + subtract (#RC4)'
         var served = await tryServe(redisReq(), res, 'demo');
         assert.equal(served, false);
         assert.equal(res.headers['Cache-Status'], undefined, 'no setHeader after headersSent');
+    });
+
+    it('#B238: a configured cache.name is the ONLY byte that moves — hit and miss, params identical', async function() {
+        // Hit arm
+        var rc = fakeRC({ 'static:demo:/p': { fromMemory: true, content: 'L1', visibility: 'public' } }, {});
+        var tryServe = makeReader({ rc: rc, cacheName: 'cache' });
+        var res = fakeRes(false);
+        var served = await tryServe(redisReq(), res, 'demo');
+        assert.equal(served, true);
+        assert.equal(res.headers['Cache-Status'], 'cache; hit; detail=memory',
+            'identifier swapped, params byte-identical to the default wire');
+        // Miss arm
+        var rc2 = fakeRC({}, {});
+        var tryServe2 = makeReader({ rc: rc2, cacheName: 'cache' });
+        var res2 = fakeRes(false);
+        var served2 = await tryServe2(redisReq(), res2, 'demo');
+        assert.equal(served2, false);
+        assert.equal(res2.headers['Cache-Status'], 'cache; fwd=uri-miss',
+            'the miss form carries the same configured identifier');
     });
 
     it('probes BOTH kinds on a data-miss/static-hit', async function() {

@@ -177,7 +177,7 @@
             "secret": {
               "type": "string",
               "minLength": 1,
-              "description": "The HMAC signing key. A literal, or a `${secret:VAR}` placeholder resolved at config load (VAR must NOT be GINA_-prefixed — the CLI sweeps GINA_* out of process.env before config load; use GINA_AUDIT_SECRET for the environment path instead). Optional here: when omitted the key is read from the GINA_AUDIT_SECRET environment variable. A key shorter than 32 characters boots with a warning. Enabling the chain with no key from either source refuses the boot."
+              "description": "The HMAC signing key. A literal, or a `${secret:VAR}` placeholder resolved at config load — the variable is read from the framework environment first, then `process.env`, so GINA_-prefixed names resolve too (before 0.6.3 the CLI sweep made them unresolvable). Optional here: when omitted the key is read from the GINA_AUDIT_SECRET environment variable. A key shorter than 32 characters boots with a warning. Enabling the chain with no key from either source refuses the boot."
             }
           }
         }
@@ -300,6 +300,11 @@
         "store": {
           "type": "string",
           "description": "Required for `redis`: the name of a `connectors.json` entry ({ \"<name>\": { \"connector\": \"redis\", \"host\": …, \"port\": … } }) providing the L2 connection. Ignored for memory / fs."
+        },
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,63}$",
+          "description": "Optional RFC 9211 Cache-Status identifier for this bundle's render/output cache (default `gina-cache`). Grammar is a conservative RFC 8941 token subset: a letter, then up to 63 of [A-Za-z0-9._-]. An invalid value is ignored with a boot warn. When `server.hidePoweredBy` is true and the cache is enabled, leaving it unset logs a boot warn naming the disclosure — set any token (e.g. `cache`) to close it, or explicitly `gina-cache` to keep the default wire and silence the warn."
         }
       }
     },

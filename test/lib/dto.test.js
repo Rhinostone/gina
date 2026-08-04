@@ -388,13 +388,15 @@ describe('lib/dto §08 — dto.load resolution (the offline-CLI + pipe resolver,
 });
 
 
-describe('lib/dto §09 — the `$` guard on toRules (#DTO2, measured server-fatal)', function () {
+describe('lib/dto §09 — the `$` guard on toRules (#DTO2, reserved-sigil model)', function () {
 
-    // MEASURED: the engine stringifies the whole rules object and, on ANY `$` in it,
-    // takes a client-only dynamic-rules branch that derefs the null server-side
-    // `$fields` (validate() -> `$fields.count()`) and throws a raw TypeError from ABOVE
-    // its own try/catch. toRules() compiles no `$` of its own, but an AUTHORED `$` can
-    // still reach it via an enum value, a field name or a date mask.
+    // MEASURED: `$` is the engine's reserved cross-field reference sigil. Whether an
+    // AUTHORED `$` (an enum value, a field name, a date mask — toRules() compiles no
+    // `$` of its own) survives as a literal depends on a runtime field-name COLLISION:
+    // a token naming a sibling field is consumed upstream as a reference (substituted
+    // + quoted, #B240) so the literal can never match, while a token naming no field
+    // stays literal only since #B239 (it crashed the pass before that). Deterministic
+    // literal semantics being impossible for ANY `$`, toRules() refuses at build/boot.
 
     it('09.1 - toRules() THROWS when an enum VALUE carries a `$`', function () {
         var D = dto.object({ amount: dto.enum(['$100', '$200']).required() }, 'GuardEnum');
@@ -424,23 +426,30 @@ describe('lib/dto §09 — the `$` guard on toRules (#DTO2, measured server-fata
         assert.deepEqual(D.toRules(), { amount: { isRequired: true, isInList: ['100', '200'] } });
     });
 
-    it('09.6 - SUBTRACT: the pre-guard rules object really does kill the engine', function () {
-        // Hand the engine the exact rules the guard now refuses. If this ever stops
-        // throwing, the engine was fixed and the guard can be revisited.
-        // (Half-fired at #B127: the validate() single-element `$fields.count()` crash
-        // was fixed, so `$` tokens that NAME FIELDS now validate server-side. A `$`
-        // token that is NOT a field reference — an enum value like `$100` — still
-        // crashes from getDynamisedRules' leftovers loop (`$fields[field].value`,
-        // null server-side), so the guard's justification stands.)
-        var poisoned = { amount: { isRequired: true, isInList: ['$100', '$200'] } };
-        assert.throws(
-            function () { Validator(poisoned, { amount: '$100' }, 'dto-test'); },
-            /Cannot read properties of null/,
-            'the guard exists because THIS throws — a null `$fields` deref inside the engine'
-        );
-        // control: the same shape without `$` validates cleanly, so the subtract can fail
-        var clean = { amount: { isRequired: true, isInList: ['100', '200'] } };
-        assert.equal(isValid(Validator(clean, { amount: '100' }, 'dto-test')), true);
+    it('09.6 - SUBTRACT: the engine reinterprets a literal `$` the guard would have refused', function () {
+        // Hand the engine rules the guard now refuses. The original justification was
+        // a CRASH, and it moved twice before retiring: #B127 fixed the single-element
+        // `$fields.count()` deref, #B234 gated getDynamisedRules' DOM-fallback loop,
+        // and #B239 guarded checkFieldAgainstRules' `d[<token>].value` — so a `$`
+        // naming NO field now validates as a LITERAL. What remains, and what keeps
+        // this guard load-bearing, is the RESERVED-SIGIL hazard: an enum element
+        // naming a SIBLING FIELD is consumed upstream as a cross-field reference
+        // (substituted + quoted, #B240), so the author's literal silently can never
+        // match — a WRONG verdict, worse than the crash it replaced, and it appears
+        // or disappears with the field names beside it. DTO authoring targets
+        // literal semantics, so toRules() refuses any `$` deterministically at
+        // build/boot. If THIS arm ever validates, the engine has become
+        // collision-safe and the guard can be revisited (a #DTO2-owned decision).
+        var poisoned = { status: { isRequired: true }, amount: { isRequired: true, isInList: ['$status', 'x'] } };
+        var res = Validator(poisoned, { status: 'approved', amount: '$status' }, 'dto-test');
+        assert.equal(isValid(res), false,
+            "the authored list contains the literal '$status', yet the engine rejects that exact value — " +
+            'the sigil was consumed as a reference');
+        // control: the same rules still accept a plain literal member, so the subtract can fail
+        var res2 = Validator(
+            { status: { isRequired: true }, amount: { isRequired: true, isInList: ['$status', 'x'] } },
+            { status: 'approved', amount: 'x' }, 'dto-test');
+        assert.equal(isValid(res2), true);
     });
 });
 

@@ -757,3 +757,158 @@ describe('09 - @options: parse + consistency gate (shipped bytes)', function() {
         assert.match(r.warnings[0], /@options parse error/);
     });
 });
+
+
+// ─── 10 — #B243: unserializable query parameters are refused, never dispatched ─
+//
+// The defect this locks is a PROCESS ABORT, not a throwable error. The SDK maps
+// `JSON.stringify` over the parameter list; for a function, a symbol or an
+// `undefined` that returns the VALUE `undefined` rather than a string, the
+// native binding coerces it to `""`, and the C++ core's JSON parse of `""`
+// throws `tao::pegtl::parse_error` on an internal thread -> `std::terminate()`
+// -> `abort()` (measured against a live cluster on SDK 4.1.3 AND 4.7.1: exit
+// 134, with no `uncaughtException` / `unhandledRejection` / `exit` hook firing).
+// So the bundle dies instead of the request 500-ing, and nothing in JS can
+// intercept it — which is exactly why the guard has to run BEFORE dispatch.
+//
+// Drives the SHIPPED bytes of `getUnserializableParamError`, not a replica.
+// Text-anchored (not brace-matched): jsdoc.md's brace-walk caveat — a `{` inside
+// a string literal or a commented-out region derails the walk — and both anchors
+// are asserted unique so a slice that stopped being the function fails loudly.
+
+describe('10 - #B243: unserializable query parameters (shipped bytes)', function() {
+
+    var GUARD, src;
+
+    /**
+     * Slices an inclusive source region between two unique text anchors.
+     *
+     * @param {string} s - source
+     * @param {string} startNeedle - must occur exactly once
+     * @param {string} endNeedle - must occur exactly once, after startNeedle
+     * @returns {string}
+     */
+    function region(s, startNeedle, endNeedle) {
+        var a = s.indexOf(startNeedle);
+        assert.notEqual(a, -1, 'start anchor not found: ' + startNeedle);
+        assert.equal(s.indexOf(startNeedle, a + 1), -1, 'start anchor not unique: ' + startNeedle);
+        var b = s.indexOf(endNeedle, a);
+        assert.notEqual(b, -1, 'end anchor not found: ' + endNeedle);
+        assert.equal(s.indexOf(endNeedle, b + 1), -1, 'end anchor not unique: ' + endNeedle);
+        return s.slice(a, b);
+    }
+
+    before(function() {
+        src   = fs.readFileSync(CONNECTOR, 'utf8');
+        GUARD = region(src, 'var getUnserializableParamError = function(',
+                            '* Runs EXPLAIN on a N1QL statement');
+        // The end anchor sits inside the NEXT JSDoc block, so the raw slice trails an
+        // unterminated `/**`. Cut back to the function's own terminator.
+        GUARD = GUARD.slice(0, GUARD.lastIndexOf('};') + 2);
+    });
+
+    /**
+     * Executes the extracted guard against one assembled parameter list.
+     *
+     * @param {Array|object} queryParams
+     * @param {Array} [params] - declared placeholders
+     * @returns {TypeError|null}
+     */
+    function run(queryParams, params) {
+        var fn = new Function('queryParams', 'params',
+            GUARD.replace(/^var getUnserializableParamError = /, 'var _guard = ') + '\n' +
+            'return _guard(queryParams, "invoice", "getByRef", "/models/n1ql/invoice/getByRef.sql", params);');
+        return fn(queryParams, params || ['$1', '$2']);
+    }
+
+    // ── 10.a — extraction control: a slice that grabbed the wrong region is not an instrument
+    it('the extracted slice really is the guard function', function() {
+        assert.match(GUARD, /typeof/, 'carries a typeof test');
+        assert.match(GUARD, /symbol/, 'carries the symbol arm');
+        assert.ok(GUARD.split('{').length === GUARD.split('}').length,
+            'braces balance — the slice is a complete function, not a truncated one');
+    });
+
+    // ── 10.b — the hazard premise: exactly which values JSON.stringify renders as `undefined`
+    it('PREMISE: JSON.stringify returns undefined for undefined, functions and symbols only', function() {
+        assert.equal(JSON.stringify(undefined), undefined);
+        assert.equal(JSON.stringify(function () {}), undefined);
+        assert.equal(JSON.stringify(Symbol('s')), undefined);
+        // the near neighbours that must stay ALLOWED
+        assert.equal(JSON.stringify(null), 'null');
+        assert.equal(JSON.stringify({ a: undefined, b: 1 }), '{"b":1}');
+        assert.equal(JSON.stringify(0), '0');
+        assert.equal(JSON.stringify(''), '""');
+    });
+
+    // ── 10.c — the guard REFUSES every fatal shape
+    it('refuses a bare undefined parameter', function() {
+        var err = run(['a', undefined]);
+        assert.ok(err instanceof TypeError, 'returns a TypeError');
+        assert.equal(err.code, 'GINA_COUCHBASE_UNSERIALIZABLE_PARAM');
+        assert.match(err.message, /\$2/, 'names the offending 1-based position');
+        assert.match(err.message, /undefined/);
+    });
+
+    it('refuses a function parameter and explains the callback-arity cause', function() {
+        var err = run(['a', function cb() {}]);
+        assert.ok(err instanceof TypeError);
+        assert.equal(err.code, 'GINA_COUCHBASE_UNSERIALIZABLE_PARAM');
+        assert.match(err.message, /function/);
+        assert.match(err.message, /callback/i, 'points at the real cause: a callback in a parameter slot');
+    });
+
+    it('refuses a symbol parameter', function() {
+        var err = run(['a', Symbol('s')]);
+        assert.ok(err instanceof TypeError);
+        assert.equal(err.code, 'GINA_COUCHBASE_UNSERIALIZABLE_PARAM');
+    });
+
+    it('refuses an unserializable value in the NAMED-parameter map form', function() {
+        var err = run({ ref: 'a', since: undefined });
+        assert.ok(err instanceof TypeError);
+        assert.match(err.message, /since/, 'names the offending key');
+    });
+
+    // ── 10.d — and does NOT over-reject: these must still reach the SDK
+    it('allows a fully serializable positional list', function() {
+        assert.equal(run(['a', 'b']), null);
+    });
+
+    it('allows null — the SDK serializes it fine and it is the documented empty value', function() {
+        assert.equal(run([null, null]), null);
+    });
+
+    it('allows falsy-but-serializable values (0, empty string, false)', function() {
+        assert.equal(run([0, '']), null);
+        assert.equal(run([false, 'x']), null);
+    });
+
+    it('allows an object carrying an undefined PROPERTY (it stringifies away)', function() {
+        assert.equal(run([{ a: undefined, b: 1 }, 'x']), null);
+    });
+
+    it('allows an empty parameter list', function() {
+        assert.equal(run([]), null);
+    });
+
+    // ── 10.e — the guard is actually WIRED before dispatch, and routes to the callback
+    it('is called at the parameters assignment site, before the query is dispatched', function() {
+        var callIdx   = src.indexOf('getUnserializableParamError(queryParams');
+        var assignIdx = src.indexOf('queryOptions.parameters = queryParams;');
+        var execIdx   = src.indexOf('execQuery = inherits(conn, conn._cluster.query)');
+        assert.notEqual(callIdx, -1, 'the guard is invoked on the query path');
+        assert.notEqual(assignIdx, -1);
+        assert.ok(callIdx > execIdx, 'guard runs on the assembled list');
+        assert.ok(callIdx < src.indexOf('conn._cluster.query(query, queryOptions)'),
+            'guard runs BEFORE the SDK dispatch — after it would be too late, the abort is uncatchable');
+    });
+
+    it('surfaces through the callback when there is one, else throws', function() {
+        var blk = region(src, 'var _unserializableErr = getUnserializableParamError(queryParams',
+                              'queryOptions.parameters = queryParams;');
+        assert.match(blk, /_mainCallback\s*\)\s*\{[\s\S]{0,120}?return _mainCallback\(_unserializableErr\)/,
+            'callback form — matches the missing-context precedent at the top of the method');
+        assert.match(blk, /throw _unserializableErr/, 'throw form when the caller passed no callback');
+    });
+});

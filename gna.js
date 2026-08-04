@@ -15,14 +15,14 @@
 'use strict';
 
 // Framework core — the main gna module (lifecycle hooks, lib, etc.)
-var _gna = require('./framework/v0.6.2/core/gna');
+var _gna = require('./framework/v0.6.3/core/gna');
 
 // SuperController and EntitySuper — loaded from their source modules
-var SuperController = require('./framework/v0.6.2/core/controller');
-var EntitySuper     = require('./framework/v0.6.2/core/model/entity');
+var SuperController = require('./framework/v0.6.3/core/controller');
+var EntitySuper     = require('./framework/v0.6.3/core/model/entity');
 
 // uuid — from the lib registry
-var uuid = require('./framework/v0.6.2/lib/uuid');
+var uuid = require('./framework/v0.6.3/lib/uuid');
 
 module.exports = {
 
@@ -82,6 +82,7 @@ module.exports = {
     get setEnvVar()             { return global.setEnvVar; },
     get getProtected()          { return global.getProtected; },
     get filterArgs()            { return global.filterArgs; },
+    get importEnvVars()         { return global.importEnvVars; },
     get getLogDir()             { return global.getLogDir; },
     get getRunDir()             { return global.getRunDir; },
     get getTmpDir()             { return global.getTmpDir; },

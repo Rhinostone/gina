@@ -133,3 +133,194 @@ describe('04 - math.operate — source-inspection guards', function () {
         assert.ok(/#SCS1/.test(mathSource), 'expected `#SCS1` tag in source');
     });
 });
+
+describe('05 - math.checkSumSync — file/data dispatch on extension-shaped tails', function () {
+    // #B207 — an extension-shaped tail (`.com`, `.pdf`, ...) is only a HINT that the
+    // input names a file: serialized data can end the same way. The file branch must
+    // only be taken when the path actually resolves to a file; everything else is data.
+    var { before, after } = require('node:test');
+    var fs     = require('fs');
+    var os     = require('os');
+    var crypto = require('crypto');
+
+    var sha1 = function (data) {
+        return crypto.createHash('sha1').update(data, 'utf8').digest('hex');
+    };
+
+    var tmpDir = null, tmpFile = null, tmpSubDir = null;
+    before(function () {
+        tmpDir    = fs.mkdtempSync(path.join(os.tmpdir(), 'gina-math-'));
+        tmpFile   = path.join(tmpDir, 'fixture.txt');
+        fs.writeFileSync(tmpFile, 'file body bytes\n');
+        tmpSubDir = path.join(tmpDir, 'sub.com'); // an existing DIRECTORY with a dot+3 tail
+        fs.mkdirSync(tmpSubDir);
+    });
+    after(function () {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+    });
+
+    it('hashes an object whose serialization ends in an extension-shaped tail as data', function () {
+        assert.equal(
+            math.checkSumSync({ contact: 'user@example.com' }, 'sha1'),
+            sha1('contact:user@example.com')
+        );
+    });
+
+    it('hashes string data ending in `.com` as data', function () {
+        var data = 'any text mentioning example.com';
+        assert.equal(math.checkSumSync(data, 'sha1'), sha1(data));
+    });
+
+    it('hashes data longer than the OS filename limit ending in `.com` as data', function () {
+        var data = 'x'.repeat(1000) + '.com';
+        assert.equal(math.checkSumSync(data, 'sha1'), sha1(data));
+    });
+
+    it('hashes data containing a NUL byte ending in `.com` as data', function () {
+        var data = 'data\u0000ending.com';
+        assert.equal(math.checkSumSync(data, 'sha1'), sha1(data));
+    });
+
+    it('hashes a path naming an existing directory with a dot+3 tail as data', function () {
+        assert.equal(math.checkSumSync(tmpSubDir, 'sha1'), sha1(tmpSubDir));
+    });
+
+    it('still hashes an existing file with a dot+3 tail by its bytes (control)', function () {
+        assert.equal(
+            math.checkSumSync(tmpFile, 'sha1'),
+            crypto.createHash('sha1').update(fs.readFileSync(tmpFile)).digest('hex')
+        );
+    });
+
+    it('still hashes plain string data with no extension tail (control)', function () {
+        assert.equal(math.checkSumSync('hello world', 'sha1'), sha1('hello world'));
+    });
+
+    it('still hashes an object with a non-extension tail (control)', function () {
+        assert.equal(math.checkSumSync({ count: 42 }, 'sha1'), sha1('count:42'));
+    });
+
+    it('defaults to md5/hex when algorithm and encoding are omitted (control)', function () {
+        assert.equal(
+            math.checkSumSync('hello world'),
+            crypto.createHash('md5').update('hello world', 'utf8').digest('hex')
+        );
+    });
+});
+
+describe('06 - math.checkSumSync — array and object serialization', function () {
+    // #B208 — the array branch of the serializer assigned its JSON to the wrong
+    // variable and returned the empty string, so EVERY array input collapsed to
+    // the checksum of '' (all arrays collided), and it sorted the caller's array
+    // in place. Arrays must produce a real, order-insensitive content sum.
+    var crypto = require('crypto');
+
+    var sha1 = function (data) {
+        return crypto.createHash('sha1').update(data, 'utf8').digest('hex');
+    };
+
+    it('different arrays produce different checksums', function () {
+        assert.notEqual(
+            math.checkSumSync(['user@example.com'], 'sha1'),
+            math.checkSumSync(['completely', 'different', 'values'], 'sha1')
+        );
+    });
+
+    it('an array checksum is not the empty-string hash', function () {
+        assert.notEqual(math.checkSumSync(['user@example.com'], 'sha1'), sha1(''));
+    });
+
+    it('an array checksum is the hash of the JSON of a sorted copy', function () {
+        assert.equal(
+            math.checkSumSync(['b', 'a'], 'sha1'),
+            sha1(JSON.stringify(['a', 'b']))
+        );
+    });
+
+    it('an array checksum is order-insensitive', function () {
+        assert.equal(
+            math.checkSumSync(['b', 'a'], 'sha1'),
+            math.checkSumSync(['a', 'b'], 'sha1')
+        );
+    });
+
+    it('does not mutate the input array', function () {
+        var input = ['b', 'a'];
+        math.checkSumSync(input, 'sha1');
+        assert.deepEqual(input, ['b', 'a']);
+    });
+
+    it('an object checksum is key-order-insensitive (control)', function () {
+        assert.equal(
+            math.checkSumSync({ a: 1, b: 2 }, 'sha1'),
+            math.checkSumSync({ b: 2, a: 1 }, 'sha1')
+        );
+    });
+});
+
+describe('07 - math.checkSumSync — widened extension probe (any real extension)', function () {
+    // #B210 — the file probe used to fire ONLY for dot+3-lowercase tails, so real
+    // paths like file.js / file.json / FILE.TXT were hashed as PATH STRINGS and
+    // never read. The probe now accepts a dot + 1-10 alphanumerics (still
+    // stat-gated per the dispatch contract); extension-less paths remain data.
+    var { before, after } = require('node:test');
+    var fs     = require('fs');
+    var os     = require('os');
+    var crypto = require('crypto');
+
+    var sha1 = function (data) {
+        return crypto.createHash('sha1').update(data, 'utf8').digest('hex');
+    };
+    var sha1File = function (p) {
+        return crypto.createHash('sha1').update(fs.readFileSync(p)).digest('hex');
+    };
+
+    var tmpDir = null, files = {};
+    before(function () {
+        tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gina-math-ext-'));
+        var fixtures = {
+            js:     ['fixture.js',   'var x = 1;\n'],
+            json:   ['fixture.json', '{"k":"v"}\n'],
+            upper:  ['FIXTURE.TXT',  'UPPER body\n'],
+            single: ['fixture.c',    'int main() { return 0; }\n'],
+            noext:  ['LICENSEFILE',  'license text body\n']
+        };
+        for (var key in fixtures) {
+            files[key] = path.join(tmpDir, fixtures[key][0]);
+            fs.writeFileSync(files[key], fixtures[key][1]);
+        }
+    });
+    after(function () {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+    });
+
+    it('hashes an existing `.js` file by its bytes', function () {
+        assert.equal(math.checkSumSync(files.js, 'sha1'), sha1File(files.js));
+    });
+
+    it('hashes an existing `.json` file by its bytes', function () {
+        assert.equal(math.checkSumSync(files.json, 'sha1'), sha1File(files.json));
+    });
+
+    it('hashes an existing uppercase-extension file by its bytes', function () {
+        assert.equal(math.checkSumSync(files.upper, 'sha1'), sha1File(files.upper));
+    });
+
+    it('hashes an existing single-letter-extension file by its bytes', function () {
+        assert.equal(math.checkSumSync(files.single, 'sha1'), sha1File(files.single));
+    });
+
+    it('still hashes an extension-less file path as data (boundary control)', function () {
+        assert.equal(math.checkSumSync(files.noext, 'sha1'), sha1(files.noext));
+    });
+
+    it('still hashes extension-shaped data naming no file as data (control)', function () {
+        var data = 'report draft.docx';
+        assert.equal(math.checkSumSync(data, 'sha1'), sha1(data));
+    });
+
+    it('a trailing dot is not an extension shape (control)', function () {
+        var data = 'a sentence that ends with a dot.';
+        assert.equal(math.checkSumSync(data, 'sha1'), sha1(data));
+    });
+});

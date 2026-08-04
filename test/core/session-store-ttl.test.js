@@ -112,6 +112,25 @@ function makeCouchbaseCtorTtl(src) {
     };
 }
 
+/**
+ * Extract the #B207 constructor validation blocks (options + connConf channels)
+ * and return an evaluator running those exact bytes.
+ *
+ * @param   {string} src
+ * @returns {{count: number, fn: (function|null)}} evaluator `(options, connConf, bundle)` — throws per the contract
+ * @inner
+ */
+function makeCtorGuard(src) {
+    var matches = stripComments(src).match(/if \((options|connConf)\.ttl != null && !\(\1\.ttl > 0\)\) \{[^{}]*\}/g);
+    if (!matches) {
+        return { count: 0, fn: null };
+    }
+    return {
+        count: matches.length,
+        fn: new Function('options', 'connConf', 'bundle', matches.join('\n'))
+    };
+}
+
 var SRC = {};
 before(function () {
     Object.keys(STORES).forEach(function (name) {
@@ -159,9 +178,10 @@ describe('02 - #B163 constructor ttl derivation', function () {
             assert.equal(ctor.fn({}, {}, ONE_DAY), null);
         });
 
-        it(name + ': connectors.json ttl 0 -> null (explicit 0 defers to maxAge)', function () {
-            var ctor = makeCtorTtl(SRC[name]);
-            assert.equal(ctor.fn({}, { ttl: 0 }, ONE_DAY), null);
+        it(name + ': connectors.json ttl 0 -> constructor refuses (#B207; was: defer-to-maxAge)', function () {
+            var guard = makeCtorGuard(SRC[name]);
+            assert.equal(guard.count, 2, 'guard extraction control (#B207)');
+            assert.throws(function () { guard.fn({}, { ttl: 0 }, 'testBundle'); }, /connectors\.json/);
         });
 
         it(name + ': options.ttl wins over connectors.json', function () {
@@ -174,9 +194,10 @@ describe('02 - #B163 constructor ttl derivation', function () {
             assert.equal(ctor.fn({}, { ttl: 600 }, ONE_DAY), 600);
         });
 
-        it(name + ': options.ttl 0 stays 0 (defer-to-maxAge semantics preserved)', function () {
-            var ctor = makeCtorTtl(SRC[name]);
-            assert.equal(ctor.fn({ ttl: 0 }, { ttl: 600 }, ONE_DAY), 0);
+        it(name + ': options.ttl 0 -> constructor refuses (#B207; was: preserved as 0)', function () {
+            var guard = makeCtorGuard(SRC[name]);
+            assert.equal(guard.count, 2, 'guard extraction control (#B207)');
+            assert.throws(function () { guard.fn({ ttl: 0 }, { ttl: 600 }, 'testBundle'); }, /store options/);
         });
     });
 });

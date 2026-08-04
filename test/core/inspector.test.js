@@ -6663,7 +6663,8 @@ describe('56 - Refresh button soft refresh (live indexes, reveal, passive agent)
             /!_passiveAgentEs\s*\|\|\s*_passiveAgentEs\.readyState\s*===\s*2/.test(body),
             'expected readyState === 2 (CLOSED) or null check'
         );
-        assert.ok(/tryAgentPassive\(\)/.test(body), 'expected tryAgentPassive() call');
+        assert.ok(/tryAgentPassive\(\s*_channelBase/.test(body),
+            'expected tryAgentPassive(_channelBase …) — the reopen stays on the currently-followed bundle (#B205)');
     });
 
     it('Shift+click triggers window.opener.location.reload()', function() {
@@ -8887,4 +8888,1534 @@ describe('81 - Inspector per-tab BroadcastChannel data binding (#INS)', function
         assert.strictEqual(applied.length, 1, 'only the well-formed data frame should apply');
         assert.strictEqual(applied[0].p, 1);
     });
+});
+
+
+describe('82 - extractIndexes: nested scan containers — IntersectScan/UnionScan/OrderedIntersectScan (`scans`) + DistinctScan (`scan`) (#B193)', function() {
+
+    // Same extraction pattern as §30: pull the REAL function out of the connector
+    // source by brace-counting and eval it — no replica to drift.
+    var extractIndexes;
+    var fnSrc = '';
+    try {
+        var src = fs.readFileSync(path.join(FW, 'core/connectors/couchbase/index.js'), 'utf8');
+        var fnStart = src.indexOf('var extractIndexes = function(profile)');
+        if (fnStart > -1) {
+            var body = src.substring(fnStart);
+            var braceDepth = 0, fnEnd = -1;
+            for (var i = body.indexOf('{'); i < body.length; i++) {
+                if (body[i] === '{') braceDepth++;
+                if (body[i] === '}') braceDepth--;
+                if (braceDepth === 0) { fnEnd = i + 1; break; }
+            }
+            if (fnEnd > -1) {
+                fnSrc = body.substring(0, fnEnd);
+                eval(fnSrc);  // defines extractIndexes in this scope
+            }
+        }
+    } catch (e) {
+        // extraction failure surfaces via the first assertion below
+    }
+
+    // -- fixture helpers (shapes taken from real EXPLAIN output) --
+    function seq(op) {
+        return { executionTimings: { '#operator': 'Sequence', '~children': [ op, { '#operator': 'Fetch', keyspace: 'sample' } ] } };
+    }
+    function idxScan(name) {
+        return { '#operator': 'IndexScan3', index: name, keyspace: 'sample' };
+    }
+    function names(result) {
+        return (result || []).map(function(ix) { return ix.name; });
+    }
+
+    it('extractIndexes function was successfully extracted from connector', function() {
+        assert.ok(typeof extractIndexes === 'function', 'extractIndexes should be a callable function');
+        assert.ok(fnSrc.length > 0, 'expected a non-empty extracted source');
+    });
+
+    // -- controls: the function CAN report an index / an empty plan reads [] --
+    // (both must stay green pre-fix AND post-fix — they isolate the wrapper
+    //  operator as the only variable in the discriminator cases below)
+    it('control: a plain IndexScan3 is reported (the instrument can fire)', function() {
+        assert.deepStrictEqual(names(extractIndexes(seq(idxScan('idx_a')))), ['idx_a']);
+    });
+
+    it('control: a plan with no scan operators reads [] (the no-index reading is real)', function() {
+        var r = extractIndexes({ executionTimings: { '#operator': 'Sequence', '~children': [
+            { '#operator': 'Filter' }, { '#operator': 'FinalProject' }
+        ] } });
+        assert.ok(Array.isArray(r));
+        assert.strictEqual(r.length, 0);
+    });
+
+    // -- discriminators: the four measured multi-index/nested operators (#B193) --
+    // Pre-fix each returned [] — the Inspector then rendered the red "no index —
+    // full bucket scan" badge + banner for a query the planner had already served
+    // with MULTIPLE indexes: a false negative that invites a pointless (and
+    // write-amplifying) index build.
+    it('IntersectScan: both child IndexScan3 nodes under `scans` are reported', function() {
+        var r = extractIndexes(seq({ '#operator': 'IntersectScan', scans: [ idxScan('idx_a'), idxScan('idx_b') ] }));
+        assert.deepStrictEqual(names(r), ['idx_a', 'idx_b']);
+    });
+
+    it('UnionScan: both child IndexScan3 nodes under `scans` are reported', function() {
+        var r = extractIndexes(seq({ '#operator': 'UnionScan', scans: [ idxScan('idx_a'), idxScan('idx_b') ] }));
+        assert.deepStrictEqual(names(r), ['idx_a', 'idx_b']);
+    });
+
+    it('OrderedIntersectScan: `scans` children are reported (same family, absent from the original report)', function() {
+        var r = extractIndexes(seq({ '#operator': 'OrderedIntersectScan', scans: [ idxScan('idx_a'), idxScan('idx_d') ] }));
+        assert.deepStrictEqual(names(r), ['idx_a', 'idx_d']);
+    });
+
+    it('DistinctScan: the SINGULAR `scan` container is walked', function() {
+        var r = extractIndexes(seq({ '#operator': 'DistinctScan', scan: idxScan('idx_c') }));
+        assert.deepStrictEqual(names(r), ['idx_c']);
+    });
+
+    it('nested composite: a UnionScan of an IntersectScan recurses through scans-in-scans', function() {
+        var r = extractIndexes(seq({ '#operator': 'UnionScan', scans: [
+            { '#operator': 'IntersectScan', scans: [ idxScan('idx_a'), idxScan('idx_b') ] },
+            idxScan('idx_c')
+        ] }));
+        assert.deepStrictEqual(names(r), ['idx_a', 'idx_b', 'idx_c']);
+    });
+
+    it('dedupe: the same index appearing in two scans collapses to one entry (seen[] holds)', function() {
+        var r = extractIndexes(seq({ '#operator': 'IntersectScan', scans: [ idxScan('idx_a'), idxScan('idx_a') ] }));
+        assert.deepStrictEqual(names(r), ['idx_a']);
+    });
+
+    it('the primary flag is computed unchanged on nested nodes', function() {
+        var r = extractIndexes(seq({ '#operator': 'IntersectScan', scans: [
+            { '#operator': 'PrimaryScan3', index: '#primary', keyspace: 'sample' },
+            idxScan('idx_a')
+        ] }));
+        assert.deepStrictEqual(r.map(function(ix) { return ix.name + ':' + ix.primary; }),
+            ['#primary:true', 'idx_a:false']);
+    });
+
+    // -- source pins: the fix cannot be silently reverted --
+    it('source pin: the walker visits the singular `scan` container', function() {
+        assert.ok(fnSrc.indexOf("node['scan']") > -1, "expected a `node['scan']` clause in extractIndexes");
+    });
+
+    it('source pin: the walker visits the `scans` array behind an Array.isArray guard', function() {
+        assert.match(fnSrc, /node\['scans'\] && Array\.isArray\(node\['scans'\]\)/);
+    });
+
+    it('source pin: the #B193 rationale comment marks the clauses', function() {
+        assert.ok(fnSrc.indexOf('#B193') > -1, 'expected the #B193 marker comment in extractIndexes');
+    });
+
+    it('roster pin: the walker dispatches walk() at exactly five sites (root + 4 containers)', function() {
+        // ~child, ~children[i], scan, scans[j], walk(root) — a silent fifth
+        // container (or a dropped one) changes this count. Pre-fix the count was 3.
+        assert.strictEqual((fnSrc.match(/walk\(/g) || []).length, 5);
+    });
+});
+
+
+describe('83 - tab-layout preview: every preset tab has a label + color; unknown tabs humanize, never "undefined" (#B194)', function() {
+
+    // dist copy, same as §44's getJs() — the SPA is served from dist verbatim.
+    var _js83;
+    function js83() { return _js83 || (_js83 = fs.readFileSync(path.join(BM_DIR, 'inspector.js'), 'utf8')); }
+
+    // Extract an object literal `var NAME = {...};` by brace counting.
+    function extractObj(name) {
+        var src = js83();
+        var at = src.indexOf('var ' + name + ' = {');
+        if (at < 0) return null;
+        var body = src.substring(at), depth = 0;
+        for (var i = body.indexOf('{'); i < body.length; i++) {
+            if (body[i] === '{') depth++;
+            if (body[i] === '}') depth--;
+            if (depth === 0) return body.substring(0, i + 1);
+        }
+        return null;
+    }
+    // Extract a `function name(...) {...}` by brace counting.
+    function extractFn(name) {
+        var src = js83();
+        var at = src.indexOf('function ' + name + '(');
+        if (at < 0) return null;
+        var body = src.substring(at), depth = 0;
+        for (var i = body.indexOf('{'); i < body.length; i++) {
+            if (body[i] === '{') depth++;
+            if (body[i] === '}') depth--;
+            if (depth === 0) return body.substring(0, i + 1);
+        }
+        return null;
+    }
+
+    var TAB_LAYOUTS, TAB_PREVIEW_LABELS, TAB_PREVIEW_COLORS, pillLabel, pillColor;
+    try {
+        /* jshint evil: true */
+        eval(extractObj('TAB_LAYOUTS'));
+        eval(extractObj('TAB_PREVIEW_LABELS'));
+        eval(extractObj('TAB_PREVIEW_COLORS'));
+        var _fL = extractFn('pillLabel'), _fC = extractFn('pillColor');
+        if (_fL) eval('pillLabel = ' + _fL);
+        if (_fC) eval('pillColor = ' + _fC);
+    } catch (e) { /* surfaced by the assertions below */ }
+
+    it('the three structures extract from the dist SPA', function() {
+        assert.ok(TAB_LAYOUTS && TAB_PREVIEW_LABELS && TAB_PREVIEW_COLORS, 'expected TAB_LAYOUTS + both preview maps');
+    });
+
+    it('control: the six original tabs are mapped (label + color) — pre-existing behaviour preserved', function() {
+        ['data', 'view', 'logs', 'forms', 'query', 'flow'].forEach(function(tab) {
+            assert.equal(typeof TAB_PREVIEW_LABELS[tab], 'string', tab + ' label');
+            assert.equal(typeof TAB_PREVIEW_COLORS[tab], 'string', tab + ' color');
+        });
+    });
+
+    // -- the class invariant (#B194): a tab CANNOT enter a preset without map entries.
+    //    Pre-fix this failed on stream + events — both were added to all three
+    //    presets but neither map, so the preview rendered the literal string
+    //    "undefined" as their pill text (and --pill-color:undefined).
+    it('every tab named in ANY preset has a label AND a color (roster completeness)', function() {
+        Object.keys(TAB_LAYOUTS).forEach(function(preset) {
+            TAB_LAYOUTS[preset].forEach(function(tab) {
+                assert.equal(typeof TAB_PREVIEW_LABELS[tab], 'string',
+                    'preset "' + preset + '" tab "' + tab + '" has no TAB_PREVIEW_LABELS entry');
+                assert.equal(typeof TAB_PREVIEW_COLORS[tab], 'string',
+                    'preset "' + preset + '" tab "' + tab + '" has no TAB_PREVIEW_COLORS entry');
+            });
+        });
+    });
+
+    it('the two newer tabs carry their display labels', function() {
+        assert.equal(TAB_PREVIEW_LABELS.stream, 'Stream');
+        assert.equal(TAB_PREVIEW_LABELS.events, 'Events');
+    });
+
+    // -- the fallback helpers: an UNKNOWN tab humanizes instead of rendering "undefined"
+    it('pillLabel: mapped tabs resolve from the map, unknown tabs humanize', function() {
+        assert.equal(typeof pillLabel, 'function', 'expected a pillLabel helper');
+        assert.equal(pillLabel('query'), 'Query');
+        assert.equal(pillLabel('stream'), 'Stream');
+        assert.equal(pillLabel('metrics'), 'Metrics', 'an unmapped tab renders its capitalized name');
+        assert.notEqual(String(pillLabel('metrics')), 'undefined');
+    });
+
+    it('pillColor: mapped tabs resolve from the map, unknown tabs get the neutral color', function() {
+        assert.equal(typeof pillColor, 'function', 'expected a pillColor helper');
+        assert.equal(pillColor('flow'), 'var(--accent)');
+        assert.equal(pillColor('metrics'), 'var(--text-dim)', 'an unmapped tab gets a neutral pill color');
+    });
+
+    it('renderLayoutPreview routes BOTH render sites through the helpers (count pins)', function() {
+        var src = js83();
+        // visible + hidden pill loops: 3 pillLabel( call sites (visible label,
+        // hidden pill's "Restore <Label> tab" title — §88 per-tab restore —
+        // and hidden label) + 2 pillColor( call sites
+        // (the '(' excludes the definitions, which match 'function pillLabel(').
+        assert.equal((src.match(/pillLabel\(/g) || []).length, 4, 'definition + 3 call sites (§88 added the restore-title site)');
+        assert.equal((src.match(/pillColor\(/g) || []).length, 3, 'definition + 2 call sites');
+        // the maps are read ONLY inside the helpers now — a bare map read at a
+        // render site is the "undefined"-class regression this section kills.
+        assert.equal((src.match(/TAB_PREVIEW_LABELS\[/g) || []).length, 1, 'one read, inside pillLabel');
+        assert.equal((src.match(/TAB_PREVIEW_COLORS\[/g) || []).length, 1, 'one read, inside pillColor');
+    });
+
+    // -- the same-family cap (#B194): the custom-order validator derives its bound
+    //    from the roster instead of the stale literal 6 (with 7-8 visible tabs a
+    //    saved custom order was rejected on read and never survived a reload).
+    it('getCustomOrder bounds the saved array by the preset roster length, not a literal 6', function() {
+        var src = js83();
+        assert.ok(src.indexOf('arr.length <= TAB_LAYOUTS.balanced.length') > -1,
+            'expected the roster-derived bound');
+        assert.equal(src.indexOf('arr.length <= 6'), -1, 'the stale literal-6 bound must be gone');
+    });
+
+    it('the roster-derived bound admits a full 8-tab custom order today', function() {
+        assert.equal(TAB_LAYOUTS.balanced.length, 8, 'all three presets carry 8 tabs today');
+    });
+});
+
+
+// ── 84 — bundle-follow: server channels re-point on bundle crossing (#B205) ──
+// In a proxy-routed multi-bundle project the Inspector's server-side channels
+// (/_gina/logs SSE + passive /_gina/agent SSE) used to stay pinned to the
+// bundle they were derived from at open time. A bundle the Inspector was never
+// opened from therefore never saw a /_gina/* hit, its per-process dev-capture
+// activation flag never latched, and every page it served rendered with no
+// flow/queries — the Flow tab showed "No timeline data for this request.".
+// The fix: each applied payload's environment.webroot drives
+// _followBundleChannels(), which closes + re-opens the live channels against
+// the new bundle's base; the /_gina/* hit latches that bundle's capture.
+// The earlier pid-guard section's local replica stays valid for its
+// webroot-less fixtures (behaviour unchanged there); the new webroot-aware
+// branch is covered here by executing the EXTRACTED shipped bytes.
+
+describe('84 - bundle-follow: server channels re-point on bundle crossing (#B205)', function() {
+
+    var INSPECTOR_84 = path.join(BM_DIR, 'inspector.js');
+    var _src84;
+    function getSrc84() { return _src84 || (_src84 = fs.readFileSync(INSPECTOR_84, 'utf8')); }
+
+    /**
+     * Brace-matched extraction of a function's shipped bytes (started-flag
+     * walker — safe here because none of the extracted bodies carry braces
+     * inside string/regex literals). Throws on not-found / duplicate decl /
+     * unbalanced braces so a silent mis-extraction cannot vacuously pass.
+     */
+    function extractFn84(src, decl) {
+        var i = src.indexOf(decl);
+        if (i < 0) throw new Error('decl not found: ' + decl);
+        if (src.indexOf(decl, i + 1) > -1) throw new Error('decl not unique: ' + decl);
+        var depth = 0, started = false, j = i;
+        for (; j < src.length; j++) {
+            var c = src[j];
+            if (c === '{') { depth++; started = true; }
+            else if (c === '}') {
+                depth--;
+                if (started && depth === 0) { j++; break; }
+            }
+        }
+        if (!started || depth !== 0) throw new Error('unbalanced braces for: ' + decl);
+        return src.slice(i, j);
+    }
+
+    // ── Source pins ──────────────────────────────────────────────────────
+
+    it('declares the bundle-follow module state', function() {
+        var src = getSrc84();
+        assert.match(src, /var _serverLogsEs = null;/);
+        assert.match(src, /var _channelBase = null;/);
+        assert.match(src, /var _livePidWebroot = null;/);
+    });
+
+    it('tryServerLogs keeps the shared resolver and accepts an explicit base', function() {
+        var src = getSrc84();
+        var i = src.indexOf('function tryServerLogs(baseOverride)');
+        assert.ok(i > -1, 'tryServerLogs must take the baseOverride param');
+        var j = src.indexOf('es.onmessage', i);
+        assert.ok(j > i, 'end anchor (es.onmessage) must follow the declaration');
+        var blk = src.slice(i, j);
+        var res = blk.indexOf('var base = resolveBundleBase();');
+        var ovr = blk.indexOf("typeof baseOverride === 'string'");
+        assert.ok(res > -1, 'the shared resolver stays the default');
+        assert.ok(ovr > res, 'the override guard must follow (not replace) the resolver');
+    });
+
+    it('tryServerLogs keeps a single live stream and records the base', function() {
+        var src = getSrc84();
+        var i = src.indexOf('function tryServerLogs(baseOverride)');
+        var blk = src.slice(i, src.indexOf('es.onmessage', i));
+        assert.ok(blk.indexOf('_serverLogsEs.close()') > -1, 'previous stream must be closed on re-point');
+        assert.ok(blk.indexOf('_serverLogsEs = es;') > -1, 'the live stream handle must be kept');
+        assert.match(blk, /_channelBase\s*=\s*base;/, 'the connected base must be recorded');
+    });
+
+    it('tryAgentPassive accepts the override, closes the previous stream, records the base', function() {
+        var src = getSrc84();
+        var i = src.indexOf('function tryAgentPassive(baseOverride)');
+        assert.ok(i > -1, 'tryAgentPassive must take the baseOverride param');
+        var j = src.indexOf("es.addEventListener('data'", i);
+        assert.ok(j > i, 'end anchor (data listener) must follow the declaration');
+        var blk = src.slice(i, j);
+        var res = blk.indexOf('var base = resolveBundleBase();');
+        var ovr = blk.indexOf("typeof baseOverride === 'string'");
+        assert.ok(res > -1 && ovr > res, 'resolver stays the default; override follows it');
+        assert.ok(blk.indexOf('_passiveAgentEs.close()') > -1, 'previous stream must be closed on re-point');
+        assert.match(blk, /_channelBase\s*=\s*base;/, 'the connected base must be recorded');
+    });
+
+    it('pollData drives the bundle-follow after the stale gate, before the label update', function() {
+        var src = getSrc84();
+        var pd = src.indexOf('function pollData');
+        assert.ok(pd > -1);
+        var stale  = src.indexOf('if (_isStaleSource(gd)) return;', pd);
+        var follow = src.indexOf('_followBundleChannels(gd);', pd);
+        var label  = src.indexOf("qs('#bm-label').textContent", pd);
+        assert.ok(stale > pd, 'stale gate inside pollData');
+        assert.ok(follow > stale, 'follow must run only on payloads that pass the stale gate');
+        assert.ok(label > follow, 'follow must run as part of the apply (before the label update)');
+    });
+
+    it('_followBundleChannels never re-points in agent mode (source pin)', function() {
+        var src = getSrc84();
+        var fn = extractFn84(src, 'function _followBundleChannels(gd)');
+        assert.ok(fn.indexOf("if (source === 'agent') return;") > -1,
+            'agent mode (?target=) is an explicit binding — never re-pointed');
+    });
+
+    it('_isStaleSource narrows to same-bundle pid mismatches (source pin)', function() {
+        var src = getSrc84();
+        var fn = extractFn84(src, 'function _isStaleSource(gd)');
+        var same = fn.indexOf('if (!p || p === _livePid) return false;');
+        var wr   = fn.indexOf('_normWebroot(_gdWebroot(gd))');
+        var tail = fn.indexOf('return true;');
+        assert.ok(same > -1, 'same-pid / pid-less payloads still pass first');
+        assert.ok(wr > same, 'the webroot comparison follows the pid checks');
+        assert.ok(tail > wr, 'only a same-webroot (or webroot-less) pid mismatch stays stale');
+    });
+
+    // ── Behavioral — the EXTRACTED shipped bytes are executed ─────────────
+
+    it('extraction controls: every construct extracts exactly once with balanced braces', function() {
+        var src = getSrc84();
+        var decls = [
+            'function _normWebroot(w)',
+            'function _gdWebroot(gd)',
+            'function _gdPid(gd)',
+            'function _isStaleSource(gd)',
+            'function _followBundleChannels(gd)'
+        ];
+        for (var d = 0; d < decls.length; d++) {
+            var fn = extractFn84(src, decls[d]);
+            assert.ok(/^function /.test(fn) && /\}$/.test(fn), 'clean extraction for ' + decls[d]);
+        }
+    });
+
+    it('_normWebroot: root forms collapse, trailing slashes strip, non-strings are unknown', function() {
+        var norm = new Function('return (' + extractFn84(getSrc84(), 'function _normWebroot(w)') + ');')();
+        assert.strictEqual(norm('/'), '');
+        assert.strictEqual(norm(''), '');
+        assert.strictEqual(norm('/admin'), '/admin');
+        assert.strictEqual(norm('/admin/'), '/admin');
+        assert.strictEqual(norm('/admin///'), '/admin');
+        assert.strictEqual(norm(undefined), null);
+        assert.strictEqual(norm(3), null);
+    });
+
+    it('_gdWebroot: gina view first, user view fallback, non-string is null', function() {
+        var src = getSrc84();
+        var wrFn = new Function('return (' + extractFn84(src, 'function _gdWebroot(gd)') + ');')();
+        assert.strictEqual(wrFn({ gina: { environment: { webroot: '/admin' } } }), '/admin');
+        assert.strictEqual(wrFn({ user: { environment: { webroot: '/' } } }), '/');
+        assert.strictEqual(wrFn({ user: { environment: {} } }), null);
+        assert.strictEqual(wrFn(null), null);
+    });
+
+    /** Run the shipped _isStaleSource with injected guard state. */
+    function runStale(livePid, livePidWebroot, gd) {
+        var src = getSrc84();
+        var runner = new Function('livePid', 'livePidWebroot', 'gd',
+            'var _livePid = livePid; var _livePidWebroot = livePidWebroot;' +
+            'var _gdPid = (' + extractFn84(src, 'function _gdPid(gd)') + ');' +
+            'var _gdWebroot = (' + extractFn84(src, 'function _gdWebroot(gd)') + ');' +
+            'var _normWebroot = (' + extractFn84(src, 'function _normWebroot(w)') + ');' +
+            'var _isStaleSource = (' + extractFn84(src, 'function _isStaleSource(gd)') + ');' +
+            'return _isStaleSource(gd);');
+        return runner(livePid, livePidWebroot, gd);
+    }
+
+    /** Payload fixture: user-view environment with optional webroot / pid. */
+    function gdWith(webroot, pid) {
+        var env = {};
+        if (typeof webroot !== 'undefined') env.webroot = webroot;
+        if (typeof pid !== 'undefined') env['gina pid'] = pid;
+        return { user: { environment: env } };
+    }
+
+    it('staleness: a different pid on ANOTHER webroot passes — a bundle crossing, not staleness', function() {
+        // live channel on the root bundle; the tab moved to the /admin bundle
+        assert.strictEqual(runStale(223, '', gdWith('/admin', 999)), false);
+        // and the reverse crossing
+        assert.strictEqual(runStale(223, '/admin', gdWith('/', 999)), false);
+    });
+
+    it('staleness: same-webroot restarts and webroot-less payloads still read stale', function() {
+        // same bundle ('/' normalises to ''), older process — a pre-restart snapshot
+        assert.strictEqual(runStale(223, '', gdWith('/', 999)), true);
+        // payload without webroot — back-compat: pid comparison alone decides
+        assert.strictEqual(runStale(223, '', gdWith(undefined, 999)), true);
+        // live webroot unknown — conservative: keep the pid-only verdict
+        assert.strictEqual(runStale(223, null, gdWith('/admin', 999)), true);
+        // unchanged verdicts: same pid, and no live pid at all
+        assert.strictEqual(runStale(223, '', gdWith('/', 223)), false);
+        assert.strictEqual(runStale(null, null, gdWith('/', 999)), false);
+    });
+
+    /** Run the shipped _followBundleChannels with an injected scope + spies. */
+    function runFollow(scope) {
+        var src = getSrc84();
+        var runner = new Function('scope',
+            'var source = scope.source;' +
+            'var _channelBase = scope.channelBase;' +
+            'var _passiveAgentEs = scope.passiveEs;' +
+            'var _serverLogsEs = scope.logsEs;' +
+            'var _normWebroot = (' + extractFn84(src, 'function _normWebroot(w)') + ');' +
+            'var _gdWebroot = (' + extractFn84(src, 'function _gdWebroot(gd)') + ');' +
+            'var calls = { passive: [], logs: [] };' +
+            'var tryAgentPassive = function (b) { calls.passive.push(b); };' +
+            'var tryServerLogs   = function (b) { calls.logs.push(b); };' +
+            'var _followBundleChannels = (' + extractFn84(src, 'function _followBundleChannels(gd)') + ');' +
+            '_followBundleChannels(scope.gd);' +
+            'return { channelBase: _channelBase, calls: calls };');
+        return runner(scope);
+    }
+
+    it('follow: a crossing re-points exactly the channels that are open, to the new base', function() {
+        // passive stream open (opener mode)
+        var r1 = runFollow({ source: 'opener-window', channelBase: '', passiveEs: {}, logsEs: null,
+            gd: gdWith('/admin') });
+        assert.deepStrictEqual(r1.calls.passive, ['/admin']);
+        assert.deepStrictEqual(r1.calls.logs, []);
+        assert.strictEqual(r1.channelBase, '/admin');
+        // logs stream open (bound mode)
+        var r2 = runFollow({ source: 'broadcast', channelBase: '/admin', passiveEs: null, logsEs: {},
+            gd: gdWith('/') });
+        assert.deepStrictEqual(r2.calls.passive, []);
+        assert.deepStrictEqual(r2.calls.logs, ['']);
+        assert.strictEqual(r2.channelBase, '');
+        // both open (refresh-button can leave both live)
+        var r3 = runFollow({ source: 'broadcast', channelBase: '', passiveEs: {}, logsEs: {},
+            gd: gdWith('/admin') });
+        assert.deepStrictEqual(r3.calls.passive, ['/admin']);
+        assert.deepStrictEqual(r3.calls.logs, ['/admin']);
+    });
+
+    it('follow: agent mode, unknown webroot, and an unchanged base are all no-ops', function() {
+        var agent = runFollow({ source: 'agent', channelBase: '', passiveEs: {}, logsEs: {},
+            gd: gdWith('/admin') });
+        assert.deepStrictEqual(agent.calls, { passive: [], logs: [] });
+        assert.strictEqual(agent.channelBase, '');
+        var unknown = runFollow({ source: 'broadcast', channelBase: '', passiveEs: {}, logsEs: {},
+            gd: gdWith(undefined) });
+        assert.deepStrictEqual(unknown.calls, { passive: [], logs: [] });
+        assert.strictEqual(unknown.channelBase, '');
+        var same = runFollow({ source: 'broadcast', channelBase: '/admin', passiveEs: {}, logsEs: {},
+            gd: gdWith('/admin/') });   // trailing slash still the same base
+        assert.deepStrictEqual(same.calls, { passive: [], logs: [] });
+        assert.strictEqual(same.channelBase, '/admin');
+    });
+
+    it('follow: adopts the new base even when no channel is open', function() {
+        var r = runFollow({ source: 'broadcast', channelBase: '', passiveEs: null, logsEs: null,
+            gd: gdWith('/admin') });
+        assert.deepStrictEqual(r.calls, { passive: [], logs: [] });
+        assert.strictEqual(r.channelBase, '/admin');
+    });
+
+});
+
+
+// ── 85 — fetchLiveIndexes re-render must target #tree-query (#B222) ──────────
+
+describe('85 - fetchLiveIndexes success re-render targets #tree-query, never the scroll-area wrapper (#B222)', function() {
+
+    // The Query tab shell nests the render container INSIDE the scroll wrapper:
+    //   <div class="bm-scroll-area" data-tab="query"><div id="tree-query">…</div></div>
+    // renderTab('query') writes #tree-query and BAILS silently when it is absent
+    // (`var treeEl = qs('#tree-' + name); if (!treeEl) return;`). So a re-render
+    // that replaces the WRAPPER's innerHTML destroys #tree-query and freezes the
+    // Query pane + badge for every later payload (navigation, XHR, refresh
+    // button) until the Inspector window itself is reloaded — the #B222 bug.
+    // The live-index fetch fires whenever a rendered query still has
+    // `indexes: null` (EXPLAIN pending / unsupported), so the freeze armed on
+    // most first renders and re-armed on every refresh-button click.
+
+    var INSPECTOR_85 = path.join(BM_DIR, 'inspector.js');
+    var SHELL_85     = path.join(BM_DIR, 'index.html');
+    var SRC_COPY_85  = path.join(FW, 'core/asset/plugin/src/vendor/gina/inspector/js/inspector.js');
+    var _src85;
+    function getSrc85() { return _src85 || (_src85 = fs.readFileSync(INSPECTOR_85, 'utf8')); }
+
+    /** Same started-flag brace walker as §84 (no braces inside string literals here). */
+    function extractFn85(src, decl) {
+        var i = src.indexOf(decl);
+        if (i < 0) throw new Error('decl not found: ' + decl);
+        if (src.indexOf(decl, i + 1) > -1) throw new Error('decl not unique: ' + decl);
+        var depth = 0, started = false, j = i;
+        for (; j < src.length; j++) {
+            var c = src[j];
+            if (c === '{') { depth++; started = true; }
+            else if (c === '}') {
+                depth--;
+                if (started && depth === 0) { j++; break; }
+            }
+        }
+        if (!started || depth !== 0) throw new Error('unbalanced braces for: ' + decl);
+        return src.slice(i, j);
+    }
+
+    // ── Premise (control that documents WHY the wrapper write is destructive) ──
+
+    it('shell premise: #tree-query is nested inside the query scroll-area wrapper', function() {
+        var shell = fs.readFileSync(SHELL_85, 'utf8');
+        var wrap = shell.indexOf('class="bm-scroll-area" data-tab="query"');
+        assert.ok(wrap > -1, 'query scroll-area wrapper must exist in the shell');
+        var root = shell.indexOf('id="tree-query"', wrap);
+        assert.ok(root > -1 && root - wrap < 200,
+            '#tree-query must sit inside the query scroll-area (this nesting is what makes a wrapper innerHTML write destroy the render container)');
+    });
+
+    it('renderTab bails silently on a missing tree container (the freeze mechanism)', function() {
+        var blk = extractFn85(getSrc85(), 'function renderTab(name)');
+        assert.match(blk, /var treeEl = qs\('#tree-' \+ name\);\s*\n\s*if \(!treeEl\) return;/,
+            'renderTab must early-return on a missing #tree-<name> — the pin documents why destroying #tree-query freezes the pane');
+    });
+
+    // ── The fix: re-render into the container renderTab owns ──────────────
+
+    it('fetchLiveIndexes success re-render targets #tree-query', function() {
+        var blk = extractFn85(getSrc85(), 'function fetchLiveIndexes()');
+        var re = blk.indexOf("qs('#tree-query')");
+        assert.ok(re > -1, 'the re-render must query #tree-query (the container renderTab owns)');
+        assert.ok(blk.indexOf('renderQueryContent(', re) > re,
+            'the #tree-query lookup must feed the renderQueryContent re-render (#B225 realigned: the argument now derives from the live payload — pinned in §86)');
+    });
+
+    it('fetchLiveIndexes never touches the scroll-area wrapper', function() {
+        // Block-scoped negative: the wrapper class is legitimately used elsewhere
+        // (fold-state capture/restore, scroll-position restore) — only the
+        // fetchLiveIndexes block must not reference it.
+        var blk = extractFn85(getSrc85(), 'function fetchLiveIndexes()');
+        assert.ok(blk.indexOf('bm-scroll-area') < 0,
+            'the live-index re-render must not target the scroll wrapper — replacing its children destroys #tree-query');
+    });
+
+    // ── Behavioral: drive the extracted onload against a fake DOM ─────────
+
+    it('extracted onload writes the tree root, not the wrapper (real bytes, no replica)', function() {
+        var fnBlk = extractFn85(getSrc85(), 'function fetchLiveIndexes()');
+        var onload = extractFn85(fnBlk, 'xhr.onload = function()');
+        // Fake DOM: a wrapper containing the tree root, both recording writes.
+        var treeEl = { innerHTML: '' };
+        var wrapEl = { innerHTML: '', querySelector: function (sel) { return sel === '.bm-scroll-area' ? wrapEl : null; } };
+        var tabEl  = { querySelector: function (sel) { return sel === '.bm-scroll-area' ? wrapEl : null; } };
+        var doc = { getElementById: function (id) { return id === 'tab-query' ? tabEl : null; } };
+        var qsFake = function (sel) { return sel === '#tree-query' ? treeEl : null; };
+        // #B225 realigned: the onload now derives its queries from the live
+        // payload (ginaData + the reveal swap) instead of the module cache —
+        // the scope bindings follow (the eval-harness-gains-a-dependency rule).
+        var runner = new Function('xhr', 'document', 'qs', 'renderQueryContent', 'ginaData', '_revealActive', '_revealedData',
+            "var _liveIndexes = null; var _liveIndexesFetching = true; var __on = (" + onload.replace(/^xhr\.onload = /, '') + "); __on(); return { liveIndexes: _liveIndexes, fetching: _liveIndexesFetching };");
+        var out = runner(
+            { status: 200, responseText: '{"connectors":{}}' },
+            doc, qsFake,
+            function () { return 'RENDERED_CARDS'; },
+            { user: { queries: [ { type: 'SQL', statement: 'SELECT 1', indexes: null } ] } },
+            false, null
+        );
+        assert.strictEqual(out.fetching, false, 'onload must clear the fetching flag');
+        assert.deepStrictEqual(out.liveIndexes, { connectors: {} }, 'onload must cache the parsed index payload');
+        assert.strictEqual(treeEl.innerHTML, 'RENDERED_CARDS',
+            'the re-render must land in #tree-query (pre-fix bytes wrote the wrapper instead, destroying the tree root)');
+        assert.strictEqual(wrapEl.innerHTML, '', 'the scroll wrapper children must be left alone');
+    });
+
+    // ── Build-step lock: the served dist copy is the src, verbatim ────────
+
+    it('dist inspector.js is byte-identical to src (verbatim-copy build step)', function() {
+        var src  = fs.readFileSync(SRC_COPY_85, 'utf8');
+        var dist = getSrc85();
+        assert.strictEqual(dist, src, 'dist/vendor/gina/inspector/inspector.js must be the verbatim src copy');
+    });
+
+});
+
+
+// ── 86 — #B225: ⟳ bound-mode SSE guard + derive-from-truth query re-renders ────────
+
+describe('86 - #B225: refresh-button SSE guard (bound mode) + derive-from-truth query re-renders', function() {
+
+    // Three mechanisms, one operator-visible symptom (the Query badge blinking
+    // page-count → xhr-count → page-count on a popin open, with the XHR payload
+    // never rendering):
+    //   (b) the ⟳ refresh handler re-opened the passive /_gina/agent SSE stream
+    //       even in a BOUND window (source === 'broadcast'), whose data comes
+    //       from the statusbar publisher (#INS15) — the leaked stream then
+    //       applied bundle-wide payloads over the page-scoped ones (the
+    //       measured badge blink at every later XHR overlay);
+    //   (c) rerenderQueries() and the live-index success re-render repainted
+    //       from the module query cache, which renderQueryContent's empty path
+    //       never clears and which survives overlay eras that end while the
+    //       Query tab is inactive — so a ⟳ resurrected dead queries and
+    //       rewrote the badge (measured 3→7).
+    // Fix (a) — the popin preload-consume overlay set — is popin.test.js §32.
+    // All reads here target the DIST copy (BM_DIR): these pins watch the served
+    // artifact, so they stay red between a src fix and the dist copy (#B222's
+    // mid-state evidence pattern).
+
+    var INSPECTOR_86 = path.join(BM_DIR, 'inspector.js');
+    var _src86;
+    function getSrc86() { return _src86 || (_src86 = fs.readFileSync(INSPECTOR_86, 'utf8')); }
+
+    /** Same started-flag brace walker as §84/§85. */
+    function extractFn86(src, decl) {
+        var i = src.indexOf(decl);
+        if (i < 0) throw new Error('decl not found: ' + decl);
+        if (src.indexOf(decl, i + 1) > -1) throw new Error('decl not unique: ' + decl);
+        var depth = 0, started = false, j = i;
+        for (; j < src.length; j++) {
+            var c = src[j];
+            if (c === '{') { depth++; started = true; }
+            else if (c === '}') {
+                depth--;
+                if (started && depth === 0) { j++; break; }
+            }
+        }
+        if (!started || depth !== 0) throw new Error('unbalanced braces for: ' + decl);
+        return src.slice(i, j);
+    }
+
+    /** Active lines only — negative pins must not trip on prose naming a symbol. */
+    function stripComments86(block) {
+        return block.split('\n').filter(function (l) {
+            return !/^\s*(\/\/|\*|\/\*)/.test(l);
+        }).join('\n');
+    }
+
+    // ── (b) the ⟳ reopen gate ─────────────────────────────────────────────
+
+    it('source: the ⟳ reopen gate skips bound-mode windows too (whole-expression pin)', function() {
+        assert.match(getSrc86(),
+            /if \(source !== 'agent' && source !== 'broadcast'\n\s*&& \(!_passiveAgentEs \|\| _passiveAgentEs\.readyState === 2\)\) \{/,
+            'the passive-SSE reopen must be gated on source !== \'agent\' AND source !== \'broadcast\' — a bound window takes its data from the statusbar publisher (#INS15)');
+    });
+
+    /** Executes the SHIPPED ⟳ click listener bytes with a recording scope;
+     *  returns the tryAgentPassive call args. */
+    function driveRefresh(src, sourceVal) {
+        var decl = "refreshBtn.addEventListener('click', function (ev) {";
+        var block = extractFn86(src, decl);
+        var fnText = block.slice(block.indexOf('function'));
+        var tryCalls = [];
+        var btn = {
+            classList: { add: function () {}, remove: function () {} },
+            addEventListener: function () {}, removeEventListener: function () {}
+        };
+        var runner = new Function(
+            'ev', 'lastGdStr', 'refreshBtn', 'pollData',
+            '_liveIndexes', '_liveIndexesFetching', 'fetchLiveIndexes',
+            '_revealActive', 'source', '_passiveAgentEs', 'tryAgentPassive', '_channelBase',
+            'var __fn = (' + fnText + '); __fn(ev);'
+        );
+        runner({ shiftKey: false }, '', btn, function () {},
+            null, false, function () {},
+            false, sourceVal, null, function (base) { tryCalls.push(base); }, null);
+        return tryCalls;
+    }
+
+    it('behavioral: a broadcast-sourced window\'s ⟳ never reopens the passive agent stream (real bytes)', function() {
+        var calls = driveRefresh(getSrc86(), 'broadcast');
+        assert.equal(calls.length, 0,
+            'bound mode must not open /_gina/agent on ⟳ — the leaked stream applies bundle-wide payloads over the page-scoped statusbar ones (the measured badge blink)');
+    });
+
+    it('behavioral: a self-polling window (source null) still reopens the stream on ⟳ — and stays on the followed bundle', function() {
+        var calls = driveRefresh(getSrc86(), null);
+        assert.equal(calls.length, 1, 'the self-polling reopen path must survive the new gate');
+        assert.strictEqual(calls[0], undefined,
+            'a null _channelBase must map to undefined (#B205 — tryAgentPassive re-derives its default)');
+    });
+
+    it('behavioral: agent mode stays excluded (pre-existing gate, control)', function() {
+        assert.equal(driveRefresh(getSrc86(), 'agent').length, 0,
+            'agent mode already has its own stream — the ⟳ must not open a second one');
+    });
+
+    // ── (c) derive-from-truth query re-renders ────────────────────────────
+
+    it('source: rerenderQueries derives from the live payload (renderTab preference), never the module query cache', function() {
+        var blk = extractFn86(getSrc86(), 'function rerenderQueries()');
+        assert.ok(blk.indexOf("(_revealActive && _revealedData) ? _revealedData : ginaData") > -1,
+            'rerenderQueries must start from the reveal-aware payload source, exactly like renderTab');
+        assert.match(blk, /u\['data-xhr'\] && u\['data-xhr'\]\.queries\s*\n?\s*\? u\['data-xhr'\]\.queries : u\.queries/,
+            'rerenderQueries must apply renderTab(\'query\')\'s own data-xhr-first preference');
+        assert.ok(stripComments86(blk).indexOf('_lastQueries') < 0,
+            'rerenderQueries must not read the module query cache — it survives eras that end while the Query tab is inactive');
+    });
+
+    it('source: the live-index success re-render derives from the live payload too', function() {
+        var blk = extractFn86(getSrc86(), 'function fetchLiveIndexes()');
+        assert.ok(blk.indexOf("(_revealActive && _revealedData) ? _revealedData : ginaData") > -1,
+            'the ⟳-forced live-index re-render must derive from the reveal-aware payload source');
+        assert.match(blk, /u\['data-xhr'\] && u\['data-xhr'\]\.queries\s*\n?\s*\? u\['data-xhr'\]\.queries : u\.queries/,
+            'the live-index re-render must apply renderTab(\'query\')\'s own data-xhr-first preference');
+        assert.ok(stripComments86(blk).indexOf('_lastQueries') < 0,
+            'the live-index re-render must not read the module query cache (#B225 — the ⟳ badge rewrite 3→7)');
+    });
+
+    /** Executes the SHIPPED rerenderQueries bytes. The stale-cache binding is
+     *  provided so the PRE-fix bytes run too (red-first stays semantic, never a
+     *  harness ReferenceError); post-fix bytes simply never read it. */
+    function driveRerender(src, opts) {
+        var fnText = extractFn86(src, 'function rerenderQueries()');
+        var rendered = [];
+        var panel = { innerHTML: '' };
+        var runner = new Function(
+            '_lastQueries', '_revealActive', '_revealedData', 'ginaData', 'qs', 'renderQueryContent',
+            'var __fn = (' + fnText + '); __fn();'
+        );
+        runner(opts.cache, opts.revealActive || false, opts.revealed || null, opts.ginaData,
+            function (sel) { return sel === '#tree-query' ? panel : null; },
+            function (q) { rendered.push(q); return 'RENDERED'; });
+        return { rendered: rendered, panel: panel };
+    }
+
+    var STALE = [{ statement: 'STALE' }];
+
+    it('behavioral: rerenderQueries paints the payload-derived queries, never the cached ones (real bytes)', function() {
+        var LIVE = [{ statement: 'LIVE' }];
+        var out = driveRerender(getSrc86(), { cache: STALE, ginaData: { user: { queries: LIVE } } });
+        assert.equal(out.rendered.length, 1, 'one repaint');
+        assert.strictEqual(out.rendered[0], LIVE,
+            'the repaint must use the live payload queries (pre-fix bytes painted the stale cache)');
+        assert.equal(out.panel.innerHTML, 'RENDERED', 'the repaint lands in #tree-query');
+    });
+
+    it('behavioral: a dead-era cache no longer repaints — empty truth bails', function() {
+        var out = driveRerender(getSrc86(), { cache: STALE, ginaData: { user: {} } });
+        assert.equal(out.rendered.length, 0,
+            'no live queries -> no repaint (pre-fix bytes resurrected the stale cache here)');
+        assert.equal(out.panel.innerHTML, '', 'the pane is left to renderTab');
+    });
+
+    it('behavioral: an active data-xhr era wins (renderTab parity)', function() {
+        var PAGE = [{ statement: 'P1' }], XHRQ = [{ statement: 'X1' }, { statement: 'X2' }];
+        var out = driveRerender(getSrc86(), {
+            cache: STALE,
+            ginaData: { user: { 'data-xhr': { queries: XHRQ }, queries: PAGE } }
+        });
+        assert.strictEqual(out.rendered[0], XHRQ,
+            'while an XHR overlay era is active its queries must win, exactly like renderTab(\'query\')');
+    });
+
+    it('behavioral: an active reveal still wins over the redacted payload (reveal fidelity)', function() {
+        var RED = [{ statement: 'REDACTED' }], REV = [{ statement: 'REVEALED' }];
+        var out = driveRerender(getSrc86(), {
+            cache: STALE, revealActive: true, revealed: { user: { queries: REV } },
+            ginaData: { user: { queries: RED } }
+        });
+        assert.strictEqual(out.rendered[0], REV,
+            'reveal mode must keep painting the unredacted payload (renderTab\'s source swap, mirrored)');
+    });
+
+    it('behavioral: the live-index success re-render paints derived queries into #tree-query (real bytes)', function() {
+        var LIVE = [{ statement: 'LIVE', indexes: null }];
+        var fnBlk = extractFn86(getSrc86(), 'function fetchLiveIndexes()');
+        var onload = extractFn86(fnBlk, 'xhr.onload = function()');
+        var rendered = [];
+        var treeEl = { innerHTML: '' };
+        var runner = new Function(
+            'xhr', 'qs', 'renderQueryContent',
+            '_lastQueries', '_revealActive', '_revealedData', 'ginaData',
+            "var _liveIndexes = null; var _liveIndexesFetching = true; var __on = (" + onload.replace(/^xhr\.onload = /, '') + "); __on(); return { liveIndexes: _liveIndexes, fetching: _liveIndexesFetching };");
+        var out = runner(
+            { status: 200, responseText: '{"connectors":{}}' },
+            function (sel) { return sel === '#tree-query' ? treeEl : null; },
+            function (q) { rendered.push(q); return 'RENDERED_CARDS'; },
+            STALE, false, null, { user: { queries: LIVE } }
+        );
+        assert.strictEqual(out.fetching, false, 'onload must clear the fetching flag');
+        assert.equal(rendered.length, 1, 'one repaint on success');
+        assert.strictEqual(rendered[0], LIVE,
+            'the ⟳-forced re-render must paint the live payload queries (pre-fix bytes painted the stale cache — the measured badge rewrite 3→7)');
+        assert.equal(treeEl.innerHTML, 'RENDERED_CARDS', 'the repaint lands in #tree-query (#B222 invariant preserved)');
+    });
+});
+
+describe('87 - #B231: ?ch=-less Inspector adopts the statusbar-advertised tab channel; source-mode badge', function() {
+
+    var INSPECTOR_87 = path.join(BM_DIR, 'inspector.js');
+    var INDEX_87     = path.join(BM_DIR, 'index.html');
+    var CSS_87       = path.join(BM_DIR, 'inspector.css');
+    var SBAR_87      = path.join(BM_DIR, '..', 'html', 'statusbar.html');
+    var SRC_INSP_87  = path.join(FW, 'core/asset/plugin/src/vendor/gina/inspector/js/inspector.js');
+    var SRC_SBAR_87  = path.join(FW, 'core/asset/plugin/src/vendor/gina/inspector/html/statusbar.html');
+    var SRC_INDEX_87 = path.join(FW, 'core/asset/plugin/src/vendor/gina/inspector/html/index.html');
+
+    var _src87, _sbar87;
+    function getSrc87()  { return _src87  || (_src87  = fs.readFileSync(INSPECTOR_87, 'utf8')); }
+    function getSbar87() { return _sbar87 || (_sbar87 = fs.readFileSync(SBAR_87, 'utf8')); }
+
+    /**
+     * Brace-matched extraction of a function's shipped bytes (§84 pattern:
+     * started-flag walker; safe here because neither extracted body carries a
+     * brace inside a string/regex literal). Throws on not-found / duplicate
+     * decl / unbalanced braces so a silent mis-extraction cannot vacuously pass.
+     */
+    function extractFn87(src, decl) {
+        var i = src.indexOf(decl);
+        if (i < 0) throw new Error('decl not found: ' + decl);
+        if (src.indexOf(decl, i + 1) > -1) throw new Error('decl not unique: ' + decl);
+        var depth = 0, started = false, j = i;
+        for (; j < src.length; j++) {
+            var c = src[j];
+            if (c === '{') { depth++; started = true; }
+            else if (c === '}') {
+                depth--;
+                if (started && depth === 0) { j++; break; }
+            }
+        }
+        if (!started || depth !== 0) throw new Error('unbalanced braces for: ' + decl);
+        return src.slice(i, j);
+    }
+
+    it('extraction control: a bogus declaration throws (the walker can fail)', function() {
+        assert.throws(function() { extractFn87(getSrc87(), 'function _noSuchFunction87('); },
+            /decl not found/);
+    });
+
+    // ── statusbar.html (sender side) ──────────────────────────────────────
+
+    it('statusbar advertises the tab channel id inside _ginaPublish, before the postMessage', function() {
+        var s = getSbar87();
+        var decl = s.indexOf('function _ginaPublish() {');
+        assert.ok(decl > -1, '_ginaPublish declaration must exist');
+        var endAnchor = s.indexOf('// A freshly-opened Inspector', decl);
+        assert.ok(endAnchor > decl, 'end anchor (request-reply comment) must follow _ginaPublish');
+        var body = s.slice(decl, endAnchor);
+        var adv  = body.indexOf("localStorage.setItem('__gina_last_tab_ch', _ginaTabId)");
+        var post = body.indexOf("postMessage({ type: 'data', payload: window.__ginaData })");
+        assert.ok(adv > -1,  'expected the advert write (code form) inside _ginaPublish');
+        assert.ok(post > adv, 'the advert write must precede the channel publish');
+    });
+
+    it('statusbar advert write is try/catch-guarded (storage-blocked browsers must not break publish)', function() {
+        var s = getSbar87();
+        assert.match(s, /try \{ localStorage\.setItem\('__gina_last_tab_ch', _ginaTabId\); \} catch \(e\) \{\}/);
+    });
+
+    // ── inspector.js — source pins ────────────────────────────────────────
+
+    it('declares the ADOPT_HANDSHAKE_MS liveness window', function() {
+        assert.match(getSrc87(), /var ADOPT_HANDSHAKE_MS = 1500;/);
+    });
+
+    it('defines _adoptAdvertisedChannel(onDead) reading the advert via getItem and binding through setupBoundChannel', function() {
+        var body = extractFn87(getSrc87(), 'function _adoptAdvertisedChannel(onDead)');
+        assert.ok(body.indexOf("localStorage.getItem('__gina_last_tab_ch')") > -1,
+            'expected the advert read (code form)');
+        assert.ok(body.indexOf('setupBoundChannel(ad)') > -1,
+            'expected the bind through setupBoundChannel');
+        assert.ok(body.indexOf('ADOPT_HANDSHAKE_MS') > -1,
+            'expected the handshake timer to use the named window constant');
+    });
+
+    it('handshake teardown closes the bound channel AND the logs stream, nulls source, then runs onDead', function() {
+        var body = extractFn87(getSrc87(), 'function _adoptAdvertisedChannel(onDead)');
+        var liveGuard = body.indexOf("source !== 'broadcast' || _bcLatest !== null");
+        var closeB    = body.indexOf('_boundChannel.close()');
+        var closeL    = body.indexOf('_serverLogsEs.close()');
+        var nullSrc   = body.indexOf('source = null;');
+        var dead      = body.indexOf('onDead()');
+        assert.ok(liveGuard > -1, 'expected the proven-live / re-claimed early return');
+        assert.ok(closeB > liveGuard, 'bound-channel close after the live guard');
+        assert.ok(closeL > closeB,   'logs-stream close after the bound-channel close');
+        assert.ok(nullSrc > closeL,  'source reset after both closes');
+        assert.ok(dead > nullSrc,    'onDead runs last (the legacy acquisition takes over)');
+    });
+
+    it('init dispatch: adopt is the second arm of the bound-mode OR; the else delegates to _startLegacyAcquisition', function() {
+        var s = getSrc87();
+        var a = s.indexOf('var isAgent = tryAgent()');
+        assert.ok(a > -1, 'init anchor must exist');
+        var end = s.indexOf('── Persist window geometry', a);
+        assert.ok(end > a, 'end anchor (geometry comment) must follow the acquisition block');
+        var blk = s.slice(a, end);
+        var setup    = blk.indexOf('setupBoundChannel(_boundCh)');
+        var adoptArm = blk.indexOf('|| _adoptAdvertisedChannel(_startLegacyAcquisition)');
+        var elseCall = blk.indexOf('_startLegacyAcquisition();');
+        var legDecl  = blk.indexOf('function _startLegacyAcquisition()');
+        assert.ok(setup > -1, 'explicit ?ch= bind stays the first arm');
+        assert.ok(adoptArm > setup, 'the adopt arm follows the explicit bind in the same OR');
+        assert.ok(elseCall > adoptArm, 'the legacy else delegates to _startLegacyAcquisition');
+        assert.ok(legDecl > elseCall, 'the legacy body is the hoisted declaration below the dispatch');
+        // Subtract: the pre-#B231 inline else body is gone; its first statement
+        // now lives inside the hoisted function.
+        assert.ok(!/else\s*\{\s*\n\s*var ok = tryOpener/.test(blk),
+            'the legacy body must no longer be inlined in the else');
+        var legBody = extractFn87(s, 'function _startLegacyAcquisition()');
+        assert.ok(legBody.indexOf('var ok = tryOpener() || tryLocalStorage();') > -1,
+            'the legacy body opens with the opener/localStorage acquisition, unchanged');
+        assert.ok(legBody.indexOf('var _passiveAgentActive = tryAgentPassive();') > -1,
+            'the passive agent subscription stays in the legacy body');
+    });
+
+    it('pollData refreshes the source-mode badge at the top of every tick', function() {
+        var s = getSrc87();
+        var pd = s.indexOf('function pollData() {');
+        assert.ok(pd > -1);
+        var gd = s.indexOf('var gd;', pd);
+        var badge = s.indexOf('updateSourceModeBadge();', pd);
+        assert.ok(badge > pd && badge < gd,
+            'updateSourceModeBadge() must run before the source branches (covers every mode incl. early returns)');
+    });
+
+    // ── behavioral: _adoptAdvertisedChannel (extracted shipped bytes) ─────
+
+    function driveAdopt(opts) {
+        var fnSrc = extractFn87(getSrc87(), 'function _adoptAdvertisedChannel(onDead)');
+        var timers = [];
+        var log = { setupCalls: [], boundClosed: 0, logsClosed: 0, onDead: 0 };
+        var harness = new Function('deps', [
+            'var localStorage = deps.localStorage;',
+            'var setupBoundChannel = deps.setupBoundChannel;',
+            'var setTimeout = deps.setTimeout;',
+            'var ADOPT_HANDSHAKE_MS = 1500;',
+            'var source = deps.source;',
+            'var _bcLatest = deps.bcLatest;',
+            'var _boundChannel = deps.boundChannel;',
+            'var _serverLogsEs = deps.serverLogsEs;',
+            fnSrc,
+            'return {',
+            '    adopt: _adoptAdvertisedChannel,',
+            '    state: function () { return { source: source, boundChannel: _boundChannel, serverLogsEs: _serverLogsEs }; },',
+            '    set: {',
+            '        source: function (v) { source = v; },',
+            '        bcLatest: function (v) { _bcLatest = v; },',
+            '        boundChannel: function (v) { _boundChannel = v; },',
+            '        serverLogsEs: function (v) { _serverLogsEs = v; }',
+            '    }',
+            '};'
+        ].join('\n'));
+        var api = harness({
+            localStorage: opts.localStorage,
+            setupBoundChannel: function (ch) { log.setupCalls.push(ch); return opts.setupReturns; },
+            setTimeout: function (fn, ms) { timers.push({ fn: fn, ms: ms }); return timers.length; },
+            source: null,
+            bcLatest: null,
+            boundChannel: null,
+            serverLogsEs: null
+        });
+        return { api: api, timers: timers, log: log };
+    }
+
+    it('no advert -> false, setupBoundChannel never called, no timer armed', function() {
+        var d = driveAdopt({ localStorage: { getItem: function () { return null; } }, setupReturns: true });
+        var onDead = 0;
+        assert.strictEqual(d.api.adopt(function () { onDead++; }), false);
+        assert.equal(d.log.setupCalls.length, 0, 'must not bind without an advert');
+        assert.equal(d.timers.length, 0, 'no handshake timer without a bind');
+        assert.equal(onDead, 0);
+    });
+
+    it('storage read throwing -> false (blocked-storage browsers)', function() {
+        var d = driveAdopt({ localStorage: { getItem: function () { throw new Error('denied'); } }, setupReturns: true });
+        assert.strictEqual(d.api.adopt(function () {}), false);
+        assert.equal(d.log.setupCalls.length, 0);
+    });
+
+    it('advert present but the bind fails -> false, no timer', function() {
+        var d = driveAdopt({ localStorage: { getItem: function () { return 'gtabc'; } }, setupReturns: false });
+        assert.strictEqual(d.api.adopt(function () {}), false);
+        assert.deepEqual(d.log.setupCalls, ['gtabc'], 'the advertised id is what gets bound');
+        assert.equal(d.timers.length, 0);
+    });
+
+    it('adopt success arms exactly one handshake timer at ADOPT_HANDSHAKE_MS', function() {
+        var d = driveAdopt({ localStorage: { getItem: function () { return 'gtabc'; } }, setupReturns: true });
+        assert.strictEqual(d.api.adopt(function () {}), true);
+        assert.equal(d.timers.length, 1, 'exactly one timer');
+        assert.equal(d.timers[0].ms, 1500, 'armed at the named window');
+    });
+
+    it('dead advert: timer fires with no data -> both streams closed, source nulled, onDead runs once', function() {
+        var d = driveAdopt({ localStorage: { getItem: function () { return 'gtabc'; } }, setupReturns: true });
+        var onDead = 0;
+        assert.strictEqual(d.api.adopt(function () { onDead++; }), true);
+        var boundClosed = 0, logsClosed = 0;
+        d.api.set.source('broadcast');
+        d.api.set.bcLatest(null);
+        d.api.set.boundChannel({ close: function () { boundClosed++; } });
+        d.api.set.serverLogsEs({ close: function () { logsClosed++; } });
+        d.timers[0].fn();
+        assert.equal(boundClosed, 1, 'bound channel closed');
+        assert.equal(logsClosed, 1, 'the /_gina/logs stream the adopt branch opened is closed too (no double log delivery after fallback)');
+        assert.strictEqual(d.api.state().source, null, 'source released for the legacy acquisition');
+        assert.strictEqual(d.api.state().boundChannel, null);
+        assert.strictEqual(d.api.state().serverLogsEs, null);
+        assert.equal(onDead, 1, 'legacy acquisition handed over exactly once');
+    });
+
+    it('live advert: a data frame arrived before the timer -> no teardown, no fallback', function() {
+        var d = driveAdopt({ localStorage: { getItem: function () { return 'gtabc'; } }, setupReturns: true });
+        var onDead = 0;
+        d.api.adopt(function () { onDead++; });
+        var closed = 0;
+        d.api.set.source('broadcast');
+        d.api.set.bcLatest({ user: {} });
+        d.api.set.boundChannel({ close: function () { closed++; } });
+        d.timers[0].fn();
+        assert.equal(closed, 0, 'a proven-live channel is never torn down');
+        assert.equal(onDead, 0);
+        assert.strictEqual(d.api.state().source, 'broadcast');
+    });
+
+    it('re-claimed source: timer fires after another mode took over -> no-op', function() {
+        var d = driveAdopt({ localStorage: { getItem: function () { return 'gtabc'; } }, setupReturns: true });
+        var onDead = 0;
+        d.api.adopt(function () { onDead++; });
+        d.api.set.source('agent');
+        d.api.set.bcLatest(null);
+        var closed = 0;
+        d.api.set.boundChannel({ close: function () { closed++; } });
+        d.timers[0].fn();
+        assert.equal(closed, 0);
+        assert.equal(onDead, 0);
+    });
+
+    it('teardown with no logs stream open does not throw and still hands over', function() {
+        var d = driveAdopt({ localStorage: { getItem: function () { return 'gtabc'; } }, setupReturns: true });
+        var onDead = 0;
+        d.api.adopt(function () { onDead++; });
+        d.api.set.source('broadcast');
+        d.api.set.bcLatest(null);
+        d.api.set.boundChannel({ close: function () {} });
+        d.api.set.serverLogsEs(null);
+        assert.doesNotThrow(function () { d.timers[0].fn(); });
+        assert.equal(onDead, 1);
+    });
+
+    // ── behavioral: updateSourceModeBadge (extracted shipped bytes) ───────
+
+    function driveBadge(sourceValue, elPresent) {
+        var fnSrc = extractFn87(getSrc87(), 'function updateSourceModeBadge()');
+        var el = elPresent === false ? null
+            : { hidden: undefined, textContent: '', className: '', title: '' };
+        var harness = new Function('deps', [
+            'var qs = deps.qs;',
+            'var source = deps.source;',
+            fnSrc,
+            'return updateSourceModeBadge;'
+        ].join('\n'));
+        harness({ qs: function () { return el; }, source: sourceValue })();
+        return el;
+    }
+
+    it('broadcast -> "bound", no warn tint', function() {
+        var el = driveBadge('broadcast');
+        assert.strictEqual(el.hidden, false);
+        assert.strictEqual(el.textContent, 'bound');
+        assert.strictEqual(el.className, 'bm-source-mode');
+        assert.ok(el.title.length > 0, 'tooltip explains the mode');
+    });
+
+    it('agent -> "agent", no warn tint', function() {
+        var el = driveBadge('agent');
+        assert.strictEqual(el.textContent, 'agent');
+        assert.strictEqual(el.className, 'bm-source-mode');
+    });
+
+    it('localStorage fallback -> "global" with the warn tint and a pointer at the statusbar link', function() {
+        var el = driveBadge('localStorage');
+        assert.strictEqual(el.textContent, 'global');
+        assert.strictEqual(el.className, 'bm-source-mode bm-source-mode-warn');
+        assert.ok(/statusbar/.test(el.title), 'tooltip must tell the user how to reach bound mode');
+    });
+
+    it('opener (a Window object) -> "global" with the warn tint (the passive bundle-wide SSE runs in that mode too)', function() {
+        var el = driveBadge({ location: {} });
+        assert.strictEqual(el.textContent, 'global');
+        assert.ok(/bm-source-mode-warn/.test(el.className));
+    });
+
+    it('no source -> badge hidden; absent element -> no throw', function() {
+        var el = driveBadge(null);
+        assert.strictEqual(el.hidden, true);
+        assert.doesNotThrow(function () { driveBadge('broadcast', false); });
+    });
+
+    // ── markup + css pins ─────────────────────────────────────────────────
+
+    it('index.html carries the badge span inside the footer target, before the health dot', function() {
+        var html = fs.readFileSync(INDEX_87, 'utf8');
+        var target = html.indexOf('class="bm-target"');
+        var badge  = html.indexOf('id="bm-source-mode"', target);
+        var dot    = html.indexOf('id="bm-dot"', target);
+        assert.ok(target > -1, 'footer target div must exist');
+        assert.ok(badge > target, 'badge span inside the target div');
+        assert.ok(dot > badge, 'badge renders before the health dot');
+    });
+
+    it('inspector.css styles the badge and its warn tint', function() {
+        var css = fs.readFileSync(CSS_87, 'utf8');
+        assert.ok(css.indexOf('.bm-source-mode') > -1, 'expected .bm-source-mode in the compiled css');
+        assert.ok(css.indexOf('.bm-source-mode-warn') > -1, 'expected the warn modifier in the compiled css');
+    });
+
+    // ── src -> dist fidelity (these three are the free subtract at the
+    //    src-fixed/dist-stale midstate: red until the build copies) ────────
+
+    it('inspector.js dist is the verbatim src copy', function() {
+        assert.strictEqual(fs.readFileSync(INSPECTOR_87, 'utf8'), fs.readFileSync(SRC_INSP_87, 'utf8'));
+    });
+
+    it('statusbar.html dist is the verbatim src copy', function() {
+        assert.strictEqual(fs.readFileSync(SBAR_87, 'utf8'), fs.readFileSync(SRC_SBAR_87, 'utf8'));
+    });
+
+    it('index.html dist is the verbatim src copy', function() {
+        assert.strictEqual(fs.readFileSync(INDEX_87, 'utf8'), fs.readFileSync(SRC_INDEX_87, 'utf8'));
+    });
+});
+
+
+// ── 88 — per-tab restore: clickable hidden preview pills (+ glyph) ────────────
+
+describe('88 - per-tab restore: a dimmed preview pill restores just that tab (Reset untouched)', function() {
+
+    // Tab hiding (custom layout mode) had no per-tab inverse: hideTab() existed,
+    // but the only way back was the all-or-nothing Reset link (restoreAllTabs).
+    // The struck-through preview pill is the removed tab's only remaining
+    // representative, so it becomes the restore control: it carries data-tab
+    // for a delegated click handler, a native title, and a leading + glyph as
+    // the visible affordance. Restoring deliberately does NOT activate the
+    // restored tab (the user is mid-layout-editing), and the button is
+    // explicitly re-parked at the END of the nav — applyTabLayout parks
+    // hidden buttons at the FRONT (only ordered visible tabs are appended),
+    // so without the appendChild the restored tab would surface leftmost.
+
+    var INSPECTOR_88 = path.join(BM_DIR, 'inspector.js');
+    var CSS_88       = path.join(BM_DIR, 'inspector.css');
+    var SRC_JS_88    = path.join(FW, 'core/asset/plugin/src/vendor/gina/inspector/js/inspector.js');
+    var SRC_CSS_88   = path.join(FW, 'core/asset/plugin/src/vendor/gina/inspector/css/inspector.css');
+    var _src88, _css88;
+    function getSrc88() { return _src88 || (_src88 = fs.readFileSync(INSPECTOR_88, 'utf8')); }
+    function getCss88() { return _css88 || (_css88 = fs.readFileSync(CSS_88, 'utf8')); }
+
+    /** Same started-flag brace walker as §84/§85 (no braces inside string literals in these blocks). */
+    function extractFn88(src, decl) {
+        var i = src.indexOf(decl);
+        if (i < 0) throw new Error('decl not found: ' + decl);
+        if (src.indexOf(decl, i + 1) > -1) throw new Error('decl not unique: ' + decl);
+        var depth = 0, started = false, j = i;
+        for (; j < src.length; j++) {
+            var c = src[j];
+            if (c === '{') { depth++; started = true; }
+            else if (c === '}') {
+                depth--;
+                if (started && depth === 0) { j++; break; }
+            }
+        }
+        if (!started || depth !== 0) throw new Error('unbalanced braces for: ' + decl);
+        return src.slice(i, j);
+    }
+
+    // ── Instrument control ────────────────────────────────────────────────
+
+    it('control: the extractor can fail (bogus decl throws)', function() {
+        assert.throws(function () { extractFn88(getSrc88(), 'function noSuchFn88()'); },
+            /decl not found/, 'a walker that cannot miss proves nothing');
+    });
+
+    // ── Premises (document the asymmetry being closed + Reset preserved) ──
+
+    it('premise: hideTab exists and DOES switch away from an active hidden tab', function() {
+        var blk = extractFn88(getSrc88(), 'function hideTab(tabName)');
+        assert.ok(blk.indexOf('switchTab(') > -1,
+            'hideTab must switch away when hiding the active tab — the discriminator for the no-activation pin on restoreTab');
+    });
+
+    it('premise: restoreAllTabs (the Reset path) is untouched and still clears the whole hidden list', function() {
+        var blk = extractFn88(getSrc88(), 'function restoreAllTabs()');
+        assert.ok(blk.indexOf('saveHiddenTabs([])') > -1, 'Reset must still clear the entire hidden list');
+    });
+
+    // ── restoreTab source pins ────────────────────────────────────────────
+
+    it('restoreTab is declared (the per-tab inverse of hideTab)', function() {
+        var blk = extractFn88(getSrc88(), 'function restoreTab(tabName)');
+        var iGuard  = blk.indexOf('indexOf(tabName)');
+        var iSplice = blk.indexOf('splice(');
+        var iSave   = blk.indexOf('saveHiddenTabs(');
+        assert.ok(iGuard > -1, 'must guard on the tab actually being hidden');
+        assert.ok(iSplice > iGuard && iSave > iSplice,
+            'must remove the one name then persist — guard, splice, saveHiddenTabs in that order');
+    });
+
+    it('restoreTab re-shows the button at the END of the nav and persists the new order', function() {
+        var blk = extractFn88(getSrc88(), 'function restoreTab(tabName)');
+        var iShow   = blk.indexOf(".style.display = ''");
+        var iAppend = blk.indexOf('nav.appendChild(btn)');
+        var iOrder  = blk.indexOf('saveCustomOrder()');
+        var iPrev   = blk.indexOf("renderLayoutPreview('custom')");
+        assert.ok(iShow > -1, 'must clear display:none on the tab button');
+        assert.ok(iAppend > iShow, 'must re-park the button at the end (hidden buttons sit at the FRONT of the nav)');
+        assert.ok(iOrder > iAppend && iPrev > iOrder,
+            'must save the order AFTER the move, then re-render the pills');
+    });
+
+    it('restoreTab does NOT activate the restored tab (no switchTab call)', function() {
+        var blk = extractFn88(getSrc88(), 'function restoreTab(tabName)');
+        assert.ok(blk.indexOf('switchTab(') < 0,
+            'restoring must not steal the active panel — hideTab is the half that switches (see premise)');
+    });
+
+    // ── renderLayoutPreview emission pins ─────────────────────────────────
+
+    it('hidden-pill emission carries data-tab, a Restore title, and the + glyph', function() {
+        var blk = extractFn88(getSrc88(), 'function renderLayoutPreview(layout)');
+        var i = blk.indexOf('bm-lp-pill-hidden');
+        assert.ok(i > -1, 'hidden-pill emission must exist');
+        var slice = blk.slice(i, i + 400);
+        assert.ok(slice.indexOf('data-tab="') > -1, 'hidden pill must carry data-tab for the delegated handler');
+        assert.ok(slice.indexOf('title="Restore ') > -1, 'hidden pill must carry the native Restore tooltip');
+        assert.ok(slice.indexOf('bm-lp-pill-add') > -1, 'hidden pill must carry the + affordance span');
+    });
+
+    it('control: visible-pill emission stays a passive readout (none of the three)', function() {
+        var blk = extractFn88(getSrc88(), 'function renderLayoutPreview(layout)');
+        var i = blk.indexOf('<span class="bm-lp-pill" style=');
+        assert.ok(i > -1, 'visible-pill emission must exist (and must NOT gain data-tab — that is the discriminator between readout and control)');
+        var end = blk.indexOf('</span>', i);
+        var slice = blk.slice(i, end);
+        assert.ok(slice.indexOf('data-tab') < 0 && slice.indexOf('title="Restore') < 0 && slice.indexOf('bm-lp-pill-add') < 0,
+            'visible pills are not restore controls');
+    });
+
+    // ── Behavioral: drive the extracted restoreTab (real bytes, no replica) ──
+
+    function driveRestore88(tabName, hiddenList, btnPresent) {
+        var blk = extractFn88(getSrc88(), 'function restoreTab(tabName)');
+        var saved = { hidden: null, orderCalls: 0, previewArg: null, switched: 0, appended: [] };
+        var btn = { style: { display: 'none' } };
+        var nav = { appendChild: function (n) { saved.appended.push(n); } };
+        var qsFake = function (sel) {
+            if (sel === '.bm-tabs') return nav;
+            if (sel.indexOf('.bm-tab[data-tab=') === 0) return btnPresent ? btn : null;
+            return null;
+        };
+        var runner = new Function('qs', 'getHiddenTabs', 'saveHiddenTabs', 'saveCustomOrder', 'renderLayoutPreview', 'switchTab',
+            blk + '\nreturn restoreTab;');
+        var restoreTab = runner(
+            qsFake,
+            function () { return hiddenList.slice(); },
+            function (h) { saved.hidden = h; },
+            function () { saved.orderCalls++; },
+            function (l) { saved.previewArg = l; },
+            function () { saved.switched++; }
+        );
+        restoreTab(tabName);
+        return { saved: saved, btn: btn };
+    }
+
+    it('restoring a hidden tab: list persisted without it, button shown + re-parked, preview re-rendered, no activation', function() {
+        var out = driveRestore88('forms', ['forms', 'flow'], true);
+        assert.deepStrictEqual(out.saved.hidden, ['flow'], 'only the restored name leaves the hidden list');
+        assert.strictEqual(out.btn.style.display, '', 'the tab button must be shown again');
+        assert.strictEqual(out.saved.appended.length, 1, 'the button must be re-parked via appendChild');
+        assert.strictEqual(out.saved.orderCalls, 1, 'the new order must be persisted');
+        assert.strictEqual(out.saved.previewArg, 'custom', 'the pills must re-render for custom mode');
+        assert.strictEqual(out.saved.switched, 0, 'restore must not activate the tab');
+    });
+
+    it('restoring a name that is not hidden is a no-op', function() {
+        var out = driveRestore88('query', ['forms'], true);
+        assert.strictEqual(out.saved.hidden, null, 'nothing may be persisted');
+        assert.strictEqual(out.saved.orderCalls, 0, 'no order write');
+        assert.strictEqual(out.btn.style.display, 'none', 'no DOM change');
+    });
+
+    it('restoring with the button absent still cleans the stored list (stale-storage resilience)', function() {
+        var out = driveRestore88('forms', ['forms'], false);
+        assert.deepStrictEqual(out.saved.hidden, [], 'the stale name must leave the list even with no button to show');
+        assert.strictEqual(out.saved.orderCalls, 1, 'order still persisted');
+        assert.strictEqual(out.saved.appended.length, 0, 'nothing to re-park');
+    });
+
+    it('extracted renderLayoutPreview emits the restorable hidden pill (real bytes)', function() {
+        var blk = extractFn88(getSrc88(), 'function renderLayoutPreview(layout)');
+        var el = { innerHTML: '' };
+        var resetEl = { classList: { toggle: function () {} } };
+        var qsFake = function (sel) {
+            if (sel === '#bm-layout-preview') return el;
+            if (sel === '#bm-layout-reset') return resetEl;
+            return null;
+        };
+        var runner = new Function('qs', 'getCustomOrder', 'getCurrentTabOrder', 'getHiddenTabs', 'TAB_LAYOUTS', 'pillColor', 'pillLabel',
+            blk + '\nreturn renderLayoutPreview;');
+        var render = runner(
+            qsFake,
+            function () { return ['data', 'view']; },
+            function () { return ['data', 'view']; },
+            function () { return ['forms']; },
+            { balanced: ['data', 'view', 'logs', 'forms', 'query', 'flow', 'stream', 'events'] },
+            function () { return 'red'; },
+            function (t) { return t.charAt(0).toUpperCase() + t.slice(1); }
+        );
+        render('custom');
+        assert.ok(el.innerHTML.indexOf('data-tab="forms"') > -1, 'hidden pill must name its tab');
+        assert.ok(el.innerHTML.indexOf('title="Restore Forms tab"') > -1, 'hidden pill must carry the tooltip');
+        assert.ok(el.innerHTML.indexOf('<span class="bm-lp-pill-add">+</span>') > -1, 'hidden pill must carry the + glyph');
+        var visible = el.innerHTML.slice(0, el.innerHTML.indexOf('bm-lp-pill-hidden'));
+        assert.ok(visible.indexOf('data-tab') < 0, 'visible pills must stay passive (control)');
+    });
+
+    // ── Delegated wiring ──────────────────────────────────────────────────
+
+    it('the restore handler is delegated on #bm-layout-preview and resolves pills via closest()', function() {
+        var src = getSrc88();
+        var i = src.indexOf("var previewEl = qs('#bm-layout-preview')");
+        assert.ok(i > -1, 'the container lookup must exist');
+        assert.ok(src.indexOf("var previewEl = qs('#bm-layout-preview')", i + 1) < 0, 'and be unique');
+        var end = src.indexOf('setupTabDrag()', i);
+        assert.ok(end > i, 'the wiring must sit before the drag setup');
+        var slice = src.slice(i, end);
+        assert.ok(slice.indexOf("closest('.bm-lp-pill-hidden')") > -1, 'must resolve the pill via closest (the + glyph is a child span)');
+        assert.ok(slice.indexOf('restoreTab(') > -1, 'must call restoreTab');
+        assert.ok(slice.indexOf('addEventListener') > -1, 'must be a listener on the container (the row is rebuilt via innerHTML)');
+    });
+
+    it('driven handler: a click inside a hidden pill restores that tab; elsewhere is ignored (real bytes)', function() {
+        var src = getSrc88();
+        var i = src.indexOf("var previewEl = qs('#bm-layout-preview')");
+        var end = src.indexOf('// ── Tab drag-to-reorder', i);
+        assert.ok(i > -1 && end > i, 'wiring slice must be extractable');
+        var slice = src.slice(i, end);
+        var recorded = [];
+        var fakeEl = { addEventListener: function (type, fn) { recorded.push({ type: type, fn: fn }); } };
+        var restored = [];
+        var runner = new Function('qs', 'restoreTab', slice + '\nreturn previewEl;');
+        runner(function (sel) { return sel === '#bm-layout-preview' ? fakeEl : null; },
+               function (name) { restored.push(name); });
+        assert.strictEqual(recorded.length, 1, 'exactly one listener on the container');
+        assert.strictEqual(recorded[0].type, 'click');
+        var pill = { getAttribute: function (a) { return a === 'data-tab' ? 'flow' : null; } };
+        recorded[0].fn({ target: { closest: function (sel) { return sel === '.bm-lp-pill-hidden' ? pill : null; } } });
+        assert.deepStrictEqual(restored, ['flow'], 'a pill-borne click restores its tab');
+        recorded[0].fn({ target: { closest: function () { return null; } } });
+        assert.deepStrictEqual(restored, ['flow'], 'a click outside any hidden pill is ignored');
+        recorded[0].fn({ target: { closest: function (sel) { return sel === '.bm-lp-pill-hidden' ? { getAttribute: function () { return null; } } : null; } } });
+        assert.deepStrictEqual(restored, ['flow'], 'a pill without data-tab is ignored (defensive)');
+    });
+
+    // ── CSS ───────────────────────────────────────────────────────────────
+
+    it('hidden pills advertise clickability: cursor pointer + hover opacity lift', function() {
+        var css = getCss88();
+        assert.match(css, /\.bm-lp-pill-hidden\s*\{[^}]*cursor:\s*pointer/, 'hidden pills must get cursor:pointer');
+        assert.match(css, /\.bm-lp-pill-hidden:hover\s*\{[^}]*opacity/, 'hover must lift the dimming');
+    });
+
+    it('the + glyph escapes the strikethrough (inline-block) and turns amber on hover', function() {
+        var css = getCss88();
+        assert.match(css, /\.bm-lp-pill-add\s*\{[^}]*display:\s*inline-block/,
+            'inline-block is what keeps the + unstruck — text-decoration does not propagate into atomic inlines');
+        assert.match(css, /\.bm-lp-pill-hidden:hover\s+\.bm-lp-pill-add\s*\{[^}]*var\(--accent\)/,
+            'the + must go amber on hover, matching the reset-link hover idiom');
+    });
+
+    // ── Build-step lock: served dist copies are the src, verbatim ─────────
+
+    it('dist inspector.js is byte-identical to src (verbatim-copy build step)', function() {
+        assert.strictEqual(getSrc88(), fs.readFileSync(SRC_JS_88, 'utf8'));
+    });
+
+    it('dist inspector.css is byte-identical to the committed src intermediate', function() {
+        assert.strictEqual(getCss88(), fs.readFileSync(SRC_CSS_88, 'utf8'));
+    });
+
+});
+
+
+// ── 89 — footer memory gauge: the unfilled track must be visible ─────────────
+
+describe('89 - footer memory gauge: the unfilled track is visible in both themes (#B237)', function() {
+
+    // The gauge track (.bm-mem-bar-wrap) had background: var(--bg2) — the exact
+    // token .bm-footer uses for its own background — so the unfilled portion
+    // rendered invisible in BOTH themes, and a low fill (64 MB / 3.1 GB ≈ 2%)
+    // read as a floating green dot. The recessed-groove fix: the track sits on
+    // --bg3 (visibly lighter than the footer in dark, darker in light) with a
+    // theme-scoped inset shadow for depth. An inset box-shadow paints UNDER
+    // child content, so the groove shading shows only on the empty region —
+    // the fill covers it as it grows.
+
+    var CSS_89     = path.join(BM_DIR, 'inspector.css');
+    var SRC_CSS_89 = path.join(FW, 'core/asset/plugin/src/vendor/gina/inspector/css/inspector.css');
+    var SCSS_89    = path.join(FW, 'core/asset/plugin/src/vendor/gina/inspector/sass/inspector.scss');
+    var _scss89, _css89;
+    function getScss89() { return _scss89 || (_scss89 = fs.readFileSync(SCSS_89, 'utf8')); }
+    function getCss89()  { return _css89  || (_css89  = fs.readFileSync(SRC_CSS_89, 'utf8')); }
+
+    /**
+     * Extract one top-level rule block (selector at column 0, brace-free body —
+     * true for every block §89 pins, comments included).
+     * @inner
+     * @param   {string} src       Stylesheet text (scss or compiled css).
+     * @param   {string} selector  Escaped selector regex fragment.
+     * @returns {?string} The matched block, or null when absent.
+     */
+    function cssBlock89(src, selector) {
+        var m = src.match(new RegExp('^' + selector + '\\s*\\{[^}]*\\}', 'm'));
+        return m ? m[0] : null;
+    }
+
+    // ── Instrument control ────────────────────────────────────────────────
+
+    it('control: the block matcher can fail (bogus selector yields null)', function() {
+        assert.strictEqual(cssBlock89(getCss89(), '\\.bm-no-such-gauge'), null,
+            'a matcher that cannot miss proves nothing');
+    });
+
+    // ── Premises (the collision being fixed + the contrast it relies on) ──
+
+    it('premise: .bm-footer background is var(--bg2) — the surface the track sits on', function() {
+        var blk = cssBlock89(getCss89(), '\\.bm-footer');
+        assert.ok(blk && blk.indexOf('background: var(--bg2)') > -1,
+            'the footer bg is what the track must NOT share — if this token ever moves, re-evaluate the track contrast');
+    });
+
+    it('premise: both themes define --bg3 distinct from --bg2 (the contrast mechanism)', function() {
+        ['dark', 'light'].forEach(function (theme) {
+            var blk = cssBlock89(getCss89(), '\\[data-theme=' + theme + '\\]');
+            assert.ok(blk, theme + ' theme variables block must exist');
+            var bg2 = (blk.match(/--bg2:\s*([^;]+);/) || [])[1];
+            var bg3 = (blk.match(/--bg3:\s*([^;]+);/) || [])[1];
+            assert.ok(bg2 && bg3, theme + ' must define both --bg2 and --bg3');
+            assert.notStrictEqual(bg2.trim(), bg3.trim(),
+                theme + ': --bg3 must differ from --bg2, or the track vanishes again');
+        });
+    });
+
+    // ── Feature pins (scss is the authored source) ────────────────────────
+
+    it('scss: the track sits on var(--bg3), footer token gone, geometry untouched', function() {
+        var blk = cssBlock89(getScss89(), '\\.bm-mem-bar-wrap');
+        assert.ok(blk, 'main .bm-mem-bar-wrap block must exist');
+        assert.ok(blk.indexOf('background: var(--bg3)') > -1, 'track must sit on --bg3');
+        assert.ok(blk.indexOf('--bg2') < 0, 'the footer background token must be gone from the track block');
+        assert.ok(blk.indexOf('height: 6px') > -1 && blk.indexOf('border-radius: 3px') > -1
+            && blk.indexOf('overflow: hidden') > -1,
+            'visibility fix only — geometry must be unchanged');
+    });
+
+    it('scss: the track carries the recessed-groove inset shadow', function() {
+        var blk = cssBlock89(getScss89(), '\\.bm-mem-bar-wrap');
+        assert.ok(blk && blk.indexOf('box-shadow: inset 0 1px 2px rgba(0,0,0,.35)') > -1,
+            'the groove depth shadow must be on the track');
+    });
+
+    it('scss: the light theme softens the groove shadow (quoted attribute form)', function() {
+        var blk = cssBlock89(getScss89(), '\\[data-theme="light"\\] \\.bm-mem-bar-wrap');
+        assert.ok(blk && blk.indexOf('rgba(0,0,0,.12)') > -1,
+            '35% black on #dddde1 would read as a smudge — light theme needs its own softer shadow');
+    });
+
+    it('compiled css carries all three (sass-normalized rgba, unquoted [data-theme=light])', function() {
+        var main = cssBlock89(getCss89(), '\\.bm-mem-bar-wrap');
+        assert.ok(main && main.indexOf('background: var(--bg3)') > -1,
+            'compiled track must sit on --bg3 — a red here with green scss pins means the sass step was skipped');
+        assert.ok(main.indexOf('box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35)') > -1,
+            'compiled shadow must carry the dart-sass-normalized rgba form');
+        var light = cssBlock89(getCss89(), '\\[data-theme=light\\] \\.bm-mem-bar-wrap');
+        assert.ok(light && light.indexOf('rgba(0, 0, 0, 0.12)') > -1,
+            'compiled light override must exist in the UNQUOTED attribute form (sass strips the quotes)');
+    });
+
+    // ── Control: the fill is untouched ────────────────────────────────────
+
+    it('control: the fill severity classes are untouched (ok/warn/crit)', function() {
+        [['mem-ok', '--ok'], ['mem-warn', '--warn'], ['mem-crit', '--err']].forEach(function (pair) {
+            var blk = cssBlock89(getCss89(), '\\.bm-mem-bar\\.' + pair[0]);
+            assert.ok(blk && blk.indexOf('var(' + pair[1] + ')') > -1,
+                '.' + pair[0] + ' must still map to var(' + pair[1] + ') — the fix touches the track, never the fill');
+        });
+    });
+
+    // ── Build-step lock: served dist copy is the src, verbatim ────────────
+
+    it('dist inspector.css is byte-identical to the committed src intermediate', function() {
+        assert.strictEqual(fs.readFileSync(CSS_89, 'utf8'), fs.readFileSync(SRC_CSS_89, 'utf8'));
+    });
+
 });

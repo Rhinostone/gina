@@ -160,6 +160,16 @@ async function onExec() {
         shortVersion = shortVersion.join('.');
         setEnvVar('GINA_SHORT_VERSION', shortVersion);// jshint ignore:line
 
+        // Import shell-exported GINA_*/VENDOR_*/USER_* overrides into the
+        // framework environment BEFORE the home/settings/host resolution
+        // below (keep-mode: process.env stays intact, so filterArgs()'s
+        // sweep later in bootstrap keeps its move semantics and the
+        // post-sweep precedence is unchanged). Without this pass, an
+        // exported GINA_HOMEDIR / GINA_BIND_HOST / GINA_MQ_PORT was
+        // invisible to this block and took effect one command late — via
+        // the settings regeneration — or never.
+        importEnvVars(true);// jshint ignore:line
+
         home = getUserHome();// jshint ignore:line
         if ( typeof(getEnvVar('GINA_HOMEDIR')) == 'undefined') {// jshint ignore:line
             setEnvVar('GINA_HOMEDIR', home + '/.gina')// jshint ignore:line
@@ -175,7 +185,14 @@ async function onExec() {
         }
 
         settingsPath = _( homeVersionDirObj.toString() +'/settings.json', true );// jshint ignore:line
-        if ( new _(settingsPath).existsSync() ) {
+        // Tracked so the bootstrap regeneration below never seeds a FRESH
+        // home: on a first-ever read (no settings file yet) its
+        // `getEnvVar(...) || settings[...] || null` chains would write a
+        // null-laden settings.json that the handler-phase init then trusts
+        // instead of seeding proper defaults. Seeding belongs to the init
+        // machinery; the regeneration is for updating an EXISTING file.
+        var settingsFileExisted = new _(settingsPath).existsSync();// jshint ignore:line
+        if ( settingsFileExisted ) {
             settings = requireJSON(settingsPath);// jshint ignore:line
         }
 
@@ -332,7 +349,7 @@ async function onExec() {
     if (!settings) {
         settings = requireJSON(settingsPath);// jshint ignore:line
     }
-    if (isUpdateRequired && settings) {
+    if (isUpdateRequired && settings && settingsFileExisted) {
         console.debug('Updating debug settings ...');// jshint ignore:line
         settings['arch'] = getEnvVar('GINA_ARCH') || settings['arch'] || null;// jshint ignore:line
         settings['platform'] = getEnvVar('GINA_PLATFORM') || settings['platform'] || null;// jshint ignore:line

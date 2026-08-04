@@ -12,14 +12,23 @@ var src; // lazily loaded — avoids repeated readFileSync calls
 describe('01 - V8 arm64 regression: const not var for object rest destructuring', function() {
 
     it('source uses const (not var) for routing object rest destructuring', function() {
-        var src = fs.readFileSync(SOURCE, 'utf8');
+        // #B212 moved the map build to core/server.js's buildClientRoutingAssets;
+        // Slice 3 (#SPA1) then rebuilt the full-map cut as an allowlist, so the
+        // `{ _comment, middleware, ...clean }` rest-destructuring is gone with the
+        // denylist. The const-not-var V8 arm64 guard re-anchors on the SURVIVING
+        // rest-destructuring — the #B66 host/hostname drop, kept verbatim in the
+        // builder. The negative half is asserted on BOTH files so a `var` rest
+        // form cannot reappear in either.
+        var serverSrc = fs.readFileSync(path.join(require('../fw'), 'core/server.js'), 'utf8');
+        var isaacSrc  = fs.readFileSync(SOURCE, 'utf8');
         assert.ok(
-            /const\s*\{\s*_comment\s*,\s*middleware\s*,\s*\.\.\.clean\s*\}/.test(src),
-            'expected `const { _comment, middleware, ...clean }` — was changed from `var` to fix V8 arm64 hang'
+            /const\s*\{\s*host\s*,\s*hostname\s*,\s*\.\.\.cleanStripped\s*\}/.test(serverSrc),
+            'expected `const { host, hostname, ...cleanStripped }` — the rest-destructuring stays const (V8 arm64 hang guard)'
         );
         assert.ok(
-            !/var\s*\{\s*_comment\s*,\s*middleware\s*,\s*\.\.\.clean\s*\}/.test(src),
-            '`var { _comment, middleware, ...clean }` must not appear — causes V8 hang on arm64 Node 25'
+            !/var\s*\{\s*[^}]*\.\.\.[a-zA-Z]/.test(serverSrc)
+            && !/var\s*\{\s*[^}]*\.\.\.[a-zA-Z]/.test(isaacSrc),
+            'a `var { ..., ...rest }` object rest-destructuring must not appear — causes V8 hang on arm64 Node 25'
         );
     });
 
@@ -2943,9 +2952,15 @@ describe('15b - #B65 reverse-proxy host context: classification, three-topology 
 describe('16 - #B66 host-stripped routing.json for proxied clients source structure', function() {
 
     function getSrc() { return src || (src = fs.readFileSync(SOURCE, 'utf8')); }
+    // #B212 — the map BUILD (full + stripped, #COMPLY1 strip included) moved to
+    // core/server.js's buildClientRoutingAssets so both engines serve the same
+    // maps; isaac keeps the file write + precompression + serve fast-path below.
+    // The build-shape pins therefore read core/server.js now.
+    var serverSrc;
+    function getServerSrc() { return serverSrc || (serverSrc = fs.readFileSync(path.join(require('../fw'), 'core/server.js'), 'utf8')); }
 
     it('boot-builds a host-stripped variant by cloning the full map and dropping host+hostname', function() {
-        var s = getSrc();
+        var s = getServerSrc();
         assert.ok(s.indexOf('var _routingStripped = JSON.clone(_routing);') > -1,
             'expected _routingStripped cloned from the (already comment/middleware-stripped) full map');
         assert.ok(s.indexOf('const { host, hostname, ...cleanStripped } = _routingStripped[_routingStrippedKeys[si]];') > -1,
@@ -2953,7 +2968,7 @@ describe('16 - #B66 host-stripped routing.json for proxied clients source struct
     });
 
     it('keeps webroot in the stripped variant (never destructured away — load-bearing for client toUrl)', function() {
-        var s = getSrc();
+        var s = getServerSrc();
         assert.ok(s.indexOf('const { host, hostname, ...cleanStripped }') > -1);
         assert.ok(s.indexOf('const { host, hostname, webroot,') < 0,
             'webroot must NOT be dropped — the client toUrl path relies on route.webroot');
@@ -2987,11 +3002,11 @@ describe('16 - #B66 host-stripped routing.json for proxied clients source struct
             'the proxied branch must select the stripped asset');
     });
 
-    it('marks the proxied (stripped) response private, RAW (full) public', function() {
+    it('marks the proxied (stripped) response private, RAW (full) public — revalidating since Slice 3 (#SPA1)', function() {
         var s = getSrc();
         assert.ok(
-            s.indexOf("response.setHeader('cache-control', ( request._ginaIsProxyHost === true ) ? 'private, max-age=86400' : 'public, max-age=86400');") > -1,
-            'expected a private-if-proxied / public-if-raw cache-control branch (a shared cache must not cross-serve variants)');
+            s.indexOf("response.setHeader('cache-control', ( request._ginaIsProxyHost === true ) ? 'private, no-cache' : 'public, no-cache');") > -1,
+            'expected a private-if-proxied / public-if-raw cache-control branch with no-cache (ETag revalidation — the 24h staleness window is closed)');
     });
 
 });
@@ -3010,7 +3025,8 @@ describe('16b - #B66 host-stripped routing.json: pure-logic replica', function()
         return a;
     }
     function cacheControl(isProxy) {
-        return (isProxy === true) ? 'private, max-age=86400' : 'public, max-age=86400';
+        // Slice 3 (#SPA1): no-cache + per-variant ETag — revalidate each boot
+        return (isProxy === true) ? 'private, no-cache' : 'public, no-cache';
     }
 
     // neutral fixture route (internal host+port), framework-generic
@@ -3051,9 +3067,9 @@ describe('16b - #B66 host-stripped routing.json: pure-logic replica', function()
         assert.equal(selectAsset(true, full, undefined).file, 'routing.json');
     });
 
-    it('cache-control: private when proxied, public when raw', function() {
-        assert.equal(cacheControl(true),  'private, max-age=86400');
-        assert.equal(cacheControl(false), 'public, max-age=86400');
+    it('cache-control: private when proxied, public when raw (no-cache — Slice 3 revalidation)', function() {
+        assert.equal(cacheControl(true),  'private, no-cache');
+        assert.equal(cacheControl(false), 'public, no-cache');
     });
 
     it('SUBTRACT: without the strip, the internal host survives in the served blob (the leak)', function() {
@@ -3092,6 +3108,15 @@ describe('17 - #RC5 Cache-Status detail + RFC miss form + stats L2 fold — sour
         assert.ok(s.indexOf("+= '; uri-miss'") < 0, 'the bare uri-miss append must not return');
     });
 
+    it('#B238: the identifier seeds from the boot-resolved stamp, never a literal', function() {
+        var s = getSrc();
+        // The seeding reads the server.js-stamped scalar (sibling of _cacheIsEnabled).
+        assert.match(s, /cacheStatus\s*=\s*server\._cacheName;/);
+        // Window-independent negative: the literal seeding is globally gone (the
+        // assignment shape — comments name the old value without this prefix form).
+        assert.ok(s.indexOf("cacheStatus = 'gina-cache'") < 0, 'the literal seeding must not return');
+    });
+
     it('/_gina/cache/stats folds store.health() as an ADDITIVE l2 field, after the admin gate', function() {
         var s = getSrc();
         assert.match(s, /cacheStatsPayload\.l2\s*=\s*process\.gina\._renderCacheStore\.health\(\)/);
@@ -3111,8 +3136,11 @@ describe('17b - #RC5 isaac cacheStatus build — pure-logic replica', function()
     // Faithful replica of the isaac pre-routing read's cacheStatus construction
     // (server.isaac.js hit path: '; hit' + ttl/max-age + '; detail=' append) and
     // the miss form. `now` is injected so the arithmetic is deterministic.
-    function buildHitStatus(cachedContentObj, now) {
-        var cacheStatus = 'gina-cache';
+    // #B238 — the real seeding reads the boot-resolved `server._cacheName` stamp;
+    // `cacheName` injects it here, with `|| 'gina-cache'` compressing the
+    // resolveCacheName default into the replica's one seam (default arms unchanged).
+    function buildHitStatus(cachedContentObj, now, cacheName) {
+        var cacheStatus = cacheName || 'gina-cache';
         cacheStatus += '; hit';
         var cacheNow = now;
         if ( cachedContentObj.sliding === true ) {
@@ -3138,8 +3166,8 @@ describe('17b - #RC5 isaac cacheStatus build — pure-logic replica', function()
         return cacheStatus;
     }
 
-    function buildMissStatus() {
-        var cacheStatus = 'gina-cache';
+    function buildMissStatus(cacheName) {
+        var cacheStatus = cacheName || 'gina-cache';
         cacheStatus += '; fwd=uri-miss';
         return cacheStatus;
     }
@@ -3174,5 +3202,13 @@ describe('17b - #RC5 isaac cacheStatus build — pure-logic replica', function()
 
     it('the miss form is gina-cache; fwd=uri-miss', function() {
         assert.equal(buildMissStatus(), 'gina-cache; fwd=uri-miss');
+    });
+
+    it('#B238: a configured identifier is the only byte that moves — hit and miss', function() {
+        var now = Date.now();
+        var s = buildHitStatus({ fromMemory: true, ttl: 60, createdAt: new Date(now - 10000) }, now, 'cache');
+        assert.equal(s, 'cache; hit; ttl=50; detail=memory',
+            'identifier swapped, params byte-identical to the default wire');
+        assert.equal(buildMissStatus('cache'), 'cache; fwd=uri-miss');
     });
 });

@@ -1,0 +1,435 @@
+<script{% if page.cspNonce %} nonce="{{ page.cspNonce }}"{% endif %}>
+(function () {
+    'use strict';
+    var d = window.__ginaData;
+    if (!d || !d.user) return;
+
+    // ── Inspector per-tab data channel (#INS) ─────────────────────────────
+    // COOP can sever window.opener for the Inspector popup, dropping the
+    // Inspector onto bundle-global channels (the shared localStorage slot +
+    // the worker-wide /_gina/agent SSE) that ANY tab's render or background
+    // XHR clobbers. A per-tab BroadcastChannel — keyed by a sessionStorage id
+    // that is stable across THIS tab's navigations — lets the Inspector bind
+    // to this tab only. We publish the tab's current __ginaData here (page
+    // load) and on every ginaToolbar.update()/restore() (in-tab XHR/pushState
+    // renders), so the bound Inspector follows this tab and ignores others.
+    var _ginaTabId = null;
+    try {
+        _ginaTabId = sessionStorage.getItem('__gina_tab_id');
+        if (!_ginaTabId) {
+            _ginaTabId = 'gt' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+            sessionStorage.setItem('__gina_tab_id', _ginaTabId);
+        }
+    } catch (e) { _ginaTabId = null; }
+    var _ginaBC = null;
+    try {
+        if (_ginaTabId && typeof BroadcastChannel !== 'undefined') {
+            _ginaBC = new BroadcastChannel('gina-inspector-' + _ginaTabId);
+        }
+    } catch (e) { _ginaBC = null; }
+    function _ginaPublish() {
+        if (!_ginaBC) return;
+        // #B231 — advertise this tab's channel id so a ?ch=-less embedded
+        // Inspector (direct URL / bookmark / a window predating bound mode)
+        // can ADOPT bound mode instead of the bundle-global fallback.
+        // Last-writer-wins across tabs; adoption is guarded by a liveness
+        // handshake on the reader side (a stale advert never strands it).
+        try { localStorage.setItem('__gina_last_tab_ch', _ginaTabId); } catch (e) {}
+        try { _ginaBC.postMessage({ type: 'data', payload: window.__ginaData }); } catch (e) {}
+    }
+    // A freshly-opened Inspector posts {type:'request'} (BroadcastChannel does
+    // not replay past messages) — reply with the current payload.
+    if (_ginaBC) {
+        _ginaBC.onmessage = function (ev) {
+            if (ev && ev.data && ev.data.type === 'request') _ginaPublish();
+        };
+    }
+
+    var env     = d.user.environment || {};
+    var data    = d.user.data        || {};
+    var bundle  = env.bundle  || '?';
+    var envName = env.env     || '?';
+    var dot     = data.error  ? '#e74c3c' : '#2ecc71';
+
+    // ── Inspector secret redaction (#R7) ──────────────────────────────────
+    // Matches the server-side rules in lib/inspector-redact. Strips secret-
+    // looking fields from anything passed to ginaToolbar.update() before it
+    // touches window.__ginaData or localStorage. Patterns/types/replacement
+    // come from window.__ginaData.gina.inspectorRedact (server-injected).
+    var _rdc      = (d.gina && d.gina.inspectorRedact) || {};
+    var _rdcRepl  = (typeof _rdc.replacement === 'string') ? _rdc.replacement : '[redacted]';
+    var _rdcTypes = {};
+    if (Array.isArray(_rdc.types)) {
+        for (var _ti = 0; _ti < _rdc.types.length; _ti++) {
+            _rdcTypes[String(_rdc.types[_ti]).toLowerCase()] = true;
+        }
+    } else {
+        _rdcTypes['password'] = true;
+    }
+    // Patterns are anchored (`^(?:...)$`) and tested against tokens, not raw
+    // substrings. So `apikey` covers `apiKey` / `api_key` / `apikey` while
+    // `companyName` no longer false-positives on `pan`. Mirrors the server-side
+    // DEFAULT_PATTERNS in lib/inspector-redact — keep both in sync.
+    var _rdcRe = [];
+    var _rdcSrc = Array.isArray(_rdc.patterns) ? _rdc.patterns
+        : ['password','passwd','pwd','secret','token','apikey','cvv','cvc','ccv','pan','ssn','authorization','credentials','privatekey'];
+    for (var _ri = 0; _ri < _rdcSrc.length; _ri++) {
+        try { _rdcRe.push(new RegExp('^(?:' + _rdcSrc[_ri] + ')$', 'i')); } catch (e) { /* skip */ }
+    }
+    // Anchored both ends — applied against the LAST token, not the raw key.
+    // Keys whose final token is a metadata word (rule/policy/config/etc.)
+    // describe validation, not user input. Mirrors the server-side
+    // NON_SECRET_SUFFIX regex in lib/inspector-redact.
+    var _rdcNonSecret = /^(rule|rules|policy|policies|validator|config|configuration|settings|setting|meta|metadata|format|requirements|strength|constraint|constraints|options|option|schema|definition|definitions|spec|specs)$/i;
+    function _rdcTokenize(k) {
+        if (typeof k !== 'string' || k.length === 0) return [];
+        var spaced = k
+            .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+            .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2');
+        var parts = spaced.split(/[\s_\-.\[\]:\/]+/);
+        var out = [];
+        for (var i = 0; i < parts.length; i++) {
+            if (parts[i].length > 0) out.push(parts[i].toLowerCase());
+        }
+        return out;
+    }
+    function _rdcKeyHit(k) {
+        if (typeof k !== 'string') return false;
+        var tokens = _rdcTokenize(k);
+        if (tokens.length === 0) return false;
+        if (_rdcNonSecret.test(tokens[tokens.length - 1])) return false;
+        var joined = tokens.join('');
+        for (var i = 0; i < _rdcRe.length; i++) {
+            var re = _rdcRe[i];
+            if (re.test(joined)) return true;
+            for (var t = 0; t < tokens.length; t++) {
+                if (re.test(tokens[t])) return true;
+            }
+        }
+        return false;
+    }
+    // Build a Set of secret field names from the form DOM (input[type=password]
+    // etc.). Lets us redact by actual input type, not just by field-name regex.
+    function _rdcDomSecrets(formId) {
+        var hits = {};
+        try {
+            var doc = (window.opener && window.opener.document) || document;
+            var form = formId ? doc.getElementById(formId) : null;
+            var els  = form ? form.querySelectorAll('input,select,textarea') : doc.querySelectorAll('input');
+            for (var i = 0; i < els.length; i++) {
+                var t = (els[i].type || '').toLowerCase();
+                var n = els[i].name || els[i].id || '';
+                if (n && _rdcTypes[t]) hits[n] = true;
+            }
+        } catch (e) { /* cross-origin or detached opener */ }
+        return hits;
+    }
+    function _rdcWalk(v, depth, seen, domHits) {
+        if (depth > 50) return v;
+        if (v === null || typeof v !== 'object') return v;
+        if (seen.indexOf(v) !== -1) return '[circular]';
+        seen.push(v);
+        if (Array.isArray(v)) {
+            var arr = new Array(v.length);
+            for (var i = 0; i < v.length; i++) arr[i] = _rdcWalk(v[i], depth + 1, seen, domHits);
+            return arr;
+        }
+        var out = {};
+        var ks  = Object.keys(v);
+        for (var k = 0; k < ks.length; k++) {
+            var key = ks[k];
+            var val = v[key];
+            if (_rdcKeyHit(key) || (domHits && domHits[key])) {
+                // Only primitive leaf values are redacted. Object/array values
+                // under a secret-like key are metadata (validation rules, error
+                // maps, validator specs keyed by form field name like
+                // `account[password]`) — walk into them so nested primitive
+                // secrets still get caught, but the rule structure itself
+                // passes through.
+                if (val === null || typeof val === 'undefined') {
+                    out[key] = val;
+                } else if (typeof val === 'object') {
+                    out[key] = _rdcWalk(val, depth + 1, seen, domHits);
+                } else {
+                    out[key] = _rdcRepl;
+                }
+            } else {
+                out[key] = _rdcWalk(val, depth + 1, seen, domHits);
+            }
+        }
+        return out;
+    }
+    function _rdc_redact(value, formId) {
+        var domHits = formId ? _rdcDomSecrets(formId) : null;
+        return _rdcWalk(value, 0, [], domHits);
+    }
+
+    // ── Component observability (#CC6) ────────────────────────────────────
+    // Census: instances per custom-element tag, split defined/awaiting-upgrade.
+    // An undefined custom tag (typo'd name, missing or failed definition
+    // script) is otherwise a perfectly silent failure — an inert inline
+    // element. Collected in-page because the Inspector SPA has no DOM access
+    // in bound/COOP mode; rides additively as user.view.components.
+    function _ginaComponentCensus() {
+        var census = { defined: {}, undefined: {}, undefinedCount: 0 };
+        try {
+            var totals = {};
+            var all = document.querySelectorAll('*');
+            for (var ci = 0; ci < all.length; ci++) {
+                var tag = all[ci].tagName ? all[ci].tagName.toLowerCase() : '';
+                if (tag.indexOf('-') === -1) continue;
+                totals[tag] = (totals[tag] || 0) + 1;
+            }
+            // the platform's own awaiting-upgrade selector
+            var pending = document.querySelectorAll(':not(:defined)');
+            for (var cp = 0; cp < pending.length; cp++) {
+                var ptag = pending[cp].tagName ? pending[cp].tagName.toLowerCase() : '';
+                if (ptag.indexOf('-') === -1) continue;
+                census.undefined[ptag] = (census.undefined[ptag] || 0) + 1;
+                census.undefinedCount++;
+            }
+            for (var ct in totals) {
+                var pendingCount = census.undefined[ct] || 0;
+                if (totals[ct] > pendingCount) census.defined[ct] = totals[ct] - pendingCount;
+            }
+        } catch (e) { /* best-effort — never break the page */ }
+        return census;
+    }
+    function _ginaAttachCensus() {
+        try {
+            var u = window.__ginaData && window.__ginaData.user;
+            if (u && u.view && typeof u.view === 'object') {
+                u.view.components = _ginaComponentCensus();
+            }
+        } catch (e) {}
+    }
+    var _ginaCensusTimer = null;
+    // XHR/popin updates publish BEFORE the fragment lands in the DOM — refresh
+    // the census (and republish) once, shortly after, so injected components
+    // and their upgrade state are reflected.
+    function _ginaScheduleCensusRefresh() {
+        if (_ginaCensusTimer) return;
+        _ginaCensusTimer = setTimeout(function () {
+            _ginaCensusTimer = null;
+            _ginaAttachCensus();
+            _ginaPublish();
+        }, 150);
+    }
+
+    // ── Component protocol events (#CC6) ──────────────────────────────────
+    // Dev-only visibility of composed, bubbling CustomEvents following the
+    // component convention `<tag>:<verb>` (dashed tag prefix — the framework's
+    // own dot-namespaced internal events never match). Event name + target +
+    // timestamp always ride; the event `detail` VALUES ride only when the
+    // events capture gate is opted in server-side (whispered as
+    // gina.inspectorEventsCaptureArgs) — arbitrary detail cannot be
+    // auto-redacted, so values stay off by default, and captured values still
+    // pass the redaction walk above.
+    var _ginaEvtBuf = [];
+    var _ginaEvtMax = 200;
+    var _ginaEvtCaptureDetail = !!(d.gina && d.gina.inspectorEventsCaptureArgs === true);
+    var _ginaEvtName = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)+:./;
+    var _ginaEvtTimer = null;
+    function _ginaEvtPublish() {
+        if (_ginaEvtTimer) return;
+        _ginaEvtTimer = setTimeout(function () {
+            _ginaEvtTimer = null;
+            try {
+                var u = window.__ginaData && window.__ginaData.user;
+                if (u) u.clientEvents = _ginaEvtBuf;
+                _ginaPublish();
+            } catch (e) {}
+        }, 250);
+    }
+    try {
+        var _ginaNativeDispatch = EventTarget.prototype.dispatchEvent;
+        EventTarget.prototype.dispatchEvent = function (ev) {
+            try {
+                if (ev && ev.bubbles && ev.composed && typeof ev.type === 'string'
+                    && _ginaEvtName.test(ev.type)) {
+                    var _evEntry = {
+                        name   : ev.type,
+                        t      : Date.now(),
+                        target : (this && this.tagName)
+                            ? String(this.tagName).toLowerCase() + (this.id ? '#' + this.id : '')
+                            : 'non-element'
+                    };
+                    if (_ginaEvtCaptureDetail && typeof ev.detail !== 'undefined') {
+                        try { _evEntry.meta = _rdc_redact(ev.detail, null); }
+                        catch (x) { _evEntry.meta = '[uncapturable]'; }
+                    }
+                    _ginaEvtBuf.push(_evEntry);
+                    if (_ginaEvtBuf.length > _ginaEvtMax) _ginaEvtBuf.shift();
+                    _ginaEvtPublish();
+                }
+            } catch (e) { /* observability must never break dispatch */ }
+            return _ginaNativeDispatch.apply(this, arguments);
+        };
+    } catch (e) { /* prototype not writable — skip the wrap */ }
+
+    // ── ginaToolbar shim ──────────────────────────────────────────────────
+    // gina.min.js is a stale build that creates its own window.ginaToolbar
+    // with a loadData function that accesses removed DOM elements
+    // (#gina-toolbar-json). We use Object.defineProperty to lock our shim
+    // so gina.min.js cannot overwrite it on DOMContentLoaded.
+    var _origData = null;
+    var _shim = {
+        update: function (section, sectionData) {
+            if (!window.__ginaData) return;
+            var u = window.__ginaData.user;
+            var g = window.__ginaData.gina;
+            if (!u || !g) return;
+
+            // Save original state for restore (once)
+            if (!_origData) {
+                try { _origData = JSON.parse(JSON.stringify({ data: u.data, view: u.view })); } catch (e) {}
+            }
+
+            if (section === 'data-xhr' || section === 'view-xhr') {
+                if (sectionData) {
+                    var _safe = _rdc_redact(sectionData, null);
+                    u[section] = _safe;
+                    g[section] = _safe;
+                } else {
+                    delete u[section];
+                    delete g[section];
+                }
+            } else if (section === 'el-xhr') {
+                u['el-xhr'] = _rdc_redact(sectionData, null);
+            } else if (section === 'forms') {
+                if (typeof sectionData === 'object' && sectionData !== null && sectionData.id) {
+                    if (!u.forms) u.forms = {};
+                    if (!u.forms[sectionData.id]) u.forms[sectionData.id] = {};
+                    var fd = u.forms[sectionData.id];
+                    var _safeForm = _rdc_redact(sectionData, sectionData.id);
+                    var fk = Object.keys(_safeForm);
+                    for (var i = 0; i < fk.length; i++) {
+                        if (fk[i] === 'id') continue;
+                        fd[fk[i]] = _safeForm[fk[i]];
+                    }
+                }
+            }
+
+            // #CC6 — refresh the component census with the update, and again
+            // shortly after (an XHR fragment lands in the DOM after this publish)
+            _ginaAttachCensus();
+            _ginaScheduleCensusRefresh();
+
+            // Sync localStorage for the Inspector's fallback channel
+            try { localStorage.setItem('__ginaData', JSON.stringify(window.__ginaData)); } catch (e) {}
+            _ginaPublish();
+        },
+        restore: function () {
+            if (!window.__ginaData) return;
+            var u = window.__ginaData.user;
+            if (!u) return;
+            delete u['data-xhr'];
+            delete u['view-xhr'];
+            delete u['el-xhr'];
+            if (_origData) {
+                try {
+                    u.data = JSON.parse(JSON.stringify(_origData.data));
+                    u.view = JSON.parse(JSON.stringify(_origData.view));
+                } catch (e) {}
+            }
+            try { localStorage.setItem('__ginaData', JSON.stringify(window.__ginaData)); } catch (e) {}
+            _ginaPublish();
+        },
+        hasParsedUrls: false
+    };
+
+    // Lock with defineProperty — gina.min.js DOMContentLoaded init will
+    // try window.ginaToolbar = new GinaToolbar() which triggers our setter
+    // that silently absorbs the assignment while preserving our update/restore.
+    try {
+        Object.defineProperty(window, 'ginaToolbar', {
+            get: function () { return _shim; },
+            set: function (v) {
+                // Absorb gina.min.js's assignment without overwriting shim
+                if (v && typeof v === 'object') {
+                    var keys = Object.keys(v);
+                    for (var i = 0; i < keys.length; i++) {
+                        var k = keys[i];
+                        if (k !== 'update' && k !== 'restore') {
+                            _shim[k] = v[k];
+                        }
+                    }
+                }
+            },
+            configurable: true,
+            enumerable: true
+        });
+    } catch (e) {
+        window.ginaToolbar = _shim;
+    }
+
+    // #CC6 — the initial component census rides the first publish
+    _ginaAttachCensus();
+    // Publish data for Inspector via localStorage (works regardless of opener)
+    try { localStorage.setItem('__ginaData', JSON.stringify(d)); } catch (e) {}
+    _ginaPublish();
+    var webroot = env.webroot || '/';
+    if (webroot.charAt(webroot.length - 1) !== '/') webroot += '/';
+    var el      = document.createElement('div');
+    el.id       = '__gina-statusbar';
+    var sr      = el.attachShadow({ mode: 'open' });
+    sr.innerHTML = '<style>'
+        + '#b { position: fixed; bottom: 0; right: 0; z-index: 2147483647;'
+        + '  display: flex; align-items: center; gap: 6px;'
+        + '  padding: 3px 8px; font: 11px/1.4 monospace;'
+        + '  background: rgba(0,0,0,.75); color: #eee;'
+        + '  border-radius: 4px 0 0 0; cursor: default; }'
+        + '.d { width: 8px; height: 8px; border-radius: 50%;'
+        + '  flex-shrink: 0; background: ' + dot + '; }'
+        + 'a { color: #adf; text-decoration: none; cursor: pointer; }'
+        + 'a:hover { text-decoration: underline; }'
+        + '</style>'
+        + '<div id="b">'
+        + '<span class="d"></span>'
+        + '<span>' + bundle + '@' + envName + '</span>'
+        + '<a id="insp">Inspector &#8599;</a>'
+        + '</div>';
+    // Standalone Inspector URL — set in bundle settings.json as
+    // `inspector.url` (e.g. "http://localhost:4200/inspector/"). When present,
+    // the statusbar link opens the standalone SPA in a new tab with
+    // ?target=<this-origin+webroot>. When absent, falls back to the embedded
+    // same-origin popup at {webroot}/_gina/inspector/ (legacy behaviour).
+    var _standaloneUrl = (window.__ginaData && window.__ginaData.gina
+        && window.__ginaData.gina.inspectorUrl) ? window.__ginaData.gina.inspectorUrl : null;
+    var _embeddedUrl   = webroot + '_gina/inspector/';
+    function inject() {
+        if (document.body) document.body.appendChild(el);
+        var link = sr.getElementById('insp');
+        if (link) link.addEventListener('click', function (ev) {
+            ev.preventDefault();
+            if (_standaloneUrl) {
+                var _base   = _standaloneUrl.replace(/\/+$/, '') + '/';
+                var _target = location.origin + webroot.replace(/\/$/, '');
+                window.open(_base + '?target=' + encodeURIComponent(_target), '_blank');
+                return;
+            }
+            var w = Math.round(screen.availWidth / 3);
+            var h = screen.availHeight;
+            var left = screen.availWidth - w;
+            var top  = 0;
+            try {
+                var geo = JSON.parse(localStorage.getItem('__gina_inspector_geometry'));
+                if (geo && geo.w > 100 && geo.h > 100) {
+                    w = geo.w; h = geo.h; left = geo.x; top = geo.y;
+                }
+            } catch (e) {}
+            window.open(
+                _embeddedUrl + (_ginaTabId ? '?ch=' + encodeURIComponent(_ginaTabId) : ''),
+                'gina-inspector',
+                'width=' + w + ',height=' + h + ',left=' + left + ',top=' + top
+                + ',menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes'
+            );
+        });
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', inject);
+    } else {
+        inject();
+    }
+}());
+</script>
