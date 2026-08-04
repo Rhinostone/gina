@@ -11353,17 +11353,38 @@ function ValidatorPlugin(rules, data, formId, culture) {
     }
 
     /**
-     * #A11Y1 (slice 4) — lazily create one visually-hidden aria-live="polite" status region per
-     * form and announce a blur-time committed error through it. A CSS :user-invalid display toggle
-     * is not reliably announced by screen readers, and on blur the field has lost focus so its own
-     * aria-invalid / aria-errormessage are not re-read; the polite region decouples the announcement
-     * from visual display. Submit-time errors use focus (see onValidate), not this region.
+     * #A11Y2 — create (or recover) a form's visually-hidden polite status region WITHOUT
+     * writing to it. Split out of announceA11yError so the region can exist LONG before the
+     * first error: a region that is inserted and populated in the same tick reaches assistive
+     * tech as a single mutation batch, which is commonly never spoken, so the very first
+     * announcement per form — the one that matters most — was the one most likely lost.
+     * bindForm calls this at bind time, which is what makes that first error audible.
+     *
+     * The region is a CHILD OF THE FORM deliberately. A popin renders its form inside a native
+     * `<dialog>` opened with showModal(), which leaves everything outside the top layer inert;
+     * a body-level region would sit in that inert subtree and go unspoken for exactly the forms
+     * that live in popins. Keeping it inside the form keeps it inside the dialog. The price is
+     * that a subtree replacement (a popin re-render's `innerHTML =`, or a nav fragment swap)
+     * destroys it — hence create-OR-RECOVER, and hence the deferred first write in
+     * announceA11yError, which is what stops a recovery from silently repeating the defect.
+     *
+     * The bookkeeping flag lives on the element rather than in a module-scope map so it dies
+     * WITH the region: a destroyed region leaves no stale entry behind, and no form id keeps
+     * an unbounded map alive. Browser-only, like readCsrfCookie — this engine is shared with
+     * the server form-body path, which has no document.
+     *
+     * @inner
      * @param {object} $form - the HTMLFormElement the region belongs to
-     * @param {string} text - the error text to announce
-     * @returns {object|null} the live-region element, or null when nothing was announced
+     * @returns {object|null} the live-region element, or null outside a browser document
+     * @example
+     * // at bind time: the region is in the a11y tree before any error can occur
+     * ensureA11yLiveRegion($form.target);
      */
-    var announceA11yError = function($form, text) {
-        if ( !$form || !text ) return null;
+    var ensureA11yLiveRegion = function($form) {
+        if ( !$form ) return null;
+        if ( typeof(document) === 'undefined' || !document || typeof(document.getElementById) !== 'function' ) {
+            return null;
+        }
         var _fid    = ( typeof($form.id) != 'undefined' && $form.id ) ? $form.id : ( $form.getAttribute('id') || 'form' );
         var _liveId = 'gina-aria-live-' + _fid;
         var _live   = document.getElementById(_liveId);
@@ -11375,7 +11396,53 @@ function ValidatorPlugin(rules, data, formId, culture) {
             _live.setAttribute('aria-atomic', 'true');
             _live.className = 'gina-visually-hidden';
             _live.style.cssText = 'position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0;';
+            _live.ginaA11yFresh = true;
             $form.appendChild(_live);
+        } else if ( _live.parentNode !== $form ) {
+            // Same id, different form node — a re-render replaced the form, or two forms share
+            // an id. Re-home it so the region always sits inside the form that announces, which
+            // is the property the inert reasoning above depends on; a move is a fresh insertion.
+            _live.ginaA11yFresh = true;
+            $form.appendChild(_live);
+        }
+        return _live;
+    };
+
+    /**
+     * #A11Y1 (slice 4) — announce a blur-time committed error through the region created at
+     * bind time. A CSS :user-invalid display toggle is not reliably announced by screen
+     * readers, and on blur the field has lost focus so its own aria-invalid /
+     * aria-errormessage are not re-read; the polite region decouples the announcement
+     * from visual display. Submit-time errors use focus (see onValidate), not this region.
+     *
+     * #A11Y2 — when the region had to be created (or re-homed) HERE rather than at bind time,
+     * the insertion and this write would land in the same tick and likely never be spoken, so
+     * that first write is deferred by one macrotask. Only the fresh case defers; an already
+     * bound region writes synchronously, exactly as before. While a deferred write is pending
+     * a later call replaces the pending text, so the LATEST error wins and a stale first
+     * message can never land on top of it. The timer re-enters this function, which then takes
+     * the synchronous branch — keeping exactly ONE textContent write site.
+     *
+     * @param {object} $form - the HTMLFormElement the region belongs to
+     * @param {string} text - the error text to announce
+     * @returns {object|null} the live-region element, or null when nothing was announced
+     * @example
+     * announceA11yError($form, 'This field is required');
+     */
+    var announceA11yError = function($form, text) {
+        if ( !$form || !text ) return null;
+        var _live = ensureA11yLiveRegion($form);
+        if ( !_live ) return null;
+        if ( _live.ginaA11yFresh ) {
+            _live.ginaA11yPending = text;
+            if ( !_live.ginaA11yTimer ) {
+                _live.ginaA11yTimer = setTimeout(function() {
+                    _live.ginaA11yTimer = null;
+                    _live.ginaA11yFresh = false;
+                    announceA11yError($form, _live.ginaA11yPending);
+                }, 0);
+            }
+            return _live;
         }
         _live.textContent = text;
         return _live;
@@ -16291,6 +16358,13 @@ function ValidatorPlugin(rules, data, formId, culture) {
         } catch(err) {
             throw new Error('Validator::bindForm($target, customRule) could not bind form `'+ $target +'`\n'+err.stack );
         }
+
+        // #A11Y2 — stand the polite live region up HERE, at bind time, rather than lazily on the
+        // first error. Creating and populating it in one tick reaches assistive tech as a single
+        // mutation batch that is commonly never spoken, so the first announcement per form used to
+        // be the one most likely lost. Every registration path funnels through bindForm, so this
+        // one call covers them all. Announcing stays announceA11yError's job; this only creates.
+        ensureA11yLiveRegion($target);
 
         // console.debug('binding for: '+ _id);
         var withRules = false, rule = null, evt = '', proceed = null;

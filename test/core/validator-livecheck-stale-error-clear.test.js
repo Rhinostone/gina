@@ -242,8 +242,18 @@ describe('04 - #B136 dist fidelity: both copies reach the bundle', function () {
         // valid+non-empty guard immediately followed by the clear loop.
         // Pre-fix artifact: 0 (every other .errors.count()>0 site is followed
         // by && / ?, never a for-in).
-        // Wrap-agnostic at every token boundary (the case-coercion §04.2 lesson).
-        var m = distMin.match(/\.errors\.count\(\)>0\)\s*\{?\s*for\s*\(/g);
+        //
+        // Wrap-PROOF by normalisation, not by enumerating \s*. Closure breaks
+        // minified lines at a fixed column, so ANY upstream byte change shifts
+        // every downstream wrap — a newline can land mid-token and blind a pin
+        // that tolerates whitespace at all the OTHER boundaries. That is a
+        // false negative (the pin stops seeing a match that is really there),
+        // so the shape is matched against a whitespace-stripped copy instead.
+        // Measured when #A11Y2 grew the bundle: the wrap moved into
+        // `count()>` + `0`, and the two live copies wrap at DIFFERENT
+        // boundaries, so patching one boundary would not have held.
+        var flat = distMin.replace(/\s+/g, '');
+        var m = flat.match(/\.errors\.count\(\)>0\)\{?for\(/g);
         assert.ok(m && m.length === 2,
             'expected the stale-clear guard+loop shape twice in the minified bundle, got ' + (m ? m.length : 0));
     });
