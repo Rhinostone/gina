@@ -129,7 +129,10 @@ describe('02 - culture threading source pins (main.js)', function () {
 
     it('forwards culture through the dispatch and both server FormValidator sites', function () {
         assert.ok(MAIN_SRC.indexOf('return backendInit(rules, data, formId, culture)') >= 0, 'dispatch forwards culture');
-        assert.ok(MAIN_SRC.indexOf('return validate($form, fields, null, instance.rules, null, culture)') >= 0, 'form-body path forwards culture');
+        // REALIGNED 2026-08-04 (approved): #B241 restructured backendInit's form-body
+        // call from a direct `return` to an assignment (the alias restore runs before
+        // returning) — same call site, same argument list, culture still forwarded.
+        assert.ok(MAIN_SRC.indexOf('var backendResult = validate($form, fields, null, instance.rules, null, culture);') >= 0, 'form-body path forwards culture');
         assert.ok(MAIN_SRC.indexOf('return new FormValidator(fields, undefined, undefined, undefined, culture)') >= 0, '"by hand" 293 site threads culture');
         assert.ok(MAIN_SRC.indexOf('d = new FormValidator(fields, null, xhrOptions, undefined, culture);') >= 0, 'validate 7149 site threads culture');
     });

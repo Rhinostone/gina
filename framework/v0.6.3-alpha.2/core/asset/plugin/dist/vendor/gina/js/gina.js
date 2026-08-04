@@ -10483,13 +10483,205 @@ function ValidatorPlugin(rules, data, formId, culture) {
         'setCustomRules': setCustomRules
     };
 
+    /**
+     * backendIsPlainObject — plain-data-object test for the #B241 alias walk.
+     * Arrays, Date instances and null are LEAF VALUES on the server form-body
+     * path (a rule addresses the array/date itself), never containers to
+     * descend into.
+     *
+     * @inner
+     * @private
+     * @param {*} value
+     * @returns {boolean} true for a non-null, non-array, non-Date object
+     */
+    var backendIsPlainObject = function (value) {
+        return (
+            value !== null
+            && typeof(value) == 'object'
+            && !Array.isArray(value)
+            && !(value instanceof Date)
+        )
+    };
 
     /**
-     * Backend init
+     * backendAliasAugment — #B241: synthesize dotted-canon field entries
+     * ALONGSIDE the raw posted keys so the per-field rule lookup can join.
      *
-     * @param {object} rules
-     * @param {object} [customRule]
-     * */
+     * `parseRules` canonicalizes every rule key to a dotted path (a bracket
+     * key `a[b]` becomes `a.b`, a nested rule tree flattens to its dotted
+     * leaves) while the fields map keeps the RAW posted keys — so a rule
+     * authored on a bracket key, or as a nested tree, never joined on this
+     * path and the field was skipped with no warn (fail-open, check AND
+     * drop directives alike). Both production wire shapes were affected:
+     * flat bracket keys (the client posts the engine's name-keyed data as
+     * JSON, which the server parses verbatim) and nested objects (the
+     * multipart and urlencoded parsers expand bracket names).
+     *
+     * The originals are deliberately KEPT in the map: dollar-token
+     * substitution reads the raw keys, so cross-field references to
+     * bracket-named peers keep resolving exactly as before, and an all-flat
+     * payload synthesizes nothing (identity). An alias is only added when
+     * its key is still free, so a caller that already posts the dotted form
+     * keeps its own entry untouched.
+     *
+     * @inner
+     * @private
+     * @param {object} fields - the fields map to augment IN PLACE
+     * @param {object} data - the raw posted payload (never mutated)
+     * @returns {object} aliases - { count: number, map: { alias: meta } }
+     *   where meta is { kind: 'bracket', original } or
+     *   { kind: 'nested', rootKey, path }
+     */
+    var backendAliasAugment = function (fields, data) {
+        var aliases = { count: 0, map: {} };
+        var addNestedLeafAliases = function (rootKey, base, obj, pathSoFar) {
+            for (var subKey in obj) {
+                var aliasPath = pathSoFar.concat(subKey);
+                var subAlias = base + '.' + subKey;
+                if ( backendIsPlainObject(obj[subKey]) ) {
+                    addNestedLeafAliases(rootKey, subAlias, obj[subKey], aliasPath);
+                } else if ( typeof(fields[subAlias]) == 'undefined' ) {
+                    fields[subAlias] = obj[subKey];
+                    aliases.map[subAlias] = { kind: 'nested', rootKey: rootKey, path: aliasPath };
+                    ++aliases.count;
+                }
+            }
+        };
+        var key = null, alias = null;
+        for (key in data) {
+            if ( /\[/.test(key) ) {
+                alias = key.replace(/\[/g, '.').replace(/\]/g, '');
+                if ( typeof(fields[alias]) == 'undefined' ) {
+                    fields[alias] = data[key];
+                    aliases.map[alias] = { kind: 'bracket', original: key };
+                    ++aliases.count;
+                }
+            } else if ( backendIsPlainObject(data[key]) ) {
+                addNestedLeafAliases(key, key, data[key], [key]);
+            }
+        }
+        return aliases;
+    };
+
+    /**
+     * backendAliasToBracketName — rebuild the client's DOM-name addressing
+     * from a nested alias path (['account','username'] -> account[username]),
+     * so restored error keys match what the browser side renders against.
+     *
+     * @inner
+     * @private
+     * @param {string} rootKey
+     * @param {array} pathArr - path segments, rootKey first
+     * @returns {string} the bracket-notation field name
+     */
+    var backendAliasToBracketName = function (rootKey, pathArr) {
+        var out = rootKey;
+        for (var i = 1, len = pathArr.length; i < len; ++i) {
+            out += '[' + pathArr[i] + ']';
+        }
+        return out;
+    };
+
+    /**
+     * backendRestoreAliases — #B241 egress: fold every alias outcome back
+     * onto the original addressing, so the summary keeps today's contract.
+     *
+     * Error keys move to the DOM-name bracket form (the addressing the
+     * client's error rendering looks up). On `.data` — which the engine has
+     * already materialized (bracket originals arrive nested) — the alias
+     * flat keys are stripped and their outcomes applied at the original
+     * spot: an alias the engine dropped (an `exclude` directive) drops the
+     * original leaf too, an alias a transform rewrote wins over the raw
+     * value. Parents emptied BY AN EXCLUSION are pruned along that alias's
+     * path only — an empty object the caller posted is not this function's
+     * to remove.
+     *
+     * @inner
+     * @private
+     * @param {object} result - the { isValid, error, data } summary (mutated)
+     * @param {object} aliases - backendAliasAugment's return value
+     * @returns {object} result
+     */
+    var backendRestoreAliases = function (result, aliases) {
+        var alias = null, meta = null;
+        var errors = {};
+        for (alias in (result.error || {})) {
+            meta = aliases.map[alias];
+            if ( !meta ) {
+                errors[alias] = result.error[alias];
+            } else if ( meta.kind == 'bracket' ) {
+                errors[meta.original] = result.error[alias];
+            } else {
+                errors[backendAliasToBracketName(meta.rootKey, meta.path)] = result.error[alias];
+            }
+        }
+        result.error = errors;
+
+        var data = result.data;
+        if ( !data || typeof(data) != 'object' ) {
+            return result;
+        }
+        for (alias in aliases.map) {
+            meta = aliases.map[alias];
+            var aliasKept = Object.prototype.hasOwnProperty.call(data, alias);
+            var aliasValue = aliasKept ? data[alias] : undefined;
+            delete data[alias];
+
+            var segments = ( meta.kind == 'bracket' )
+                ? meta.original.replace(/\]/g, '').split(/\[/g)
+                : meta.path;
+            var sLen = segments.length - 1;
+            var parent = data, s = 0;
+            for (; s < sLen && parent; ++s) {
+                parent = parent[ segments[s] ];
+            }
+            if ( !parent || typeof(parent) != 'object' ) {
+                continue;
+            }
+            if ( !aliasKept ) {
+                delete parent[ segments[sLen] ];
+                // walk back up THIS path only, dropping parents the exclusion emptied
+                for (var back = sLen - 1; back >= 0; --back) {
+                    var holder = data, b = 0;
+                    for (; b < back && holder; ++b) {
+                        holder = holder[ segments[b] ];
+                    }
+                    if (
+                        holder
+                        && backendIsPlainObject(holder[ segments[back] ])
+                        && Object.keys(holder[ segments[back] ]).length === 0
+                    ) {
+                        delete holder[ segments[back] ];
+                    } else {
+                        break;
+                    }
+                }
+            } else {
+                parent[ segments[sLen] ] = aliasValue;
+            }
+        }
+        return result;
+    };
+
+    /**
+     * Backend init — the server half of form-body validation.
+     *
+     * Builds the fields map from the posted payload, parses the rule set
+     * into the dotted canon, and runs the engine. #B241: bracket-notation
+     * and nested-authored rule keys join through synthesized dotted aliases
+     * (see backendAliasAugment above); verdict keys and the data egress are
+     * restored to the original addressing before returning. The no-rules
+     * branch is untouched and keeps returning the payload verbatim.
+     *
+     * @inner
+     * @private
+     * @param {object} rules - the form's rule set (authored keys)
+     * @param {object} data - the posted payload
+     * @param {string} [formId]
+     * @param {string} [culture]
+     * @returns {object} the { isValid, error, data } summary, or a bare
+     *   FormValidator instance on the no-rules branch
+     */
     var backendInit = function (rules, data, formId, culture) {
 
         var $form = ( typeof(formId) != 'undefined' ) ? { 'id': formId } : null;
@@ -10503,6 +10695,9 @@ function ValidatorPlugin(rules, data, formId, culture) {
         // parsing rules
         if ( typeof(rules) != 'undefined' && rules.count() > 0 ) {
 
+            // #B241 — join bracket/nested rule keys through dotted aliases
+            var backendAliases = backendAliasAugment(fields, data);
+
             try {
                 parseRules(rules, '');
                 rules = checkForRulesImports(rules);
@@ -10512,7 +10707,16 @@ function ValidatorPlugin(rules, data, formId, culture) {
 
             backendProto.rules = instance.rules;
 
-            return validate($form, fields, null, instance.rules, null, culture)
+            var backendResult = validate($form, fields, null, instance.rules, null, culture);
+            if (
+                backendAliases.count > 0
+                && backendResult
+                && typeof(backendResult.isValid) == 'function'
+                && typeof(backendResult.error) != 'undefined'
+            ) {
+                backendRestoreAliases(backendResult, backendAliases);
+            }
+            return backendResult;
 
         } else {
             // without rules - by hand

@@ -562,7 +562,14 @@ describe('validator-case-driver-value-preservation §06 — dist fidelity', func
         // adjacent-run rename cannot false-red it while a shape change will.
         // VALIDATED against the real artifacts: 0 on the pre-fix gina.min.js
         // (git HEAD before the rebuild), 1 on the rebuilt one.
-        var m = min.match(/!([A-Za-z_$][\w$]*)&&typeof ([A-Za-z_$][\w$]*)\['_case_'\+([A-Za-z_$][\w$]*)\]=='undefined'\|\|typeof ([A-Za-z_$][\w$]*)=='undefined'\|\|typeof ([A-Za-z_$][\w$]*)\[\3\]!='undefined'\|\|\(\5\[\3\]=\4\)/g) || [];
+        // REALIGNED wrap-agnostic 2026-08-04 (approved; the #B241 rebuild moved
+        // Closure's content-dependent line wrap INSIDE the tail — the artifact
+        // read  typeof jb['_case_'+\nMa]==…  — the documented wrap-fragility
+        // class): \s* at every token boundary, typeof\s+, same backreferences,
+        // same count. Re-validated three-arm: 1 on the rebuilt artifact, 1 on
+        // the prior generation the strict form passed on, 0 on the true
+        // pre-#B230 artifact at its commit-derived path (7570c1c0^).
+        var m = min.match(/!\s*([A-Za-z_$][\w$]*)\s*&&\s*typeof\s+([A-Za-z_$][\w$]*)\s*\[\s*'_case_'\s*\+\s*([A-Za-z_$][\w$]*)\s*\]\s*==\s*'undefined'\s*\|\|\s*typeof\s+([A-Za-z_$][\w$]*)\s*==\s*'undefined'\s*\|\|\s*typeof\s+([A-Za-z_$][\w$]*)\s*\[\s*\3\s*\]\s*!=\s*'undefined'\s*\|\|\s*\(\s*\5\s*\[\s*\3\s*\]\s*=\s*\4\s*\)/g) || [];
         assert.equal(m.length, 1,
             'the served artifact must carry the union-gated restore — gina.min.js is what browsers run');
     });
