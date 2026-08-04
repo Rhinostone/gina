@@ -1,0 +1,7 @@
+{
+    "name": "gina-lib-loading-state",
+    "version": "1.0.0",
+    "description": "Framework-owned loading state for submit-like triggers (data-gina-loading)",
+    "main": "src/main",
+    "license": "MIT"
+}

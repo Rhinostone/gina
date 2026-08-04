@@ -106,6 +106,7 @@ function ValidatorPlugin(rules, data, formId, culture) {
     var FormValidator   = (isGFFCtx) ? require('lib/form-validator') : require('./form-validator');
     //var Collection      = (isGFFCtx) ? require('lib/collection') : require('../../../../../lib/collection');
     var routing         = (isGFFCtx) ? require('lib/routing') : require('../../../../../lib/routing');
+    var loadingState    = (isGFFCtx) ? require('lib/loading-state') : require('../../../../../lib/loading-state');
 
 
     /** definitions */
@@ -1476,6 +1477,79 @@ function ValidatorPlugin(rules, data, formId, culture) {
 
 
     /**
+     * armSubmitLoading
+     *
+     * Marks `$trigger` as running (`data-gina-loading="true"`, or whatever
+     * `gina.config.loadingAttribute` names) and remembers it on the form instance so
+     * every terminal path can release it — including the ones that never reach an
+     * XHR and therefore have no `$submitTrigger` of their own in scope.
+     *
+     * The element is stashed rather than re-derived because the two are NOT always
+     * the same: `send()` resolves `$submitTrigger` once from `$form.submitTrigger`
+     * (an id) at its own entry, which a rejected submit never reaches, and which a
+     * second click on a different button would have overwritten by then. The stash
+     * is a single reference per form, replaced on each arm and nulled on disarm, so
+     * it can not retain a detached node past the submit that created it.
+     *
+     * @param {object} $formInstance - the form instance (`instance.$forms[id]`)
+     * @param {object} $trigger - the element the user operated
+     *
+     * @returns {boolean} true when the trigger was marked
+     *
+     * FIRST ARM WINS until the state is released. A form runs one submit at a time — that
+     * is what `withRateLimit` enforces — so a second attempt arriving mid-flight is about
+     * to be refused, and must not take ownership: on a form with several submit buttons it
+     * would move the stash to the refused trigger, leaving the trigger that actually owns
+     * the request armed with nothing left to release it.
+     *
+     * @example
+     * armSubmitLoading(instance.$forms[$form.id], loadingState.resolveTrigger($el, $target));
+     *
+     * @inner
+     */
+    var armSubmitLoading = function($formInstance, $trigger) {
+        if ( !$formInstance || !$trigger ) {
+            return false;
+        }
+        if ($formInstance.loadingTrigger) {
+            return false;
+        }
+        $formInstance.loadingTrigger = $trigger;
+        return loadingState.arm($trigger);
+    };
+
+    /**
+     * disarmSubmitLoading
+     *
+     * Releases whatever `armSubmitLoading` marked for this form
+     * (`data-gina-loading="false"`) and drops the stash. Idempotent and safe to call
+     * on a form that was never armed — every terminal path calls it unconditionally
+     * rather than trying to work out whether arming happened.
+     *
+     * #B247: the validation-rejected path is the one that stranded consumer loading
+     * state, because a rejected submit sends nothing and so never reaches any XHR
+     * settle. `send()`'s rate-limit early return is the same shape and is covered
+     * too; `loadend` covers success, error, timeout and abort alike.
+     *
+     * @param {object} $formInstance - the form instance (`instance.$forms[id]`)
+     *
+     * @returns {boolean} true when a marked trigger was released
+     *
+     * @example
+     * disarmSubmitLoading(instance.$forms[_id]); // on reject, settle, timeout or abort
+     *
+     * @inner
+     */
+    var disarmSubmitLoading = function($formInstance) {
+        if ( !$formInstance || !$formInstance.loadingTrigger ) {
+            return false;
+        }
+        var released = loadingState.disarm($formInstance.loadingTrigger);
+        $formInstance.loadingTrigger = null;
+        return released;
+    };
+
+    /**
      * send
      * N.B.: no validation here; if you want to validate against rules, use `.submit()` or `.validateFormById(formId)` before
      *
@@ -1509,6 +1583,11 @@ function ValidatorPlugin(rules, data, formId, culture) {
             && typeof($form.sent) != 'undefined'
             && /^true$/i.test($form.sent)
         ) {
+            // #B247 — deliberately NO loading-state release here. This return means a
+            // request for this form is already in flight, so the trigger that owns it is
+            // still legitimately loading and its own settle will release it. Releasing
+            // here would clear the state mid-request; and because `armSubmitLoading` is
+            // first-wins, the refused attempt never armed anything of its own to clear.
             return;
         }
 
@@ -1664,6 +1743,9 @@ function ValidatorPlugin(rules, data, formId, culture) {
                         }
                     }
                     $form.target.removeAttribute('data-gina-form-loading');
+                    // #B247 — the trigger-scoped release rides the same fail-safe:
+                    // `loadend` is the one hook that covers abort and error too.
+                    disarmSubmitLoading($form);
                 });
             }
             // catching ready state cb
@@ -1732,6 +1814,8 @@ function ValidatorPlugin(rules, data, formId, culture) {
                         }
                     }
                     $form.target.removeAttribute('data-gina-form-loading');
+                    // #B247 — idempotent with the `loadend` release above
+                    disarmSubmitLoading($form);
 
                     var $popin          = null;
                     var blob            = null;
@@ -7352,6 +7436,21 @@ function ValidatorPlugin(rules, data, formId, culture) {
                         return false;
                     }
 
+                    // #B247 — arm the loading state on the element the user actually
+                    // operated. DELIBERATELY after the #B246 gate above: a disabled
+                    // trigger returns without starting anything, so arming it there
+                    // would strand exactly the state this feature exists to release.
+                    // `resolveTrigger` climbs to the owning button/anchor, because a
+                    // click on a wrapped label (`<button><span>Save</span></button>`)
+                    // targets the inner node, and the state belongs on the control the
+                    // user perceives as the trigger.
+                    if ( /^submit\./i.test(_evt) ) {
+                        armSubmitLoading(
+                            instance.$forms[$form.id] || $form,
+                            loadingState.resolveTrigger($el, $target)
+                        );
+                    }
+
                     if (gina.events[_evt]) {
                         cancelEvent(event);
 
@@ -7485,6 +7584,22 @@ function ValidatorPlugin(rules, data, formId, culture) {
                     // keeps live-check quiet during a real in-flight submit.
                     if ( instance.$forms[_id] ) {
                         instance.$forms[_id].isSubmitting = false;
+                    }
+
+                    // #B247 — release the trigger-scoped loading state. THIS is the path
+                    // that stranded it: a rejected submit produces no request at all, so
+                    // none of the XHR releases can ever run, and only the framework knows
+                    // the submit was refused before it started. Left armed, the trigger
+                    // stays visually loading until the page or popin is reloaded.
+                    //
+                    // Gated on nothing being in flight: a form can be submitted again
+                    // while an earlier request is still running, and that later attempt
+                    // may well be the one that fails validation. Releasing unconditionally
+                    // would clear the state belonging to the request still in progress —
+                    // whose own settle is what must release it.
+                    var _loadingForm = instance.$forms[_id] || $form;
+                    if ( !/^true$/i.test(_loadingForm.isSending) ) {
+                        disarmSubmitLoading(_loadingForm);
                     }
 
                     // #A11Y1 (slice 3) — failed submit: move focus to the first invalid field so
@@ -7723,6 +7838,27 @@ function ValidatorPlugin(rules, data, formId, culture) {
             // prevent event to be triggered twice
             if ( typeof(e.defaultPrevented) != 'undefined' && e.defaultPrevented ) {
                 return false;
+            }
+
+            // #B247 — a submit that never went through the click proxy still gets a
+            // loading state: Enter inside a field, `form.submit()`, `$validator.submit()`,
+            // and — less obviously — a click on a wrapped label such as
+            // `<button type="submit"><span>Save</span></button>`, whose event.target is
+            // the span (no `.type`), so the click proxy's submit branch never fires and
+            // the event surfaces here instead. There is no clicked element on this path,
+            // so the registered trigger is the best and only referent. Placed after the
+            // disabled + defaultPrevented guards above, which both return first.
+            // NB. the disabled check at the top of this handler reads a DOMParser copy of
+            // the form's innerHTML, so it sees neither a live `disabled` set by JS nor the
+            // `aria-disabled` marker `updateSubmitTriggerState` uses. Re-check the live
+            // node with #B246's predicate: without it, every Enter-key submit on an
+            // invalid live-check form would flash the trigger armed for the length of the
+            // validation pass before the rejected branch released it.
+            if ($formInstance) {
+                var $loadingTrigger = document.getElementById($formInstance.submitTrigger);
+                if ( !isTriggerDisabled($loadingTrigger) ) {
+                    armSubmitLoading($formInstance, $loadingTrigger);
+                }
             }
 
             if (withRules || isBinded) {
@@ -9614,5 +9750,5 @@ if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
     module.exports  = ValidatorPlugin
 } else if ( typeof(define) === 'function' && define.amd) {
     // Publish as AMD module
-    define('gina/validator', ['utils/events', 'utils/dom', 'utils/effects', 'utils/data', 'lib/form-validator', 'lib/routing'], function(){ return ValidatorPlugin })
+    define('gina/validator', ['utils/events', 'utils/dom', 'utils/effects', 'utils/data', 'lib/form-validator', 'lib/routing', 'lib/loading-state'], function(){ return ValidatorPlugin })
 }

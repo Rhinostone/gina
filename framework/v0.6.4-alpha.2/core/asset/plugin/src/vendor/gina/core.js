@@ -237,7 +237,8 @@ require([
     "lib/form-validator",
     "lib/collection",
     "lib/domain",
-    "lib/routing"
+    "lib/routing",
+    "lib/loading-state"
 ], function () {
     // Boot the popin handler at page load so the declarative `data-gina-dialog` API is
     // active WITHOUT bundle code calling `new gina.popin()`. Constructing the handler
