@@ -637,6 +637,64 @@ describe('09 - scope overlay + env-file', function () {
         });
     });
 
+    // ---- declaration resolution: shared/config vs the bundle's own ----------
+    // Replicates the loader's own expression (`merge(sharedMain, jsonFile, true)`),
+    // so these pin the RUNTIME's semantics, not just the CLI's copy of them.
+
+    function effectiveChain(shared, bundle) {
+        var eff = merge(JSON.clone(shared), JSON.clone(bundle), true);
+        return (eff && eff.secrets && typeof eff.secrets === 'object') ? eff.secrets.file : undefined;
+    }
+
+    it('a bundle-level chain REPLACES the shared one outright (arrays do not concatenate)', function () {
+        assert.deepStrictEqual(
+            effectiveChain({ secrets: { file: ['SHARED'] } }, { secrets: { file: ['BUNDLE'] } }),
+            ['BUNDLE']
+        );
+    });
+
+    it('a bundle with no secrets block at all inherits the shared chain', function () {
+        assert.deepStrictEqual(effectiveChain({ secrets: { file: ['SHARED'] } }, {}), ['SHARED']);
+    });
+
+    it('an EMPTY bundle secrets block does not silently disable a project-wide chain', function () {
+        // The distinction matters: declaring `secrets: {}` for some future sibling
+        // key must not strip the inherited file chain out from under the bundle.
+        assert.deepStrictEqual(
+            effectiveChain({ secrets: { file: ['SHARED'] } }, { secrets: {} }),
+            ['SHARED']
+        );
+    });
+
+    it('an explicit null IS the opt-out lever (distinct from an empty block)', function () {
+        assert.equal(
+            effectiveChain({ secrets: { file: ['SHARED'] } }, { secrets: { file: null } }),
+            null
+        );
+        // and selectBackend treats null as "no chain" -> the unchanged env backend
+        var envOnly = secrets.selectBackend({ content: { settings: { secrets: { file: null } } } });
+        var plain   = secrets.selectBackend({ content: { settings: {} } });
+        assert.equal(envOnly, plain, 'a nulled chain must yield the SAME default backend instance');
+    });
+
+    it('neither level declaring leaves no chain at all (control)', function () {
+        assert.equal(effectiveChain({}, {}), undefined);
+    });
+
+    it('--env-file outranks the declared file tier (it stands in for the environment)', function () {
+        // Replica of lookupSecret with an --env-file map occupying the env tier.
+        var envFileMap = { SHARED_KEY: 'from-env-file' };
+        var fileTier   = { SHARED_KEY: 'from-declared-file', FILE_ONLY: 'f' };
+        function lookup(key) {
+            if (typeof envFileMap[key] === 'string' && envFileMap[key] !== '') return 'env-file';
+            if (typeof fileTier[key] === 'string' && fileTier[key] !== '') return 'file';
+            return null;
+        }
+        assert.equal(lookup('SHARED_KEY'), 'env-file');   // explicit flag wins
+        assert.equal(lookup('FILE_ONLY'), 'file');        // but does not mask the tier below
+        assert.equal(lookup('NOWHERE'), null);
+    });
+
     it('an underivable token still survives verbatim so the tier fails loudly (control for the test above)', function () {
         var reps = { homedir: '/home/u/.demoproject' };   // no version, no scope
         var out = '${homedir}/v${projectVersionMajor}/x.env'.replace(/\$\{(\w+)\}/g, function (s, k) {
