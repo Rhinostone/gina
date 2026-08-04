@@ -1,3 +1,0 @@
-kind: Fixed
-body: '`/_gina/assets/routing.json` now serves under every engine (#B212) — the client routing maps (the full map and the host-stripped proxied variant) were built and served by the isaac engine only, so an `engine: "express"` bundle answered the framework 404 for the URL the browser fetches at boot to populate its client routing table; the maps are now built once, engine-agnostically, and the express path serves them with the same headers and byte-identical content, including the proxied-variant selection.'
-time: 2026-08-02T13:12:48+01:00

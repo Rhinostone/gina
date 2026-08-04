@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'The browser''s boot-time routing fetch now checks the HTTP status before installing the body (#B213) — `fetch` resolves on error statuses, and the framework''s 404 page is valid JSON, so a non-2xx answer (an engine missing the asset, a restart window) used to be silently installed AS the client routing table, breaking every later client-side `getRoute`/`toUrl`. A non-OK status now takes the existing error path instead. Ships in the browser bundle: rebuild your bundles to pick it up.'
-time: 2026-08-02T13:40:02+01:00

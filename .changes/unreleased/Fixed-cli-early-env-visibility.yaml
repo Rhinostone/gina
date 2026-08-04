@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Fixed `GINA_*` variables set for a single command being invisible to the CLI''s own bootstrap — `GINA_HOMEDIR=/path gina env:list` now resolves the home directory, settings file and host from that value instead of falling back to the default home and only honouring it once the handler ran; a fresh home is no longer seeded with a null-laden settings.json (and the `Cannot override Env variable` warnings that produced are gone), and the framework environment no longer leaks a junk `gina` variable into the environment of every spawned child process'
-time: 2026-08-01T20:30:36+01:00

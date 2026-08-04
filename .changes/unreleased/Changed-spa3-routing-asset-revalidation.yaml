@@ -1,3 +1,0 @@
-kind: Changed
-body: '`/_gina/assets/routing.json` is now served with a per-variant weak `ETag` and `cache-control: no-cache` (was `max-age=86400`), on both engines: each page boot revalidates with one conditional GET — normally answered `304 Not Modified` — so a restart''s new route table reaches returning browsers immediately instead of up to 24 hours later. The proxied variant keeps its `private` marking.'
-time: 2026-08-02T13:40:01+01:00

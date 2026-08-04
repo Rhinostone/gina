@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Inspector footer memory gauge: the unfilled portion of the track was invisible — it shared the footer''s own background color in both themes, so a low fill read as a floating green dot. The track now renders as a visible recessed groove (distinct background plus inset shadow) in dark and light themes.'
-time: 2026-08-03T19:36:33+01:00

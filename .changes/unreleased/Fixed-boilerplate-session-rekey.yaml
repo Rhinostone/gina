@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'The scaffolded bundle template (`bundle:add`) taught an impossible session-store selection: `expressSession.name = ''myRedis''` — `Function.prototype.name` is read-only, so the assignment silently no-ops (or throws under strict mode) and the store factory always resolves the literal `"session"` connectors.json entry, meaning the template''s `"myRedis"`/`"myDb"` example entries could never be found and boot failed with `[SessionStore] Could not be loaded`. The template now shows the documented shape — one connectors.json entry named `"session"` whose `connector` field selects the backend — and the four store factories'' JSDoc no longer teaches the same re-key.'
-time: 2026-08-02T03:18:27+01:00

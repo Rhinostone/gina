@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Fixed the Inspector Query pane and its tab badge freezing on the first page whose queries still lacked index data: the live-index refetch re-rendered the tab by replacing the scroll wrapper''s children, destroying the `#tree-query` container every later render targets — so navigating the monitored tab (or any new payload, including the refresh button''s forced refetch) silently kept the previous page''s queries and count on screen until the Inspector window was reloaded. The refetch now re-renders into `#tree-query` itself (#B222)'
-time: 2026-08-02T23:18:26+01:00

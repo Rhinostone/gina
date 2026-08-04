@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Fixed lib/math checkSumSync collapsing every ARRAY input to the checksum of the empty string: the serializer assigned the JSON of the array to the wrong variable and returned an always-empty string, so all arrays produced the same constant hash regardless of content - and it also sorted the caller''s array in place. Arrays now produce a real, order-insensitive content checksum (the hash of the JSON of a sorted copy), and the input array is no longer mutated. Any previously stored array checksum was the degenerate empty-string constant and will change. (#B208)'
-time: 2026-08-02T03:32:13+01:00

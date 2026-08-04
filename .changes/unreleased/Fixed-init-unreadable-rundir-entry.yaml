@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Fixed any gina command aborting with `EISDIR: illegal operation on a directory, read` when the configured run directory contains a sub-directory — the framework:init pid cleanup read every entry as a pidfile with no guard, so one unreadable entry threw out of the loop and failed the whole command. Unreadable entries are now skipped (and deliberately never pruned, since the stale-pidfile removal is only safe for entries whose contents were actually read), which also covers a pidfile removed by a concurrent run'
-time: 2026-08-01T20:30:37+01:00

@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Session stores no longer write an immortal record for an already-expired session: when the resolved ttl is <= 0 (a cookie `maxAge` of 0, or the decaying remainder truncating to zero in a session''s final second), `set()` is now a no-op in every store — previously redis wrote an expiry-less plain SET, and the couchbase and scylladb stores stored the record with a ZERO expiry (never expires), leaving a zombie session that still validated if its id was replayed. The couchbase `touch()` gains the same guard. Behavior change: a configured `ttl: 0` (or any non-positive value, via store options or the connectors.json session entry) now refuses at bundle init naming the offending channel, instead of silently behaving as unset.'
-time: 2026-08-02T03:18:27+01:00

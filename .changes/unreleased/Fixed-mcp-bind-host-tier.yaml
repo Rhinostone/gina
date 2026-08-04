@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Fixed the MCP HTTP transport''s dead `GINA_HOST_V4` bind tier — replaced with `GINA_BIND_HOST` read through the framework environment (the loopback default is unchanged, and a connect address can no longer become the bind), and the MCP server version banner no longer degrades to `0.0.0` under the CLI'
-time: 2026-08-01T19:46:35+01:00
