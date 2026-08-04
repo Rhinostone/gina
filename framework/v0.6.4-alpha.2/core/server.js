@@ -142,6 +142,59 @@ var Domain          = lib.Domain;
 var domainLib       = new Domain();
 
 /**
+ * #A11Y3 — BCP-47 language tag for a framework-generated document.
+ *
+ * The negotiated culture is stored underscore-separated (`en_CM`), and a raw
+ * `accept-language` value can still carry its q-value (`fr;q=0.9`). Neither form
+ * is a valid `lang` attribute: assistive technology that cannot parse the tag
+ * falls back to the wrong voice, which is worse than no tag at all. Normalises
+ * to a hyphen-separated subtag sequence and falls back to `en` rather than
+ * emitting something unparseable.
+ *
+ * @param {object} [req] - request whose negotiated `culture` should be used
+ * @returns {string} a BCP-47-shaped language tag, never empty
+ *
+ * @example
+ * a11yLangTag({ culture: 'en_CM' });    // 'en-CM'
+ * a11yLangTag({ culture: 'fr;q=0.9' }); // 'fr'
+ * a11yLangTag(null);                    // 'en'
+ *
+ * @inner
+ */
+var a11yLangTag = function(req) {
+    var culture = ( req && typeof(req.culture) == 'string' && req.culture )
+        ? req.culture
+        : ( getEnvVar('GINA_CULTURE') || '' );
+    culture = String(culture).split(',')[0].split(';')[0].trim().replace(/_/g, '-');
+    return /^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$/.test(culture) ? culture : 'en';
+};
+
+/**
+ * #A11Y3 — wraps a framework-generated error body in a conforming HTML document.
+ *
+ * The built-in fallback previously emitted no doctype (so browsers rendered it in
+ * quirks mode), no `<head>`, no `<title>` (WCAG 2.4.2) and no `lang` (WCAG 3.1.1);
+ * the HTTP/1 branch additionally closed `<body>` with an *opening* `<html>` tag.
+ * The caller's body is embedded verbatim, so the status and incident ref that the
+ * error-pages guide promises the fallback shows are preserved unchanged.
+ *
+ * @param {number|string} code - HTTP status code, used for the document title
+ * @param {string} bodyHtml - the already-built error body markup
+ * @param {object} [req] - request, for language negotiation
+ * @returns {string} a complete, conforming HTML document
+ *
+ * @example
+ * a11yErrorDocument(500, '<h1>Error 500.</h1><pre>ref A1B2C3</pre>', local.request);
+ *
+ * @inner
+ */
+var a11yErrorDocument = function(code, bodyHtml, req) {
+    return '<!doctype html><html lang="'+ a11yLangTag(req) +'">'
+        + '<head><title>Error '+ code +'</title></head>'
+        + '<body><main>'+ bodyHtml +'</main></body></html>';
+};
+
+/**
  * Constant-time API-key check for the /_gina/agent SSE endpoint when it is
  * exposed outside dev mode (#INS9b). Engine-agnostic mirror of the helper in
  * server.isaac.js. The configured key lives on `process.gina._inspectorAgentKey`
@@ -7423,7 +7476,9 @@ function Server(options) {
                     if (stream.destroyed || stream.closed) { return; }
                     stream.respond(header);
                     if ( isHtmlContent && !hasCustomErrorFile ) {
-                        stream.end('<html><body><pre><h1>Error '+ code +'.</h1><pre>'+ msg + '\n\nref '+ ref +'</pre></body></html>');
+                        // #A11Y3 — the body previously opened two `<pre>` elements and closed
+                        // only one, inside a document with no doctype, head, title or lang.
+                        stream.end(a11yErrorDocument(code, '<h1>Error '+ code +'.</h1><pre>'+ msg + '\n\nref '+ ref +'</pre>', local.request));
                     } else {
                         stream.end(JSON.stringify({
                             status  : code,
@@ -7434,7 +7489,10 @@ function Server(options) {
                 } else {
                     res.writeHead(code, { 'content-type': _h1ContentType } );
                     if ( isHtmlContent && !hasCustomErrorFile ) {
-                        res.end('<html><body><pre><h1>Error '+ code +'.</h1><pre>'+ msg + '\n\nref '+ ref +'</pre></body><html>');
+                        // #A11Y3 — this branch additionally closed `<body>` with an OPENING
+                        // `<html>` tag, so the document never terminated. Same fix as the
+                        // HTTP/2 branch above; both now share one document builder.
+                        res.end(a11yErrorDocument(code, '<h1>Error '+ code +'.</h1><pre>'+ msg + '\n\nref '+ ref +'</pre>', local.request));
                     } else {
                         res.end(JSON.stringify({
                             status  : code,

@@ -21,6 +21,57 @@ const { Resolver } = require('node:dns').promises;
 
 var lib             = require('./../../lib') || require.cache[require.resolve('./../../lib')];
 
+/**
+ * #A11Y3 — BCP-47 language tag for a framework-generated document.
+ *
+ * Mirror of the helper in `core/server.js`; kept local because the fallback error
+ * paths in both engines must stay self-contained. The negotiated culture is stored
+ * underscore-separated (`en_CM`) and a raw `accept-language` value can still carry
+ * its q-value (`fr;q=0.9`) — neither is a valid `lang` attribute, and a tag AT
+ * cannot parse makes it select the wrong voice.
+ *
+ * @param {object} [req] - request whose negotiated `culture` should be used
+ * @returns {string} a BCP-47-shaped language tag, never empty
+ *
+ * @example
+ * a11yLangTag({ culture: 'en_CM' }); // 'en-CM'
+ * a11yLangTag(null);                 // 'en'
+ *
+ * @inner
+ */
+var a11yLangTag = function(req) {
+    var culture = ( req && typeof(req.culture) == 'string' && req.culture )
+        ? req.culture
+        : ( getEnvVar('GINA_CULTURE') || '' );
+    culture = String(culture).split(',')[0].split(';')[0].trim().replace(/_/g, '-');
+    return /^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$/.test(culture) ? culture : 'en';
+};
+
+/**
+ * #A11Y3 — wraps the inline fallback error body in a conforming HTML document.
+ *
+ * The body was previously sent as a bare `<h1>` + `<pre>` fragment with a
+ * `text/html` content type: no doctype (quirks mode), no `<head>`, no `<title>`
+ * (WCAG 2.4.2), no `lang` (WCAG 3.1.1) and no landmark. The caller's markup is
+ * embedded verbatim, so the status and incident ref that the error-pages guide
+ * promises the fallback shows are preserved unchanged.
+ *
+ * @param {number|string} code - HTTP status code, used for the document title
+ * @param {string} bodyHtml - the already-built `msgString` markup
+ * @param {object} [req] - request, for language negotiation
+ * @returns {string} a complete, conforming HTML document
+ *
+ * @example
+ * a11yErrorDocument(500, '<h1 class="status">Error 500.</h1>', req);
+ *
+ * @inner
+ */
+var a11yErrorDocument = function(code, bodyHtml, req) {
+    return '<!doctype html><html lang="'+ a11yLangTag(req) +'">'
+        + '<head><title>Error '+ code +'</title></head>'
+        + '<body><main>'+ bodyHtml +'</main></body></html>';
+};
+
 // #B3 — persist resolver and cache across dev-mode cache-busts.
 // controller.js is re-required on every request when isCacheless (dev mode), which would
 // create a new Resolver and Cache instance each time, silently abandoning in-flight DNS
@@ -1034,7 +1085,12 @@ function SuperController(options) {
                 now: new Date().format("isoDateTime")
             }
             set('page.view.locale', options.conf.locale);
-            set('page.view.lang', userCulture);
+            // #A11Y3 — `userCulture` is underscore-form (`en_CM`) and, when it came from a
+            // raw `accept-language`, can still carry a q-value (`fr;q=0.9`). Neither is a
+            // valid BCP-47 `lang` attribute. Only the value that reaches the document is
+            // normalised — the locale lookup above deliberately keeps the raw form, whose
+            // resolution behaviour is out of scope here.
+            set('page.view.lang', a11yLangTag({ culture: userCulture }));
         }
 
 
@@ -7026,7 +7082,11 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                 //     res.end(msgString);
                 // } else {
                 //if ( isHtmlContent && !hasCustomErrorFile ) {
-                    res.end(msgString);
+                    // #A11Y3 — wrap the fragment in a conforming document. The wrap is
+                    // deliberately here, after the msgString construction block above, so
+                    // the body markup (status + incident ref + the local-scope-gated stack)
+                    // is unchanged and its characterization tests keep mirroring it.
+                    res.end(a11yErrorDocument(code, msgString, req));
                 //}
                 // Release per-request refs — HTML error path (no custom error file). (#M1)
                 local.req  = null;

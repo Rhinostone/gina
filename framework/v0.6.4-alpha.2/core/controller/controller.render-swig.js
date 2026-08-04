@@ -1266,7 +1266,21 @@ module.exports = async function render(userData, displayInspector, errOptions, d
 
         // iframe case - without HTML TAG
         if (!self.isXMLRequest() && _layoutLower.indexOf('<html') < 0 ) {
-            layout = '<html>\n\t<head></head>\n\t<body class="gina-iframe-body">\n\t\t'+ layout +'\n\t</body>\n</html>';
+            // #A11Y3 — the synthesised wrapper carried no doctype (so the document rendered
+            // in quirks mode) and no `lang` (WCAG 3.1.1). Deliberately NOT added here:
+            //   - `<title>`: no title value is in scope at this point, and inventing one is
+            //     worse than omitting it;
+            //   - a landmark: this wraps arbitrary partial content that may already carry
+            //     its own `<main>`, and two landmarks are worse than none.
+            // The `</body>` below is load-bearing beyond markup validity — release-banner's
+            // maybeInject() splices the dev banner on /<\/body>/i, so dropping it would
+            // silently stop the banner injecting with no test to catch it.
+            var _iframeLang = ( data && data.page && data.page.view
+                                && typeof(data.page.view.lang) == 'string'
+                                && /^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$/.test(data.page.view.lang) )
+                ? data.page.view.lang
+                : 'en';
+            layout = '<!doctype html>\n<html lang="'+ _iframeLang +'">\n\t<head></head>\n\t<body class="gina-iframe-body">\n\t\t'+ layout +'\n\t</body>\n</html>';
         }
 
         // adding stylesheets

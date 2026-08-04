@@ -1232,9 +1232,17 @@ module.exports = async function renderNunjucks(userData, displayInspector, errOp
         // reads the file directly at line 347 and compiles its contents.
         var _absErrTemplate = localOptions.file;
         var _errStatusCode  = (data && data.page && data.page.data && data.page.data.status) || 500;
+        // #A11Y3 — the three fallbacks below already carry a doctype and a title but no
+        // `lang` (WCAG 3.1.1). Reuse the negotiated, already-normalised value the render
+        // data carries, and fall back to `en` rather than emit an unparseable tag.
+        var _errLang = ( data && data.page && data.page.view
+                         && typeof(data.page.view.lang) == 'string'
+                         && /^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$/.test(data.page.view.lang) )
+            ? data.page.view.lang
+            : 'en';
 
         if (!_absErrTemplate || !fs.existsSync(_absErrTemplate)) {
-            html = '<!doctype html><html><head><title>Error ' + _errStatusCode + '</title></head>'
+            html = '<!doctype html><html lang="' + _errLang + '"><head><title>Error ' + _errStatusCode + '</title></head>'
                  + '<body><pre>[render-nunjucks] error template not found: '
                  + (_absErrTemplate || '(unset)') + '</pre></body></html>';
         } else {
@@ -1242,7 +1250,7 @@ module.exports = async function renderNunjucks(userData, displayInspector, errOp
             try {
                 _errSource = fs.readFileSync(_absErrTemplate, 'utf8');
             } catch (readErr) {
-                html = '<!doctype html><html><head><title>Error ' + _errStatusCode + '</title></head>'
+                html = '<!doctype html><html lang="' + _errLang + '"><head><title>Error ' + _errStatusCode + '</title></head>'
                      + '<body><pre>[render-nunjucks] failed to read error template: '
                      + (readErr.message || readErr) + '</pre></body></html>';
             }
@@ -1250,7 +1258,7 @@ module.exports = async function renderNunjucks(userData, displayInspector, errOp
                 try {
                     html = env.renderString(_errSource, data);
                 } catch (renderErr) {
-                    html = '<!doctype html><html><head><title>Error ' + _errStatusCode + '</title></head>'
+                    html = '<!doctype html><html lang="' + _errLang + '"><head><title>Error ' + _errStatusCode + '</title></head>'
                          + '<body><pre>[render-nunjucks] error template render failed: '
                          + (renderErr.message || renderErr) + '</pre></body></html>';
                 }
