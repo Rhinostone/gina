@@ -920,6 +920,69 @@ function ValidatorPlugin(rules, data, formId, culture) {
     };
 
     /**
+     * A11Y_LABELS — English defaults for gina's own accessibility status strings.
+     *
+     * Deliberately separate from `setErrorLabels`, which owns per-culture overrides
+     * for *rule* error labels and is keyed by rule name. These are framework-authored
+     * announcements about what gina is doing, so they need a home of their own.
+     *
+     * @constant {object}
+     * @inner
+     */
+    var A11Y_LABELS = {
+        submitting: 'Submitting…'
+    };
+
+    /**
+     * a11yLabel — resolve one accessibility status string.
+     *
+     * Follows the same philosophy `setErrorLabels` documents: an English default
+     * ships inline and fills anything the project does not translate. A project
+     * overrides by assigning `gina.config.a11y`, typically once at boot keyed off
+     * the negotiated culture.
+     *
+     * @param   {string} key - Label key, e.g. `submitting`.
+     * @returns {string} the project's override when it supplies a non-empty string,
+     *                   otherwise the English default (empty string for unknown keys).
+     *
+     * @example
+     * // project side, once at boot:
+     * gina.config.a11y = { submitting: 'Envoi…' };
+     *
+     * @inner
+     */
+    var a11yLabel = function(key) {
+        var _over = ( typeof(gina) != 'undefined' && gina && gina.config && gina.config.a11y )
+            ? gina.config.a11y
+            : null;
+        if ( _over && typeof(_over[key]) == 'string' && _over[key] ) {
+            return _over[key];
+        }
+        return A11Y_LABELS[key] || '';
+    };
+
+    /**
+     * announceA11yStatus — announce a non-error status through the form's region.
+     *
+     * The region #A11Y2 stands up at bind time is `role="status" aria-live="polite"`,
+     * i.e. already a status channel rather than an error-only one — so submit progress
+     * rides that same element instead of a second region competing with it. Kept as a
+     * named delegate purely so call sites read as status, not as errors.
+     *
+     * @param   {object} $form - form target (HTMLFormElement), not the form instance.
+     * @param   {string} text  - resolved, human-readable status text.
+     * @returns {object|null} the live region, or null when it could not be resolved.
+     *
+     * @example
+     * announceA11yStatus($myForm, 'Envoi…');
+     *
+     * @inner
+     */
+    var announceA11yStatus = function($form, text) {
+        return announceA11yError($form, text);
+    };
+
+    /**
      * handleErrorsDisplay
      * Attention: if you are going to handle errors display by hand, set data to `null` to prevent Toolbar refresh with empty data
      *
@@ -1617,6 +1680,154 @@ function ValidatorPlugin(rules, data, formId, culture) {
     };
 
     /**
+     * holdTriggerFocus — remember the submit trigger gina is about to blur.
+     *
+     * A natively `disabled` control cannot hold focus: the instant gina disables an
+     * in-flight submit trigger the browser moves focus to `<body>`, and re-enabling
+     * does not bring it back (both measured). Every keyboard submit therefore loses
+     * the user's place. Only the native-`disabled` branch is recorded — an `<a>`
+     * receives `aria-disabled`, which does not blur (measured), so it needs no restore.
+     *
+     * @param   {object} $form    - the form instance, which carries the stash.
+     * @param   {object} $trigger - resolved submit trigger; may be null.
+     * @returns {boolean} true when focus was captured for a later restore.
+     *
+     * @example
+     * holdTriggerFocus($myFormInstance, $mySaveButton);
+     *
+     * @inner
+     */
+    var holdTriggerFocus = function($form, $trigger) {
+        if ( !$form || !$trigger ) {
+            return false;
+        }
+        if ( typeof(document) === 'undefined' || !document ) {
+            return false;
+        }
+        if ( document.activeElement !== $trigger ) {
+            return false;
+        }
+        $form.ginaA11yFocusReturn = $trigger;
+        return true;
+    };
+
+    /**
+     * releaseTriggerFocus — put focus back on the trigger gina blurred.
+     *
+     * Deliberately conservative: it restores ONLY when focus is still exactly where
+     * the disable dropped it (`<body>`) and the trigger is still in the document. If
+     * anything else claimed focus while the request was in flight — a popin opened, a
+     * redirect ran, the failed-submit branch moved focus to the first invalid field —
+     * that decision wins and gina undoes nothing. gina restores what gina took, never
+     * more.
+     *
+     * @param   {object} $form - the form instance holding the stash.
+     * @returns {boolean} true when focus was actually restored.
+     *
+     * @example
+     * releaseTriggerFocus($myFormInstance);
+     *
+     * @inner
+     */
+    var releaseTriggerFocus = function($form) {
+        if ( !$form || !$form.ginaA11yFocusReturn ) {
+            return false;
+        }
+        var $trigger = $form.ginaA11yFocusReturn;
+        $form.ginaA11yFocusReturn = null;
+        if ( typeof(document) === 'undefined' || !document ) {
+            return false;
+        }
+        // Nothing else may have claimed focus in the meantime.
+        if ( document.activeElement && document.activeElement !== document.body ) {
+            return false;
+        }
+        var _stillThere = ( typeof($trigger.isConnected) == 'boolean' )
+            ? $trigger.isConnected
+            : ( document.body && document.body.contains($trigger) );
+        if ( !_stillThere || typeof($trigger.focus) != 'function' ) {
+            return false;
+        }
+        $trigger.focus();
+        return true;
+    };
+
+    /**
+     * armSubmitA11y — expose an in-flight submit to assistive technology.
+     *
+     * Three things at once, all scoped to the request window: capture the trigger's
+     * focus before the caller's native disable blurs it, mark the trigger busy, and
+     * announce the start once through the form's polite region.
+     *
+     * Two placement decisions worth keeping:
+     * - `aria-busy` goes on the TRIGGER, never the form. The live region lives inside
+     *   the form, and `aria-busy` on an ancestor is commonly implemented as "defer
+     *   announcements in this subtree" — which would silence the very region used to
+     *   announce. (ARIA 1.2 defines no normative behaviour here, so this is a hedge
+     *   against real implementations, not a spec requirement.)
+     * - This window is only ever reached once a request is genuinely in flight, so a
+     *   validation-rejected submit never arms and never announces. That is what keeps
+     *   the arm-before-validate loading state from producing a busy/not-busy flap.
+     *
+     * @param   {object} $form    - the form instance.
+     * @param   {object} $trigger - resolved submit trigger; may be null.
+     * @returns {boolean} true when this call produced the announcement.
+     *
+     * @example
+     * armSubmitA11y($myFormInstance, $mySaveButton);
+     *
+     * @inner
+     */
+    var armSubmitA11y = function($form, $trigger) {
+        if ( !$form ) {
+            return false;
+        }
+        if ($trigger) {
+            if ( !/^A$/i.test($trigger.tagName) ) {
+                holdTriggerFocus($form, $trigger);
+            }
+            $trigger.setAttribute('aria-busy', 'true');
+        }
+        // readyState 1 and 3 both reach here; announce once per request.
+        if ( $form.ginaA11yBusy ) {
+            return false;
+        }
+        $form.ginaA11yBusy = true;
+        if ( $form.target ) {
+            announceA11yStatus($form.target, a11yLabel('submitting'));
+        }
+        return true;
+    };
+
+    /**
+     * releaseSubmitA11y — clear the in-flight submit exposure.
+     *
+     * Idempotent, because both the readyState-4 release and the `loadend` fail-safe
+     * run it. Deliberately announces nothing on completion: an errored response is
+     * already announced field-by-field by `handleErrorsDisplay`, and writing a second
+     * status over a polite region in the same beat can cut that announcement off.
+     *
+     * @param   {object} $form    - the form instance.
+     * @param   {object} $trigger - resolved submit trigger; may be null.
+     * @returns {boolean} true when focus was restored to the trigger.
+     *
+     * @example
+     * releaseSubmitA11y($myFormInstance, $mySaveButton);
+     *
+     * @inner
+     */
+    var releaseSubmitA11y = function($form, $trigger) {
+        if ( !$form ) {
+            return false;
+        }
+        if ($trigger) {
+            $trigger.removeAttribute('aria-busy');
+        }
+        $form.ginaA11yBusy = false;
+        return releaseTriggerFocus($form);
+    };
+
+    /**
      * send
      * N.B.: no validation here; if you want to validate against rules, use `.submit()` or `.validateFormById(formId)` before
      *
@@ -1813,12 +2024,17 @@ function ValidatorPlugin(rules, data, formId, culture) {
                     // #B247 — the trigger-scoped release rides the same fail-safe:
                     // `loadend` is the one hook that covers abort and error too.
                     disarmSubmitLoading($form);
+                    // #A11Y4 — last, so focus lands on a trigger that is fully settled:
+                    // re-enabled above and no longer flagged loading.
+                    releaseSubmitA11y($form, $submitTrigger);
                 });
             }
             // catching ready state cb
             // Data loading ...
             if ( /^(1|3)$/.test(xhr.readyState) ) {
                 $form.target.setAttribute('data-gina-form-loading', true);
+                // #A11Y4 — must run BEFORE the native disable below, which blurs the trigger.
+                armSubmitA11y($form, $submitTrigger);
                 if ($submitTrigger) {
                     // For A tag: aria-disabled=true
                     if ( /^A$/i.test($submitTrigger.tagName) ) {
@@ -1847,6 +2063,8 @@ function ValidatorPlugin(rules, data, formId, culture) {
                 // Data loading ...
                 if ( /^(1|3)$/.test(xhr.readyState) ) {
                     $form.target.setAttribute('data-gina-form-loading', true);
+                    // #A11Y4 — must run BEFORE the native disable below, which blurs the trigger.
+                    armSubmitA11y($form, $submitTrigger);
                     if ($submitTrigger) {
                         // For A tag: aria-disabled=true
                         if ( /^A$/i.test($submitTrigger.tagName) ) {
@@ -1883,6 +2101,9 @@ function ValidatorPlugin(rules, data, formId, culture) {
                     $form.target.removeAttribute('data-gina-form-loading');
                     // #B247 — idempotent with the `loadend` release above
                     disarmSubmitLoading($form);
+                    // #A11Y4 — last, so focus lands on a fully settled trigger; idempotent
+                    // with the `loadend` release, which may already have restored it.
+                    releaseSubmitA11y($form, $submitTrigger);
 
                     var $popin          = null;
                     var blob            = null;
