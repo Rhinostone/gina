@@ -11654,11 +11654,26 @@ function ValidatorPlugin(rules, data, formId, culture) {
      * for *rule* error labels and is keyed by rule name. These are framework-authored
      * announcements about what gina is doing, so they need a home of their own.
      *
+     * `%s` in a value is replaced with a runtime detail (currently the file name);
+     * it follows the same placeholder convention the rule error labels already use,
+     * so a translation keeps control of where the detail lands in the sentence.
+     *
      * @constant {object}
      * @inner
      */
     var A11Y_LABELS = {
-        submitting: 'Submitting…'
+        submitting      : 'Submitting…',
+        // #A11Y7/U2 — staged uploads announce only their TRANSITIONS (start and
+        // success), never per-tick progress: `aria-live="polite"` coalesces but does
+        // not throttle, and one announcement per onprogress event would bury every
+        // other message on the page. There is deliberately NO `uploadError` key —
+        // the error path announces the server's own message instead (#A11Y7/U3), and
+        // a generic second write in the same beat would clobber it (see the rationale
+        // on `releaseSubmitA11y`).
+        uploadStarted   : 'Upload started',
+        uploadComplete  : 'Upload complete',
+        // #A11Y7/U5 — spoken when a staged file's reset/delete control removes it.
+        fileRemoved     : '%s removed'
     };
 
     /**
@@ -13717,7 +13732,16 @@ function ValidatorPlugin(rules, data, formId, culture) {
      *   computable) so the browser renders its native indeterminate animation;
      *   `error` empties the bar (value 0 — NOT indeterminate, whose animation
      *   would read as still working)
-     * - any other element: `textContent` shows the integer percentage (`42%`)
+     * - any other element: `textContent` shows the integer percentage (`42%`), and
+     *   `role="progressbar"` + `aria-valuemin="0"` / `aria-valuemax="100"` /
+     *   `aria-valuenow="<percent>"` give it the semantics a native `<progress>` gets
+     *   for free (#A11Y7/U2 — without them the indicator is unlabelled text to
+     *   assistive tech). `aria-valuenow` tracks `data-gina-upload-progress` exactly:
+     *   both are ABSENT while indeterminate and on `error`, because an absent
+     *   `aria-valuenow` is how a progressbar signals "unknown" — a stale or zero
+     *   value would read as real, stalled progress. A native `<progress>` is left
+     *   untouched: it already exposes all of this, and a redundant explicit role
+     *   risks overriding the implicit one.
      *
      * Every target also carries two data attributes as styling hooks:
      * `data-gina-upload-progress` (integer percent, absent while indeterminate)
@@ -13753,10 +13777,28 @@ function ValidatorPlugin(rules, data, formId, culture) {
             }
             $indicator.removeAttribute('data-gina-upload-progress');
             $indicator.removeAttribute('data-gina-upload-progress-state');
+            // #A11Y7/U2 — `reset` strips everything this layer ever set, and the ARIA
+            // below is part of "everything": leaving a stale `role="progressbar"` on a
+            // cleared element would expose a permanently 0%-looking bar to assistive tech.
+            if (!isNativeProgress) {
+                $indicator.removeAttribute('role');
+                $indicator.removeAttribute('aria-valuemin');
+                $indicator.removeAttribute('aria-valuemax');
+                $indicator.removeAttribute('aria-valuenow');
+            }
             return;
         }
 
         $indicator.setAttribute('data-gina-upload-progress-state', state);
+        // #A11Y7/U2 — a native <progress> already carries implicit progressbar
+        // semantics (and its own value/max), so it is deliberately left alone; every
+        // other element is text with no role at all until we give it one. The bounds
+        // are constant because `data-gina-upload-progress` is already a percentage.
+        if (!isNativeProgress) {
+            $indicator.setAttribute('role', 'progressbar');
+            $indicator.setAttribute('aria-valuemin', '0');
+            $indicator.setAttribute('aria-valuemax', '100');
+        }
 
         if (state == 'processing') {
             // #R8 — byte-complete, server still post-processing. Advance the STATE only:
@@ -13778,6 +13820,9 @@ function ValidatorPlugin(rules, data, formId, culture) {
                 $indicator.textContent = '100%';
             }
             $indicator.setAttribute('data-gina-upload-progress', 100);
+            if (!isNativeProgress) {
+                $indicator.setAttribute('aria-valuenow', '100');
+            }
             return;
         }
 
@@ -13791,6 +13836,13 @@ function ValidatorPlugin(rules, data, formId, culture) {
                 $indicator.textContent = '';
             }
             $indicator.removeAttribute('data-gina-upload-progress');
+            // #A11Y7/U2 — an errored bar is EMPTY, not indeterminate (the native branch
+            // above says the same about `value`): drop `aria-valuenow` so assistive tech
+            // reports an unknown state rather than a confident 0% that reads as "no
+            // progress yet, still working".
+            if (!isNativeProgress) {
+                $indicator.removeAttribute('aria-valuenow');
+            }
             return;
         }
 
@@ -13799,6 +13851,12 @@ function ValidatorPlugin(rules, data, formId, culture) {
                 $indicator.removeAttribute('value'); // native indeterminate animation
             }
             $indicator.removeAttribute('data-gina-upload-progress');
+            // #A11Y7/U2 — mirrors the `value` removal above: an absent `aria-valuenow`
+            // on a progressbar IS the indeterminate signal, so this must track the
+            // percent attribute exactly rather than reporting a stale last-known value.
+            if (!isNativeProgress) {
+                $indicator.removeAttribute('aria-valuenow');
+            }
             return;
         }
 
@@ -13808,6 +13866,7 @@ function ValidatorPlugin(rules, data, formId, culture) {
             $indicator.value    = result.loaded;
         } else {
             $indicator.textContent = result.progress + '%';
+            $indicator.setAttribute('aria-valuenow', result.progress);
         }
         $indicator.setAttribute('data-gina-upload-progress', result.progress);
     };
@@ -14022,9 +14081,27 @@ function ValidatorPlugin(rules, data, formId, culture) {
 
             $error.innerHTML = '<p>'+ errMsg +'</p>';
             fadeIn($error);
+            // #A11Y7/U3 — the container is `display:none` when the text is written and
+            // only revealed by the fadeIn above, which is exactly the case where a
+            // `role="alert"` on it is unreliable; route through the form's own polite
+            // region instead — the same channel field validation errors already use.
+            // Announce the RENDERED text, not `errMsg`: the message can carry markup
+            // (the url-action checker substitutes `<br>`), and textContent is what a
+            // user would actually read.
+            if ( $uploadTriger && $uploadTriger.form ) {
+                announceA11yError($uploadTriger.form, $error.textContent);
+            }
         } else if(!$error && status != 'success') {
             throw new Error(errMsg)
         } else {
+            // #A11Y7/U2 — success is the other end of the `uploadStarted` transition.
+            // It lives in this branch rather than at the indicator chokepoint above so
+            // it can never fire alongside the error announcement and overwrite it: a
+            // polite region is latest-wins, and a generic "complete" landing on top of
+            // a specific server message would lose the message.
+            if ( $uploadTriger && $uploadTriger.form ) {
+                announceA11yStatus($uploadTriger.form, a11yLabel('uploadComplete'));
+            }
 
             var fieldsObjectList = null
                 , $li   = null
@@ -14038,11 +14115,12 @@ function ValidatorPlugin(rules, data, formId, culture) {
                 let resetLinkNeedToBeAdded = false;
                 let $resetLink = document.getElementById(resetLinkId);
                 let defaultClassNameArr = ['reset','js-upload-reset'];
+                let resetLabel = $uploadTriger.getAttribute('data-gina-form-upload-reset-label') || 'Reset';
                 if (!$resetLink) {
                     resetLinkNeedToBeAdded      = true;
                     $resetLink                  = document.createElement('A');
                     $resetLink.href             = '#';
-                    $resetLink.innerHTML        = $uploadTriger.getAttribute('data-gina-form-upload-reset-label') || 'Reset';
+                    $resetLink.innerHTML        = resetLabel;
                     $resetLink.className        = defaultClassNameArr.join(' ');
                     $resetLink.id               = resetLinkId;
                 } else {
@@ -14050,13 +14128,34 @@ function ValidatorPlugin(rules, data, formId, culture) {
                         $resetLink.href             = '#';
                     }
                     if ( !$resetLink.innerHTML || $resetLink.innerHTML == '' ) {
-                        $resetLink.innerHTML        = $uploadTriger.getAttribute('data-gina-form-upload-reset-label') || 'Reset';
+                        $resetLink.innerHTML        = resetLabel;
                     }
                     if ( typeof($resetLink.className) == 'undefined' ) {
                         $resetLink.className = "";
                     }
                     let classNameArr = merge($resetLink.className.split(/\s+/g), defaultClassNameArr);
                     $resetLink.className    = classNameArr.join(' ');
+                }
+                // #A11Y7/U5 — the control gina generates is an anchor, so assistive tech
+                // announces it as a link and Space does not activate it. Give it button
+                // semantics; the matching Space handler lives with the click binding in
+                // `bindUploadResetOrDeleteTrigger`, because a role that PROMISES button
+                // behaviour without delivering the key is worse than no role at all.
+                // Stamped only on an anchor: a consumer supplying their own <button> under
+                // this id already has the right semantics, and overriding an implicit role
+                // is a regression. Strict `/^a$/i` here, unlike the loose `/a/i` guarding
+                // `href` above (that one also matches TEXTAREA, CANVAS, LABEL…).
+                if ( /^a$/i.test($resetLink.tagName) ) {
+                    $resetLink.setAttribute('role', 'button');
+                    // The accessible name names the file it acts on: these controls stack
+                    // one per staged file and are otherwise identical, so a controls list
+                    // reads "Reset, Reset, Reset". The visible label stays the PREFIX so
+                    // the name still contains it (WCAG 2.5.3 Label in Name), and it reuses
+                    // the consumer's own `-reset-label`, so it is translated wherever that
+                    // already is.
+                    if ( files[f].originalFilename ) {
+                        $resetLink.setAttribute('aria-label', resetLabel + ' ' + files[f].originalFilename);
+                    }
                 }
                 $resetLink.style.display    = 'none';
 
@@ -14414,6 +14513,39 @@ function ValidatorPlugin(rules, data, formId, culture) {
                         // when there is no more files to preview, restore input file visibility
                         // display upload input
                         restoreUploadAffordance($uploadTrigger, uploadHiddenClass);
+
+                        // #A11Y7/U5 — the control about to be removed is the one the user
+                        // just activated, so it holds focus; removing a focused element
+                        // drops focus to <body> and the user loses their place with no
+                        // signal. Move focus first, onto the file input that owns the
+                        // staged files — which `restoreUploadAffordance` just made visible
+                        // again. Guarded on it actually holding focus, so a programmatic
+                        // reset never yanks focus away from wherever the user really is.
+                        if ( document.activeElement === $resetLink || $resetLink.contains(document.activeElement) ) {
+                            if ( typeof($uploadTrigger.focus) == 'function' ) {
+                                $uploadTrigger.focus();
+                            }
+                            // #A11Y5's lesson, applied: `typeof focus == 'function'` is true
+                            // for EVERY HTMLElement, and focus() is a silent no-op on one
+                            // that cannot take focus (hidden, disabled, detached) — so
+                            // confirm the move instead of assuming it. Signal-only: there is
+                            // no better fallback than the document, and failing loudly here
+                            // would break a removal that otherwise succeeded.
+                            if ( document.activeElement !== $uploadTrigger ) {
+                                console.debug('[FormValidator][upload]['+ ($uploadTrigger.id || '?') +'] '+ bindingType +': could not move focus to the file input before removing the '+ bindingType +' control; focus falls back to the document.');
+                            }
+                        }
+                        // Announce the removal. `aria-live="polite"` queues rather than
+                        // interrupts, so this lands after the focus move above has been
+                        // announced instead of racing it. Function replacer, not a string:
+                        // a file name may contain `$`, and a string replacement would expand
+                        // `$&` / `$1` patterns inside it.
+                        if ( $uploadTrigger.form && childNodeFile ) {
+                            announceA11yStatus(
+                                $uploadTrigger.form,
+                                a11yLabel('fileRemoved').replace('%s', function () { return childNodeFile; })
+                            );
+                        }
 
                         // remove link & image - must be done last
                         // (the reset/delete link's own click listener dies with the node)
@@ -16424,6 +16556,19 @@ function ValidatorPlugin(rules, data, formId, culture) {
 
                 onUploadResetOrDelete($uploadTrigger, bindingType);
             });
+            // #A11Y7/U5 — the generated control is an anchor carrying `role="button"`,
+            // and a button MUST activate on Space; an anchor natively answers Enter only,
+            // so without this the role would advertise an interaction that does not work.
+            // Anchors only: a real <button> already fires click on Space, and binding
+            // this there would run the removal twice.
+            if ( /^a$/i.test($uploadResetOrDeleteTrigger.tagName) ) {
+                addListener(gina, $uploadResetOrDeleteTrigger, 'keydown', function onUploadResetOrDeleteTriggerKeydown(e) {
+                    if ( e.key === ' ' || e.keyCode === 32 ) {
+                        e.preventDefault(); // Space would otherwise scroll the page
+                        onUploadResetOrDelete($uploadTrigger, bindingType);
+                    }
+                });
+            }
             $uploadResetOrDeleteTrigger.isBinded = true;
         } else {
             console.warn('[FormValidator::bindForm][upload]['+$uploadTrigger.id+'] : did not find `upload '+bindingType+' trigger`.\nPlease, make sure that your '+bindingType+' element ID is `'+ uploadResetOrDeleteTriggerId +'`, or add to your file input ('+ $uploadTrigger.id +') -> `data-gina-form-upload-'+bindingType+'-trigger="your-custom-id"` definition.');
@@ -17628,6 +17773,24 @@ function ValidatorPlugin(rules, data, formId, culture) {
                         // block above is create-only.
                         if ( $uploadForm.uploadProperties && $uploadForm.uploadProperties.progressContainer ) {
                             updateUploadProgressIndicator($uploadForm.uploadProperties.progressContainer, 'preparing');
+                        }
+
+                        // #A11Y7/U2 — announce the transition into "uploading". Note this
+                        // is deliberately NOT gated on `progressContainer`: the indicator is
+                        // opt-in by presence, but a user who cannot see it is precisely the
+                        // one who needs to be told the upload began.
+                        // The announcement targets the file input's REAL owning form, not
+                        // `$uploadForm` (the virtual one built just above): the real form is
+                        // where `bindForm` already stood up a live region, so upload status
+                        // and validation errors share one region instead of splitting across
+                        // two. Selection always sends today — the `.send()` below is
+                        // unconditional and `data-gina-file-autosend="false"` is still a TODO
+                        // — so this is a true start; gate it if that ever lands.
+                        if ( $uploadForm.uploadProperties && $uploadForm.uploadProperties.uploadTriggerId ) {
+                            var $a11yUploadInput = document.getElementById($uploadForm.uploadProperties.uploadTriggerId);
+                            if ( $a11yUploadInput && $a11yUploadInput.form ) {
+                                announceA11yStatus($a11yUploadInput.form, a11yLabel('uploadStarted'));
+                            }
                         }
 
                         // binding form

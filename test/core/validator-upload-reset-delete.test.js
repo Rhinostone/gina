@@ -56,8 +56,16 @@ function fnSlice(src, declToken) {
     var start = src.indexOf(declToken);
     assert.ok(start > -1, 'declaration anchor not found: ' + declToken);
     // generous fixed span is fine here: both functions are < 200 lines and the
-    // assertions inside are existence/ordering checks, not end-of-slice pins
-    return src.substring(start, start + 12000);
+    // assertions inside are existence/ordering checks, not end-of-slice pins.
+    // Widened 12000 -> 16000 for #A11Y7/U5, which added the pre-removal focus move
+    // and removal announcement inside `onUploadResetOrDelete` (~2.6k chars) and
+    // pushed the #R8 strip and the callback dispatch past the old window — the
+    // pinned code was present and correctly ordered, the extractor just could not
+    // reach it. `onUploadResetOrDelete` currently ends ~14.2k past its anchor.
+    // NOTE this is still a FIXED window and will bite again on the next sizeable
+    // edit here; the durable fix is to brace-walk to the real function end, as
+    // the sibling validator-upload-progress.test.js already does.
+    return src.substring(start, start + 16000);
 }
 var onRemoveSlice = fnSlice(mainSrc, 'var onUploadResetOrDelete = function');
 var binderSlice   = fnSlice(mainSrc, 'var bindUploadResetOrDeleteTrigger = function').substring(0, 4000);
