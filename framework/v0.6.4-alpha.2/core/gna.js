@@ -306,9 +306,13 @@ try {
 if ( !getPath('gina').home && typeof(getEnvVar) != 'undefined' ) {
     // #B277 — `getEnvVar` reads `process.gina`, which the CLI populates when it
     // starts a bundle; it deliberately does NOT consult `process.env`. Outside a
-    // bundle it therefore yields nothing, and `setPath` then failed with
-    // `setPath("gina.home", path): path cannot be empty or undefined` — a message
-    // naming an internal path-registry call rather than the boundary that was hit.
+    // bundle it therefore yields nothing, and `setPath` then failed with the path
+    // registry's generic empty-value error — a message naming an internal call
+    // rather than the boundary that was hit. That old text is deliberately NOT
+    // reproduced verbatim here: a consumer grepping to confirm it is gone would
+    // otherwise match this comment and conclude the fix had not landed. It is
+    // quoted where quoting it helps a reader recognise the symptom instead — the
+    // changelog entry and the llms.txt record.
     //
     // Failing HERE is correct and is not what changed: this is the first point at
     // which a boot without bundle context is detectable. `GINA_HOMEDIR` is read a
