@@ -1568,6 +1568,8 @@ function Config(opt, contextResetNeeded) {
                 + ( self.userConf ? 'the file declares no `'+ bundle +'.'+ env +'` block' : 'file NOT FOUND' )
                 + ') — every bundle must be declared there for the env it starts in; refusing to start';
             console.error(_envBlockMsg);
+            // Guarantee the reason survives process.exit() on an async pipe (e.g. bin/gina-container).
+            try { fs.writeSync(2, _envBlockMsg + '\n'); } catch (_e) { /* best-effort */ }
             return callback(new Error(_envBlockMsg));
         }
 
