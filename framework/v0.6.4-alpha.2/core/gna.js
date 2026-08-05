@@ -304,7 +304,35 @@ try {
 
 // Ensure gina.home is always registered (SQLite connector, session store)
 if ( !getPath('gina').home && typeof(getEnvVar) != 'undefined' ) {
-    setPath('gina.home', getEnvVar('GINA_HOMEDIR'));
+    // #B277 — `getEnvVar` reads `process.gina`, which the CLI populates when it
+    // starts a bundle; it deliberately does NOT consult `process.env`. Outside a
+    // bundle it therefore yields nothing, and `setPath` then failed with
+    // `setPath("gina.home", path): path cannot be empty or undefined` — a message
+    // naming an internal path-registry call rather than the boundary that was hit.
+    //
+    // Failing HERE is correct and is not what changed: this is the first point at
+    // which a boot without bundle context is detectable. `GINA_HOMEDIR` is read a
+    // few lines below as a bare global, so letting an empty value through only
+    // defers the failure into a `ReferenceError: GINA_HOMEDIR is not defined`,
+    // which is strictly less legible. This is also the sole registration site for
+    // `gina.home` (the SQLite connector and the session store both read it), so
+    // skipping the call would leave it unregistered. Message only — the boot still
+    // throws at exactly the same point, for exactly the same reason.
+    var _ginaHome = getEnvVar('GINA_HOMEDIR');
+    if ( !_ginaHome ) {
+        throw new Error(
+            'gina must be required from within a bundle context. The framework '
+            + 'bootstrap could not resolve GINA_HOMEDIR, which the CLI sets on '
+            + '`process.gina` when it starts a bundle (`process.env` is not '
+            + 'consulted). Requiring gina from a plain node process — a test '
+            + 'runner, a one-off script, a codegen pass — is not supported. To '
+            + 'exercise controller code without booting a bundle, use '
+            + 'SuperController.createTestInstance() from '
+            + '`gina/framework/<version>/core/controller`; see the Testing guide '
+            + 'at https://gina.io/docs/guides/testing.'
+        );
+    }
+    setPath('gina.home', _ginaHome);
 }
 
 if ( typeof(getEnvVar) == 'undefined') {

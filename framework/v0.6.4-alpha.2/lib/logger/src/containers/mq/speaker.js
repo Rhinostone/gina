@@ -82,6 +82,24 @@ function MQSpeaker(opt, loggers, cb) {
     }
 
 
+    /**
+     * Opens the speaker's connection to the MQ listener.
+     *
+     * The socket is `unref`'d: a logging transport must never be the reason a
+     * process stays alive. Processes that legitimately run long hold the event
+     * loop open by their own means — a bundle keeps it alive with its HTTP
+     * server (`core/server.js` owns the single `listen()` call for both
+     * engines) — so unref'ing costs them nothing while it stops the speaker
+     * from outliving its host.
+     *
+     * @inner
+     * @param {object} opt - Logger options; `mqPort`/`hostV4`/`bindHost` are read here.
+     * @param {function} [cb] - Called `(false, client)` on connect, `(err)` on error.
+     * @returns {object} The connected (unref'd) net.Socket.
+     *
+     * @example
+     * startMQSpeaker({ mqPort: 8125, hostV4: '127.0.0.1' }, function (err, client) { });
+     */
     function startMQSpeaker(opt, cb) {
         var port = opt.mqPort || 8125;// jshint ignore:line
         // #B160 — the MQ listener binds `bind_host` (loopback by default):
@@ -103,6 +121,15 @@ function MQSpeaker(opt, loggers, cb) {
                 cb(false, client)
             }
         });
+        // #B276 — the logger is a load-time singleton (`lib/index.js` requires it
+        // eagerly, `main.js` invokes `Logger()` at module scope), so this socket is
+        // opened by the mere act of requiring the framework — including on a boot
+        // that is about to throw for want of a bundle context. Without unref, that
+        // documented throw becomes unrecoverable: the caller catches the error and
+        // the process still cannot exit, because the socket keeps the loop alive.
+        // Only bites when something is actually listening on the MQ port; with
+        // nothing there the connection is refused and the handle closes itself.
+        client.unref();
         client.on('error', (data) => {
             var err = data.toString();
             if (cb) {
