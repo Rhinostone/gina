@@ -12422,10 +12422,14 @@ function ValidatorPlugin(rules, data, formId, culture) {
      *
      * Two placement decisions worth keeping:
      * - `aria-busy` goes on the TRIGGER, never the form. The live region lives inside
-     *   the form, and `aria-busy` on an ancestor is commonly implemented as "defer
-     *   announcements in this subtree" — which would silence the very region used to
-     *   announce. (ARIA 1.2 defines no normative behaviour here, so this is a hedge
-     *   against real implementations, not a spec requirement.)
+     *   the form, and an ancestor marked busy MAY be treated as "defer announcements in
+     *   this subtree", which would silence the very region used to announce. ARIA 1.2
+     *   defines no normative behaviour here, so this is a cheap hedge, not a spec
+     *   requirement — and it is explicitly NOT a claim about what implementations do:
+     *   measured 2026-08-05 on VoiceOver/Chrome, an announcement from inside an
+     *   `aria-busy="true"` ancestor WAS spoken, so at least that pairing does not defer.
+     *   The placement costs nothing and still guards ATs that might; do not restate it
+     *   as "assistive tech commonly defers" — that wording was wrong and was corrected.
      * - This window is only ever reached once a request is genuinely in flight, so a
      *   validation-rejected submit never arms and never announces. That is what keeps
      *   the arm-before-validate loading state from producing a busy/not-busy flap.
