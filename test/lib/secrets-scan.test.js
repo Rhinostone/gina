@@ -493,7 +493,21 @@ describe('09 - scope overlay + env-file', function () {
         assert.deepStrictEqual(effectiveKeys({ db: { password: '${secret:DB_PW}' } }, null), ['DB_PW']);
     });
 
-    // Replica of check.js loadEnvFile.
+    // Replica of lib/secrets/src/env-file.js `parseEnv` (which `check.js` now
+    // delegates to — it no longer parses inline). Kept in sync deliberately:
+    // this file asserts the SCAN's view of an env file, so a drift here would
+    // make these assertions describe a parser the runtime does not use.
+    // Includes the #B269 inline-comment strip.
+    function stripInlineComment(raw) {
+        var quote = null;
+        for (var i = 0; i < raw.length; i++) {
+            var ch = raw[i];
+            if (quote) { if (ch === quote) quote = null; continue; }
+            if (ch === '"' || ch === "'") { quote = ch; continue; }
+            if (ch === '#' && i > 0 && /\s/.test(raw[i - 1])) return raw.slice(0, i);
+        }
+        return raw;
+    }
     function parseEnv(raw) {
         var map = Object.create(null);
         raw.split(/\r?\n/).forEach(function (line) {
@@ -503,7 +517,7 @@ describe('09 - scope overlay + env-file', function () {
             var eq = line.indexOf('=');
             if (eq < 0) return;
             var key = line.slice(0, eq).trim();
-            var val = line.slice(eq + 1).trim();
+            var val = stripInlineComment(line.slice(eq + 1)).trim();
             if (/^".*"$/.test(val) || /^'.*'$/.test(val)) val = val.slice(1, -1);
             map[key] = val;
         });

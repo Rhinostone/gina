@@ -84,6 +84,52 @@ describe('01 - env-file parsing', function () {
         assert.equal(envFile.parseEnv('D=first\nD=second\n').D, 'second');
     });
 
+    // #B269 — every expectation below was measured against a real `sh` doing
+    // `set -a; . file; set +a`, which is the entrypoint pattern the module
+    // header documents. The two conditions on the strip (preceded by
+    // whitespace, outside quotes) each exist because dropping one corrupts a
+    // legitimate secret, so both halves are asserted.
+    it('#B269 strips a trailing `#` comment, matching shell `source`', function () {
+        assert.equal(envFile.parseEnv('A=abc # note\n').A, 'abc');
+        assert.equal(envFile.parseEnv('A=abc # one # two\n').A, 'abc');
+        assert.equal(envFile.parseEnv('A=abc  #  spaced\n').A, 'abc');
+    });
+
+    it('#B269 a `#` NOT preceded by whitespace is literal, not a comment', function () {
+        // `PW=abc#def` is the literal `abc#def` to a shell — stripping here
+        // would silently corrupt any password containing a hash.
+        assert.equal(envFile.parseEnv('A=abc#def\n').A, 'abc#def');
+        // Directly after the `=` it is literal too, which is why the strip
+        // runs on the RAW value: trimming first would make this look like a
+        // leading `#` and swallow the whole value.
+        assert.equal(envFile.parseEnv('A=#leading\n').A, '#leading');
+    });
+
+    it('#B269 a quoted `#` is kept — quoting is the escape hatch', function () {
+        assert.equal(envFile.parseEnv('A="abc # inside"\n').A, 'abc # inside');
+        assert.equal(envFile.parseEnv("A='abc # inside'\n").A, 'abc # inside');
+        // First hash quoted, second one a real comment.
+        assert.equal(envFile.parseEnv('A="abc # in" # out\n').A, 'abc # in');
+    });
+
+    it('#B269 unquoting still applies after a trailing comment is removed', function () {
+        // Previously the trailing comment defeated the /^".*"$/ test, so the
+        // value kept its literal quote characters and became the credential.
+        assert.equal(envFile.parseEnv('A="abc" # note\n').A, 'abc');
+        assert.equal(envFile.parseEnv("A='abc' # note\n").A, 'abc');
+    });
+
+    it('#B269 `KEY= # comment` is EMPTY, so presence checks report it unset', function () {
+        // The consequential case: a shell yields '' here, and both the
+        // `secrets:check` gate and the file backend treat '' as unresolved.
+        // Before the fix this parsed to '# comment' — non-empty — so the gate
+        // reported the key SET while the documented entrypoint delivered it
+        // empty, and the file tier would have used '# comment' as the value.
+        var m = envFile.parseEnv('A= # comment\n');
+        assert.equal(m.A, '');
+        assert.equal(typeof m.A === 'string' && m.A !== '', false);
+    });
+
     it('parseEnvFile returns null for an unreadable path (NOT an empty map)', function () {
         assert.strictEqual(envFile.parseEnvFile(path.join(TMP, 'nope.env')), null);
         // control: a readable file must NOT return null
