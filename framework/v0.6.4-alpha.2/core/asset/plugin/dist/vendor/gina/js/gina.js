@@ -9798,8 +9798,26 @@ define('gina/link', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge',
         /**
          * linkRequest
          *
-         * @param {string} url
-         * @param {object} [options]
+         * Builds and sends the request for a bound link. Every entry point funnels
+         * through here — the direct click, the `proxyClick` child delegation and the
+         * public `gina.link.request()` — which is why the loading state is armed here
+         * rather than in the click handlers: `$el` is already the anchor at this point,
+         * so no click target ever has to be walked back up to it.
+         *
+         * Side effects: supersedes any request still in flight, arms `data-gina-loading`
+         * on the anchor for the duration of this one, and releases it from a `loadend`
+         * listener. An indefinite hang is the single outcome that never releases, because
+         * no `xhr.timeout` is set.
+         *
+         * @param {string} url - URL to request
+         * @param {object} [options] - XHR options, merged over the link's own
+         *
+         * @returns {void}
+         *
+         * @example
+         * gina.link.request('/some/route'); // arms the bound anchor, releases on loadend
+         *
+         * @inner
          * */
         function linkRequest(url, options) {
 
