@@ -309,16 +309,47 @@ function cli(scene, args) {
     });
 }
 
+/**
+ * Renders a spawnSync result into an assertion message.
+ *
+ * The scaffold asserts on on-disk state by design — "CLI exit codes are not
+ * trusted" — and that stays true: nothing here is read by any CONDITION. But
+ * when an on-disk check fails, the CLI's own result is the only record of why,
+ * and it was being discarded. These scaffold assertions have fired on CI while
+ * passing locally across repeated runs, so the reason was reachable only by
+ * downloading the run's log archive and inferring. `signal` and `error` are
+ * included deliberately: `cli()` sets a 120 s timeout, and a timeout surfaces
+ * there rather than in `status`.
+ *
+ * @inner
+ * @param {object} r - A spawnSync result (may be undefined).
+ * @returns {string} A message fragment; never throws.
+ *
+ * @example
+ * assert.ok(onDiskCheck, 'bundle:add did not register' + cliDetail(result));
+ */
+function cliDetail(r) {
+    if (!r) { return '\n  [no CLI result captured]'; }
+    var tail = function(s) {
+        s = (s == null) ? '' : String(s).trim();
+        return s ? s.slice(-600) : '(empty)';
+    };
+    var head = 'status=' + r.status
+        + (r.signal ? ' signal=' + r.signal : '')
+        + (r.error ? ' spawnError=' + r.error.message : '');
+    return '\n  CLI: ' + head + '\n  stderr: ' + tail(r.stderr) + '\n  stdout: ' + tail(r.stdout);
+}
+
 /** Scaffolds the scene, verified through on-disk state (CLI exit codes are not trusted). */
 function scaffold(scene) {
     fs.mkdirSync(scene.PROJ_DIR, { recursive: true });
     fs.mkdirSync(scene.CWD, { recursive: true });
-    cli(scene, ['project:add', '@' + scene.PROJ, '--path=' + scene.PROJ_DIR]);
+    var rProject = cli(scene, ['project:add', '@' + scene.PROJ, '--path=' + scene.PROJ_DIR]);
 
     var projects = path.join(scene.GINA_HOME, 'projects.json');
-    assert.ok(fs.existsSync(projects), 'project:add did not bootstrap the isolated home');
+    assert.ok(fs.existsSync(projects), 'project:add did not bootstrap the isolated home' + cliDetail(rProject));
     var registered = JSON.parse(fs.readFileSync(projects, 'utf8'))[scene.PROJ];
-    assert.ok(registered, 'project:add did not register @' + scene.PROJ);
+    assert.ok(registered, 'project:add did not register @' + scene.PROJ + cliDetail(rProject));
     assert.ok(String(registered.path).indexOf(scene.HOME) === 0,
         'sandbox breach: the project resolved OUTSIDE the throwaway home (' + registered.path + ')');
 
@@ -329,14 +360,15 @@ function scaffold(scene) {
         fs.symlinkSync(GINA_ROOT, path.join(scene.PROJ_DIR, 'node_modules', 'gina'));
     }
 
-    cli(scene, ['bundle:add', BUNDLE, '@' + scene.PROJ, '--start-port-from=' + scene.portFrom]);
+    var rBundle = cli(scene, ['bundle:add', BUNDLE, '@' + scene.PROJ, '--start-port-from=' + scene.portFrom]);
     var rev = JSON.parse(fs.readFileSync(path.join(scene.GINA_HOME, 'ports.reverse.json'), 'utf8'));
-    assert.ok(rev[BUNDLE + '@' + scene.PROJ], 'bundle:add did not register ' + BUNDLE + '@' + scene.PROJ);
+    assert.ok(rev[BUNDLE + '@' + scene.PROJ],
+        'bundle:add did not register ' + BUNDLE + '@' + scene.PROJ + cliDetail(rBundle));
 
-    cli(scene, ['view:add', BUNDLE, '@' + scene.PROJ]);
+    var rView = cli(scene, ['view:add', BUNDLE, '@' + scene.PROJ]);
     scene.port = rev[BUNDLE + '@' + scene.PROJ].dev['http/1.1'].http;
     scene.envJson = path.join(scene.PROJ_DIR, 'env.json');
-    assert.ok(fs.existsSync(scene.envJson), 'the scaffold must produce a project env.json');
+    assert.ok(fs.existsSync(scene.envJson), 'the scaffold must produce a project env.json' + cliDetail(rView));
 }
 
 /**
