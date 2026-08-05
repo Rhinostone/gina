@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'A bundle that starts in an environment its env.json does not declare now reliably prints why. The refusal was written with console.error and the boot then ended through a callback, so on a loaded or short-lived pipe — a container start, CI — the explanation could be truncated away and the operator was left with an exit code and no reason. The message is now flushed synchronously before the boot unwinds, matching the other boot-refusal sites in the same file.'
-time: 2026-08-05T03:57:03+01:00

@@ -1,3 +1,0 @@
-kind: Added
-body: '`gina.config.a11y` overrides the accessibility status strings gina announces on its own behalf, for example `gina.config.a11y = { submitting: ''Envoi…'' }`. English defaults ship for anything a project does not translate, mirroring how `setErrorLabels` already handles built-in rule labels. These are distinct from rule error labels: `setErrorLabels` is keyed by rule name, while these describe what the framework itself is doing.'
-time: 2026-08-05T00:32:58+01:00

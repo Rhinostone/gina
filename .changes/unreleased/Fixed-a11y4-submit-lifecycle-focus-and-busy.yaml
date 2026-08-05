@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Submitting a form no longer loses the keyboard user''s place. gina disables the submit trigger for the duration of the request, which makes the browser drop focus to the document body; focus is now returned to that trigger once the request settles, and only when nothing else claimed it in the meantime. Assistive technology is also told that a submit is under way: the trigger carries `aria-busy` while the request is in flight, and the form''s polite live region announces the start once. Completion announces nothing, so an errored response still announces its field errors uninterrupted, and a submit rejected by validation announces nothing at all.'
-time: 2026-08-05T00:32:57+01:00
