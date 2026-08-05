@@ -1,7 +1,8 @@
-define('gina/link', [ 'require', 'lib/domain', 'lib/merge', 'lib/uuid', 'utils/events' ], function (require) {
+define('gina/link', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge', 'lib/uuid', 'utils/events' ], function (require) {
 
     var Domain          = require('lib/domain');
     var domainInstance  = null;
+    var loadingState    = require('lib/loading-state');
     var merge           = require('lib/merge');
     var uuid            = require('lib/uuid');
 
@@ -154,8 +155,26 @@ define('gina/link', [ 'require', 'lib/domain', 'lib/merge', 'lib/uuid', 'utils/e
         /**
          * linkRequest
          *
-         * @param {string} url
-         * @param {object} [options]
+         * Builds and sends the request for a bound link. Every entry point funnels
+         * through here — the direct click, the `proxyClick` child delegation and the
+         * public `gina.link.request()` — which is why the loading state is armed here
+         * rather than in the click handlers: `$el` is already the anchor at this point,
+         * so no click target ever has to be walked back up to it.
+         *
+         * Side effects: supersedes any request still in flight, arms `data-gina-loading`
+         * on the anchor for the duration of this one, and releases it from a `loadend`
+         * listener. An indefinite hang is the single outcome that never releases, because
+         * no `xhr.timeout` is set.
+         *
+         * @param {string} url - URL to request
+         * @param {object} [options] - XHR options, merged over the link's own
+         *
+         * @returns {void}
+         *
+         * @example
+         * gina.link.request('/some/route'); // arms the bound anchor, releases on loadend
+         *
+         * @inner
          * */
         function linkRequest(url, options) {
 
@@ -294,8 +313,59 @@ define('gina/link', [ 'require', 'lib/domain', 'lib/merge', 'lib/uuid', 'utils/e
                 }
             };
 
+            // #B247 — loading state for the link the user actually clicked.
+            //
+            // Armed HERE rather than in the click handlers because `$el` is already the
+            // anchor at this point (`getElementById($link.id)` above), and because this
+            // is the one funnel every entry reaches: the direct click, the `proxyClick`
+            // child delegation — which dispatches its custom event ON the anchor, so the
+            // handler's `e.target` is never the inner node — and the public
+            // `gina.link.request()`. Arming below the `!xhr` throw also means a transport
+            // that never materialises can not leave a trigger lit.
+            //
+            // Released on `loadend`, the same fail-safe the validator uses: a LISTENER
+            // emits no events of its own, so it covers success, error, abort AND the
+            // readyState-4/status-0 network failure `handleXhr` has no branch for —
+            // without any of the consumer-visible surface that adding such a branch
+            // would carry (#B282). One listener per transport, and transports are built
+            // per request, so nothing accumulates.
+            //
+            // Never arm what can not be released: the CORS branch above can swap in a
+            // legacy `XDomainRequest`, which has no `addEventListener` and so no
+            // `loadend` to release on. An armed trigger with no release is exactly the
+            // permanent strand this feature exists to prevent.
+            //
+            // Deliberately NOT sequence-guarded, unlike the response wrapper above. The
+            // sequence drops a stale RESPONSE; a superseded request must still RELEASE
+            // its trigger. It releases before the newer click arms, because `abort()`
+            // fires `loadend` synchronously — inside the abort at the top of this
+            // function, which runs before this line. Guarding here would strand the
+            // trigger it was meant to protect.
+            //
+            // Residual: a request that never terminates never fires `loadend`, so an
+            // indefinite hang still strands the trigger. That is #B283 (no `xhr.timeout`
+            // is set, which is also why the `ontimeout` handleXhr installs is dead code)
+            // — a separate, consumer-visible behaviour change, NOT covered here.
+            if ( typeof(xhr.addEventListener) == 'function' ) {
+                loadingState.arm($el);
+                xhr.addEventListener('loadend', function onLinkSettled() {
+                    loadingState.disarm($el);
+                });
+            }
+
             // sending
-            xhr.send();
+            try {
+                xhr.send();
+            } catch (sendErr) {
+                // A synchronous throw out of `send()` (a cross-origin synchronous
+                // request, a transport already in an invalid state) means no request ran,
+                // so no `loadend` is ever coming. Release, then let the error out
+                // unchanged — the caller's contract is untouched.
+                if ( loadingState.isArmed($el) ) {
+                    loadingState.disarm($el);
+                }
+                throw sendErr;
+            }
         }
 
         function registerLink($link, options) {
