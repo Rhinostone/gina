@@ -57,8 +57,52 @@ define('gina/link', [ 'require', 'lib/domain', 'lib/merge', 'lib/uuid', 'utils/e
 
 
 
-        // XML Request
-        var xhr = null;
+        // XML Request — the request currently in flight, plus a monotonic sequence.
+        //
+        // These replace a single module-scope `xhr` that every link click reused.
+        // That is the #B175 class popin already fixed and nav deliberately avoids:
+        // calling `open()` on an object that is still carrying a request implicitly
+        // ABORTS it, and an aborted request reaches readyState 4 with status 0 —
+        // which `handleXhr` has no branch for. So the first click's completion never
+        // arrived at all, and anything waiting on it waited forever.
+        //
+        // The sequence exists because aborting is not enough on its own: the
+        // superseded request may already have reached readyState 4 and queued its
+        // handler. `_linkSeq` lets that stale response be dropped rather than acted
+        // upon, so a slow first response can never overwrite a newer one.
+        var _linkXhr = null;
+        var _linkSeq = 0;
+
+        /**
+         * Build a fresh transport for a single request.
+         *
+         * Was inlined in the `init` handler, which created ONE object for the whole
+         * page lifetime. Per-request construction is what makes concurrent link
+         * clicks independent.
+         *
+         * @returns {object} a new XHR-like object, or `null` when the browser has none
+         *
+         * @example
+         * var xhr = createXhr(); // fresh per request — never shared
+         *
+         * @inner
+         */
+        var createXhr = function() {
+            if (window.XMLHttpRequest) { // Mozilla, Safari, ...
+                return new XMLHttpRequest();
+            }
+            if (window.ActiveXObject) { // IE
+                try {
+                    return new ActiveXObject("Msxml2.XMLHTTP");
+                } catch (e) {
+                    try {
+                        return new ActiveXObject("Microsoft.XMLHTTP");
+                    }
+                    catch (e) {}
+                }
+            }
+            return null;
+        };
 
         /**
          * XML Request options
@@ -114,6 +158,19 @@ define('gina/link', [ 'require', 'lib/domain', 'lib/merge', 'lib/uuid', 'utils/e
          * @param {object} [options]
          * */
         function linkRequest(url, options) {
+
+            // One transport per request, and a sequence taken BEFORE the abort so a
+            // supersede-abort is stale by construction — its handler sees
+            // `seq !== _linkSeq` and drops out, which is what keeps the abort from
+            // being mistaken for a real network failure.
+            var seq = ++_linkSeq;
+            if ( _linkXhr && _linkXhr.readyState !== 4 ) {
+                try {
+                    _linkXhr.abort();
+                } catch (abortErr) { /* already dead — nothing to unwind */ }
+            }
+            var xhr = createXhr();
+            _linkXhr = xhr;
 
             // link object
             var $link      = getLinkByUrl(url);
@@ -213,8 +270,30 @@ define('gina/link', [ 'require', 'lib/domain', 'lib/merge', 'lib/uuid', 'utils/e
 
 
             options.$link = $link;
+            // The CORS branches above can swap the transport (XDomainRequest) or drop
+            // it entirely, so re-point the in-flight tracker at whatever will actually run.
+            _linkXhr = xhr;
             //xhr = handleXhr(xhr, $el, options);
             handleXhr(xhr, $el, options, require);
+
+            // Sequence guard, applied by WRAPPING the handler `handleXhr` just installed
+            // rather than by teaching `handleXhr` about link's sequence. `handleXhr` is
+            // shared and the sequence belongs to the plugin that owns the clicks, so the
+            // guard lives here and `utils/events.js` stays untouched.
+            //
+            // Only `onreadystatechange` needs wrapping: an aborted request fires
+            // `onabort` (which `handleXhr` does not install), never `onerror`, so a
+            // superseded request has exactly one way back into the completion path.
+            var onSettled = xhr.onreadystatechange;
+            xhr.onreadystatechange = function(event) {
+                if ( seq !== _linkSeq ) {
+                    return; // superseded by a newer click — drop the stale response
+                }
+                if ( typeof(onSettled) == 'function' ) {
+                    onSettled.call(this, event);
+                }
+            };
+
             // sending
             xhr.send();
         }
@@ -385,19 +464,10 @@ define('gina/link', [ 'require', 'lib/domain', 'lib/merge', 'lib/uuid', 'utils/e
             setupInstanceProto();
             instance.on('init', function(event) {
 
-                // setting up AJAX
-                if (window.XMLHttpRequest) { // Mozilla, Safari, ...
-                    xhr = new XMLHttpRequest();
-                } else if (window.ActiveXObject) { // IE
-                    try {
-                        xhr = new ActiveXObject("Msxml2.XMLHTTP");
-                    } catch (e) {
-                        try {
-                            xhr = new ActiveXObject("Microsoft.XMLHTTP");
-                        }
-                        catch (e) {}
-                    }
-                }
+                // AJAX setup used to happen HERE, building one transport for the whole
+                // page lifetime. It moved to `createXhr()`, called per request from
+                // `linkRequest`, so two link clicks no longer share one object — see the
+                // `_linkXhr` / `_linkSeq` comment at the top of this closure.
 
                 // proxies
                 // click on main document
