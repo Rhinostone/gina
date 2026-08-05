@@ -3346,6 +3346,12 @@ function ValidatorPlugin(rules, data, formId, culture) {
                 ) {
                     let $img    = document.createElement('IMG');
                     $img.src    = files[f].tmpUri;
+                    // #A11Y7/U1 — the preview tells the user WHICH file is staged, so it is
+                    // informative content, not decoration; without a text alternative assistive
+                    // tech falls back to reading the temp URI aloud, once per staged file.
+                    // Empty string when the name is missing: a silently ignored image beats
+                    // announcing a placeholder.
+                    $img.alt    = files[f].originalFilename || '';
                     $img.style.display = 'none';
                     $img.setAttribute('data-upload-original-filename', files[f].originalFilename);
                     $img.setAttribute('data-upload-reset-link-id', $resetLink.id);
@@ -3441,6 +3447,12 @@ function ValidatorPlugin(rules, data, formId, culture) {
                                 // creating IMG tag
                                 let $img = document.createElement('IMG');
                                 $img.src = files[f][key].tmpUri;
+                                // #A11Y7/U1 — name the file the user actually chose, not the
+                                // server-generated preview variant recorded just below: the
+                                // generated name is an internal artefact and means nothing to
+                                // the person listening. Same empty-string fallback as the
+                                // no-preview branch.
+                                $img.alt = files[f].originalFilename || '';
                                 $img.style.display = 'none';
                                 // retrieve img `originalFilename` (not the preview img[key] `originalFilename`)
                                 // these 2 metadatas will be used to remove files from the server

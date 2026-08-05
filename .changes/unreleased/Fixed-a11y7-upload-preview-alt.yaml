@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Upload preview images built by the staged-upload client layer now carry an `alt` text alternative taken from the original filename. Previously neither preview branch set `alt` at all, so assistive technology fell back to reading the temporary upload URI aloud, once per staged file. The name used is the one the user chose, not the server-generated preview variant, and an image with no available name falls back to an empty `alt` so it is ignored rather than announced.'
+time: 2026-08-05T03:03:54+01:00
