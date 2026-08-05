@@ -372,7 +372,12 @@ function focusFirstInvalid($form, errs) {
             && typeof(_aField.focus) == 'function'
         ) {
             _aField.focus();
-            return _aField;
+            // #A11Y5 (V8) — mirrors the source: `typeof focus == 'function'` is true for
+            // every HTMLElement, so the loop must confirm focus actually moved before
+            // stopping. ownerDocument keeps the replica's signature unchanged.
+            if ( _aField.ownerDocument && _aField.ownerDocument.activeElement === _aField ) {
+                return _aField;
+            }
         }
     }
     return null;

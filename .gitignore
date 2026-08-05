@@ -48,7 +48,13 @@ Thumbs.db
 # Misc
 /data
 /cgi-bin
+
+# Secrets — glob, never an exact name: `.env` alone matched neither
+# `secrets.env` nor `.env.production`, so both were tracked by default.
 .env
+.env.*
+*.env
+
 *.bak
 *.bak.*
 *.old

@@ -1,0 +1,27 @@
+# SCM
+.svn
+.git
+
+# Desktop
+.DS_Store
+._.DS_Store
+desktop.ini
+
+# Project
+.gna
+bundles
+package-lock.json
+node_modules
+npm-debug.log
+releases
+bundles
+logs
+tmp
+
+# Secrets — glob, never an exact name: `.env` alone matches neither
+# `secrets.env` nor `.env.production`. Commit an example instead.
+.env
+.env.*
+*.env
+!.env.example
+!*.example.env

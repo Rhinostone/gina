@@ -42,8 +42,11 @@ script/check_readme_freshness.js
 .claude*
 CLAUDE*
 
-# Secrets
+# Secrets — glob, never an exact name: `.env` alone matched neither
+# `secrets.env` nor `.env.production`, so both shipped by default.
 .env
+.env.*
+*.env
 script/.private-tokens.json
 
 # Contributor docs (not for npm consumers)

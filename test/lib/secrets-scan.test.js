@@ -493,7 +493,21 @@ describe('09 - scope overlay + env-file', function () {
         assert.deepStrictEqual(effectiveKeys({ db: { password: '${secret:DB_PW}' } }, null), ['DB_PW']);
     });
 
-    // Replica of check.js loadEnvFile.
+    // Replica of lib/secrets/src/env-file.js `parseEnv` (which `check.js` now
+    // delegates to — it no longer parses inline). Kept in sync deliberately:
+    // this file asserts the SCAN's view of an env file, so a drift here would
+    // make these assertions describe a parser the runtime does not use.
+    // Includes the #B269 inline-comment strip.
+    function stripInlineComment(raw) {
+        var quote = null;
+        for (var i = 0; i < raw.length; i++) {
+            var ch = raw[i];
+            if (quote) { if (ch === quote) quote = null; continue; }
+            if (ch === '"' || ch === "'") { quote = ch; continue; }
+            if (ch === '#' && i > 0 && /\s/.test(raw[i - 1])) return raw.slice(0, i);
+        }
+        return raw;
+    }
     function parseEnv(raw) {
         var map = Object.create(null);
         raw.split(/\r?\n/).forEach(function (line) {
@@ -503,7 +517,7 @@ describe('09 - scope overlay + env-file', function () {
             var eq = line.indexOf('=');
             if (eq < 0) return;
             var key = line.slice(0, eq).trim();
-            var val = line.slice(eq + 1).trim();
+            var val = stripInlineComment(line.slice(eq + 1)).trim();
             if (/^".*"$/.test(val) || /^'.*'$/.test(val)) val = val.slice(1, -1);
             map[key] = val;
         });
@@ -543,9 +557,213 @@ describe('09 - scope overlay + env-file', function () {
         });
     });
 
-    it('check.js reads --env-file from self.params, defines loadEnvFile, and switches the env source', function () {
+    it('check.js reads --env-file from self.params and defines loadEnvFile', function () {
         assert.match(checkSrc, /self\.envFile\s*=\s*\(self\.params\s*&&\s*self\.params\[['"]env-file['"]\]\)/);
         assert.match(checkSrc, /var\s+loadEnvFile\s*=\s*function/);
-        assert.match(checkSrc, /self\.envMap\s*\|\|\s*process\.env/);
+    });
+
+    // ---- two-tier lookup (env over file), matching backends/file.js ---------
+
+    it('check.js consults the environment tier BEFORE the file tier', function () {
+        var lookup = checkSrc.slice(checkSrc.indexOf('var lookupSecret'));
+        assert.ok(lookup.length > 0, 'lookupSecret must exist');
+        var envAt  = lookup.indexOf('source[key]');
+        var fileAt = lookup.indexOf('chain.map[key]');
+        assert.ok(envAt > -1, 'environment tier must be present');
+        assert.ok(fileAt > -1, 'file tier must be present');
+        assert.ok(envAt < fileAt, 'environment must be read before the file chain');
+    });
+
+    it('check.js builds the file chain with the shared whisper + secrets.readEnvFile (no second resolver)', function () {
+        assert.match(checkSrc, /whisper\(\s*buildReps\(/);
+        // #B267 moved this call site from `parseEnvFile` (map-or-null) to the
+        // discriminated `readEnvFile`, so the checker can tell an absent layer
+        // from an unreadable one exactly as the runtime does. Still the SHARED
+        // parser from lib/secrets — which is what this pin actually guards.
+        assert.match(checkSrc, /secrets\.readEnvFile\(\s*path\s*\)/);
+    });
+
+    it('check.js never sources ${homedir} from projects.json (the field the config loader never reads)', function () {
+        assert.doesNotMatch(checkSrc, /self\.projectHomedir/);
+        assert.doesNotMatch(checkSrc, /getCoreEnv\s*\(/);
+        // It must read the project's own env.json instead.
+        assert.match(checkSrc, /env\.json/);
+    });
+
+    it('check.js skips the file tier on an unresolved token rather than statting a literal path', function () {
+        assert.match(checkSrc, /UNRESOLVED_TOKEN\.test\(\s*path\s*\)/);
+        assert.match(checkSrc, /unresolved token in/);
+    });
+
+    it('check.js only seeds a reps key from a NON-EMPTY string (an empty one substitutes silently)', function () {
+        // Guards the measured whisper behaviour: an absent key leaves its token
+        // verbatim (caught loudly downstream), but an empty-string value IS
+        // substituted, collapsing `<home>/${scope}/f.env` to `<home>//f.env`.
+        assert.match(checkSrc, /typeof\s+value\s*===\s*['"]string['"]\s*&&\s*value\s*!==\s*['"]{2}/);
+    });
+
+    it('arguments.json declares --env (needed to pick the env block homedir is read from)', function () {
+        assert.ok(argsArr.indexOf('--env') > -1, 'expected --env in arguments.json');
+    });
+
+    // ---- #B266: reps must carry every token a real chain uses ---------------
+
+    it('check.js seeds the version tokens from the manifest (a ${projectVersionMajor} path must resolve)', function () {
+        assert.match(checkSrc, /put\(\s*['"]projectVersion['"]\s*,\s*manifest\.version\s*\)/);
+        assert.match(checkSrc, /put\(\s*['"]projectVersionMajor['"]\s*,\s*manifest\.version\.split/);
+    });
+
+    it('check.js resolves ${scope} from an ASSUMED scope, not from the overlay flag alone', function () {
+        // scopeAssumed falls back to the project default...
+        assert.match(checkSrc, /self\.scopeAssumed\s*=\s*self\.scopeName\s*\|\|\s*self\.defaultScope/);
+        assert.match(checkSrc, /put\(\s*['"]scope['"]\s*,\s*self\.scopeAssumed\s*\)/);
+        // ...while scopeName itself stays explicit-only, so the config_<scope>/
+        // overlay is never applied by default (that would be a behaviour change).
+        assert.match(checkSrc, /self\.scopeName\s*=\s*\(self\.params\s*&&\s*self\.params\.scope\)\s*\?\s*self\.params\.scope\s*:\s*null/);
+    });
+
+    it('check.js derives the project name from the PATH, so the all-projects form cannot build ~/.undefined', function () {
+        assert.match(checkSrc, /self\.projects\[pn\]\.path\s*===\s*projectPath/);
+        assert.doesNotMatch(checkSrc, /['"]~\/\.['"]\s*\+\s*self\.projectName/);
+    });
+
+    it('a versioned + scoped chain resolves end to end (regression for the shape that skipped the tier)', function () {
+        // Replica of buildReps' seeding rules + the real substitution semantics.
+        var manifest = { version: '3.0.0-beta.1' };
+        var reps = {};
+        var put  = function (k, v) { if (typeof v === 'string' && v !== '') reps[k] = v; };
+        put('projectName', 'demoproject');
+        put('scope', null || 'local');                 // no --scope -> project default
+        put('projectVersion', manifest.version);
+        put('projectVersionMajor', manifest.version.split(/\./g)[0]);
+        put('homedir', '/home/u/.demoproject');
+
+        var chain = [
+            '${homedir}/v${projectVersionMajor}/credentials/secrets.env',
+            '${homedir}/v${projectVersionMajor}/credentials/${scope}/secrets.env'
+        ];
+        var out = chain.map(function (p) {
+            return p.replace(/\$\{(\w+)\}/g, function (s, k) {
+                return (reps[k] !== undefined) ? reps[k] : s;
+            });
+        });
+
+        assert.equal(out[0], '/home/u/.demoproject/v3/credentials/secrets.env');
+        assert.equal(out[1], '/home/u/.demoproject/v3/credentials/local/secrets.env');
+        out.forEach(function (p) {
+            assert.doesNotMatch(p, /\$\{[^}]*\}/, 'no token may survive: ' + p);
+        });
+    });
+
+    // ---- declaration resolution: shared/config vs the bundle's own ----------
+    // Replicates the loader's own expression (`merge(sharedMain, jsonFile, true)`),
+    // so these pin the RUNTIME's semantics, not just the CLI's copy of them.
+
+    function effectiveChain(shared, bundle) {
+        var eff = merge(JSON.clone(shared), JSON.clone(bundle), true);
+        return (eff && eff.secrets && typeof eff.secrets === 'object') ? eff.secrets.file : undefined;
+    }
+
+    it('a bundle-level chain REPLACES the shared one outright (arrays do not concatenate)', function () {
+        assert.deepStrictEqual(
+            effectiveChain({ secrets: { file: ['SHARED'] } }, { secrets: { file: ['BUNDLE'] } }),
+            ['BUNDLE']
+        );
+    });
+
+    it('a bundle with no secrets block at all inherits the shared chain', function () {
+        assert.deepStrictEqual(effectiveChain({ secrets: { file: ['SHARED'] } }, {}), ['SHARED']);
+    });
+
+    it('an EMPTY bundle secrets block does not silently disable a project-wide chain', function () {
+        // The distinction matters: declaring `secrets: {}` for some future sibling
+        // key must not strip the inherited file chain out from under the bundle.
+        assert.deepStrictEqual(
+            effectiveChain({ secrets: { file: ['SHARED'] } }, { secrets: {} }),
+            ['SHARED']
+        );
+    });
+
+    it('an explicit null IS the opt-out lever (distinct from an empty block)', function () {
+        assert.equal(
+            effectiveChain({ secrets: { file: ['SHARED'] } }, { secrets: { file: null } }),
+            null
+        );
+        // and selectBackend treats null as "no chain" -> the unchanged env backend
+        var envOnly = secrets.selectBackend({ content: { settings: { secrets: { file: null } } } });
+        var plain   = secrets.selectBackend({ content: { settings: {} } });
+        assert.equal(envOnly, plain, 'a nulled chain must yield the SAME default backend instance');
+    });
+
+    it('neither level declaring leaves no chain at all (control)', function () {
+        assert.equal(effectiveChain({}, {}), undefined);
+    });
+
+    it('--env-file outranks the declared file tier (it stands in for the environment)', function () {
+        // Replica of lookupSecret with an --env-file map occupying the env tier.
+        var envFileMap = { SHARED_KEY: 'from-env-file' };
+        var fileTier   = { SHARED_KEY: 'from-declared-file', FILE_ONLY: 'f' };
+        function lookup(key) {
+            if (typeof envFileMap[key] === 'string' && envFileMap[key] !== '') return 'env-file';
+            if (typeof fileTier[key] === 'string' && fileTier[key] !== '') return 'file';
+            return null;
+        }
+        assert.equal(lookup('SHARED_KEY'), 'env-file');   // explicit flag wins
+        assert.equal(lookup('FILE_ONLY'), 'file');        // but does not mask the tier below
+        assert.equal(lookup('NOWHERE'), null);
+    });
+
+    it('an underivable token still survives verbatim so the tier fails loudly (control for the test above)', function () {
+        var reps = { homedir: '/home/u/.demoproject' };   // no version, no scope
+        var out = '${homedir}/v${projectVersionMajor}/x.env'.replace(/\$\{(\w+)\}/g, function (s, k) {
+            return (reps[k] !== undefined) ? reps[k] : s;
+        });
+        assert.match(out, /\$\{projectVersionMajor\}/);   // must NOT silently vanish
+    });
+
+    // ---- behavioural: real lib/secrets parser, real files -------------------
+
+    it('layering a real chain: later entry wins, absent file contributes nothing', function () {
+        var dir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'gina-secrets-chain-'));
+        try {
+            var base  = path.join(dir, 'base.env');
+            var scope = path.join(dir, 'scope.env');
+            fs.writeFileSync(base,  'SHARED=from-base\nONLY_BASE=b\n');
+            fs.writeFileSync(scope, 'SHARED=from-scope\nONLY_SCOPE=s\n');
+
+            // Replica of resolveSecretsFileChain's layering loop.
+            var paths  = [base, scope, path.join(dir, 'missing.env')];
+            var map    = Object.create(null);
+            var layers = [];
+            paths.forEach(function (p) {
+                var m = secrets.parseEnvFile(p);
+                layers.push({ path: p, found: m !== null });
+                if (m === null) return;
+                for (var k in m) map[k] = m[k];
+            });
+
+            assert.equal(map.SHARED, 'from-scope');      // later entry wins
+            assert.equal(map.ONLY_BASE, 'b');            // earlier entry back-fills
+            assert.equal(map.ONLY_SCOPE, 's');
+            assert.deepStrictEqual(layers.map(function (l) { return l.found; }), [true, true, false]);
+        } finally {
+            fs.rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    it('two-tier resolution: env wins over file, file fills a gap, neither → UNSET', function () {
+        // Replica of lookupSecret with both tiers populated.
+        var envTier  = { IN_BOTH: 'from-env', ONLY_ENV: 'e', EMPTY_IN_ENV: '' };
+        var fileTier = { IN_BOTH: 'from-file', ONLY_FILE: 'f', EMPTY_IN_ENV: 'rescued' };
+        function lookup(key) {
+            if (typeof envTier[key] === 'string' && envTier[key] !== '') return 'env';
+            if (typeof fileTier[key] === 'string' && fileTier[key] !== '') return 'file';
+            return null;
+        }
+        assert.equal(lookup('IN_BOTH'), 'env');            // environment outranks the file
+        assert.equal(lookup('ONLY_ENV'), 'env');
+        assert.equal(lookup('ONLY_FILE'), 'file');         // file fills the gap
+        assert.equal(lookup('EMPTY_IN_ENV'), 'file');      // empty env value is NOT "set"
+        assert.equal(lookup('NOWHERE'), null);             // still fail-closed
     });
 });

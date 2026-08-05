@@ -217,6 +217,27 @@ describe('03 - config.js + proc.js:319 boot exit-sites: sync flush before exit/d
     it('config.js bad-routing-syntax: flush precedes exit', function() {
         flushPrecedesExit(config, 'var _routeMsg', 'fs.writeSync(2, _routeMsg', 'config.js routing syntax');
     });
+    it('config.js env-block refusal: flush precedes the callback-driven exit (#B278)', function() {
+        // Deliberately NOT flushPrecedesExit(): this site exits via
+        // `return callback(new Error(...))`, not a literal process.exit(1). The
+        // shared helper slices from its anchor to the NEXT `process.exit(1)` in
+        // the file, which here lies far below in unrelated code — so the slice
+        // would span most of config.js and the assertion would pass no matter
+        // where (or whether) the flush sat. A helper that cannot fail is not a
+        // pin. Anchor on the callback that IS this site's exit instead.
+        var i = config.indexOf('var _envBlockMsg');
+        assert.ok(i > -1, 'config.js: _envBlockMsg anchor not found');
+        var cbIdx = config.indexOf('return callback(new Error(_envBlockMsg))', i);
+        assert.ok(cbIdx > -1, 'config.js: no callback exit after _envBlockMsg');
+        var slice = config.slice(i, cbIdx);
+        assert.ok(slice.indexOf('fs.writeSync(2, _envBlockMsg') > -1,
+            'expected a synchronous flush before the callback that ends this boot — ' +
+            'without it the refusal can be lost to the async pipe, which is what made ' +
+            'config-envjson-failfast §04b intermittently unable to see its own message');
+        assert.match(slice, /console\.error\(/,
+            'the env-block refusal must keep its console.error alongside the flush');
+    });
+
     it('config.js requires fs (the flush dependency)', function() {
         assert.match(config, /require\(['"]fs['"]\)/, 'config.js must require fs');
     });
