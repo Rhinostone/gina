@@ -284,25 +284,55 @@ function LoadingState() {
      * the boundary element (typically the form), at `form`/`body`/`html`, or after
      * `MAX_DEPTH` hops.
      *
+     * ## Recognising a non-submit trigger (`isTrigger`)
+     *
+     * The default predicate recognises submit-like controls only — a `button` or
+     * `input` of type `submit`, or an `a[data-gina-form-submit]`. That is what the
+     * validator needs and nothing else. Other plugins arm elements this module has
+     * no business knowing about: link arms `a[data-gina-link]`, popin arms
+     * `a[data-gina-dialog]`. Pass `isTrigger` to say what counts as YOUR trigger.
+     *
+     * Without it the climb finds no match, breaks at `form`/`body`/`html`, and
+     * returns the ORIGINAL `$el` — so a click on the `<span>` inside
+     * `<a data-gina-link><span>Go</span></a>` would arm the span and leave the
+     * anchor unstyled.
+     *
+     * The predicate lives with the caller deliberately rather than being folded
+     * into the default: this module owns the WALK, each plugin owns its own notion
+     * of a trigger. Folding plugin attribute names in here would also couple the
+     * module to the popin deprecation/alias work, which changes which attributes
+     * are honoured over time.
+     *
      * @param {object} $el - the clicked element (`event.target`)
      * @param {object} [$boundary] - element to stop at, usually the `<form>`
+     * @param {function} [isTrigger] - `($node) => boolean`; defaults to the
+     *   submit-like predicate. Ignored when not a function. A predicate that
+     *   THROWS is deliberately not caught: every caller is framework code, so
+     *   swallowing would hide a framework bug behind a silently unarmed trigger.
      *
-     * @returns {object} the owning submit trigger, or `$el`, or `null` when `$el` is not an element
+     * @returns {object} the owning trigger, or `$el`, or `null` when `$el` is not an element
      *
      * @example
      * // <button type="submit"><span>Save</span></button>
      * resolveTrigger(event.target, $form); // the <button>, even when the <span> was clicked
      *
+     * @example
+     * // <a data-gina-link><span>Go</span></a> — the span was clicked
+     * resolveTrigger(event.target, null, function($n) {
+     *     return /^a$/i.test($n.tagName) && $n.getAttribute('data-gina-link') != null;
+     * }); // the <a>, not the <span>
+     *
      * @api Public
      */
-    var resolveTrigger = function($el, $boundary) {
+    var resolveTrigger = function($el, $boundary, isTrigger) {
         if ( !isNode($el) ) {
             return null;
         }
+        var matches = ( typeof(isTrigger) == 'function' ) ? isTrigger : isSubmitTrigger;
         var $node = $el;
         var depth = 0;
         while ( isNode($node) && depth < MAX_DEPTH ) {
-            if ( isSubmitTrigger($node) ) {
+            if ( matches($node) ) {
                 return $node;
             }
             if ( $boundary && $node === $boundary ) {

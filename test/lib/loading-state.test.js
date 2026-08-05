@@ -270,6 +270,77 @@ describe('04 - resolveTrigger climbs to the owning trigger', function () {
 });
 
 
+describe('04b - resolveTrigger accepts a caller-supplied predicate (slice 2 blocker)', function () {
+
+    // The default predicate recognises submit-like controls ONLY. link arms
+    // `a[data-gina-link]` and popin arms `a[data-gina-dialog]`; neither matches, so
+    // before this parameter existed the climb fell through to `form|body|html` and
+    // returned the ORIGINAL clicked node — arming an inner <span> and leaving the
+    // anchor unstyled. The predicate is the caller's because each plugin owns its
+    // own notion of a trigger, and popin's set is about to change under the
+    // deprecation/alias work.
+
+    var isLink = function ($n) {
+        return !!($n && $n.tagName && /^a$/i.test($n.tagName)
+            && $n.getAttribute('data-gina-link') != null);
+    };
+
+    it('climbs to an <a data-gina-link> from a nested node', function () {
+        var d = mount('<a id="a" data-gina-link="/x"><span id="s"><i id="i">Go</i></span></a>');
+        assert.equal(loadingState.resolveTrigger(d.getElementById('i'), null, isLink).id, 'a');
+    });
+
+    it('SUBTRACT: the SAME DOM without the predicate returns the clicked span — this is the defect the parameter fixes', function () {
+        var d = mount('<a id="a" data-gina-link="/x"><span id="s"><i id="i">Go</i></span></a>');
+        assert.equal(loadingState.resolveTrigger(d.getElementById('i'), null).id, 'i',
+            'the default predicate cannot see a link trigger; without the 3rd arg the span is armed');
+    });
+
+    it('works for popin\'s shape too — the predicate is the extension point, not a hardcoded list', function () {
+        var isDialog = function ($n) {
+            return !!($n && $n.tagName && /^a$/i.test($n.tagName)
+                && $n.getAttribute('data-gina-dialog') != null);
+        };
+        var d = mount('<a id="a" data-gina-dialog="/x"><span id="s">Open</span></a>');
+        assert.equal(loadingState.resolveTrigger(d.getElementById('s'), null, isDialog).id, 'a');
+    });
+
+    it('the default is UNCHANGED when no predicate is passed — submit shapes still resolve', function () {
+        var d = mount('<form id="f"><button id="b" type="submit"><span id="s">Save</span></button></form>');
+        assert.equal(loadingState.resolveTrigger(d.getElementById('s'), d.getElementById('f')).id, 'b');
+    });
+
+    it('a non-function 3rd arg falls back to the default rather than throwing', function () {
+        var d = mount('<form id="f"><button id="b" type="submit"><span id="s">Save</span></button></form>');
+        [null, undefined, 'nope', 42, {}].forEach(function (bad) {
+            assert.equal(loadingState.resolveTrigger(d.getElementById('s'), d.getElementById('f'), bad).id, 'b',
+                'a bad predicate must degrade to the documented default, not break the click handler');
+        });
+    });
+
+    it('a predicate that never matches still terminates and returns the element it was handed', function () {
+        var d = mount('<div id="d"><span id="s"><i id="i">x</i></span></div>');
+        var never = function () { return false; };
+        assert.equal(loadingState.resolveTrigger(d.getElementById('i'), null, never).id, 'i');
+    });
+
+    it('the boundary still wins over a matching ancestor outside it', function () {
+        var d = mount('<a id="outer" data-gina-link="/x"><form id="f"><span id="s">x</span></form></a>');
+        assert.equal(loadingState.resolveTrigger(d.getElementById('s'), d.getElementById('f'), isLink).id, 's',
+            'a custom predicate must not be able to climb past the caller\'s boundary');
+    });
+
+    it('a THROWING predicate propagates — deliberately not swallowed', function () {
+        var d = mount('<div id="d"><span id="s">x</span></div>');
+        var boom = function () { throw new Error('caller bug'); };
+        assert.throws(function () {
+            loadingState.resolveTrigger(d.getElementById('s'), null, boom);
+        }, /caller bug/,
+            'all three callers are framework code; swallowing would hide a framework bug behind a silently unarmed trigger');
+    });
+});
+
+
 describe('05 - bundle + validator wiring', function () {
 
     it('build.json carries the lib/loading-state alias', function () {
