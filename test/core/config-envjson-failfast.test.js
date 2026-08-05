@@ -340,11 +340,57 @@ function cliDetail(r) {
     return '\n  CLI: ' + head + '\n  stderr: ' + tail(r.stderr) + '\n  stdout: ' + tail(r.stdout);
 }
 
+/**
+ * Renders the scaffold's retained CLI results, for a failure that surfaces
+ * AFTER scaffold() returned.
+ *
+ * The scaffold's own assertions can all pass while the bundle tree is still
+ * incomplete — a missing entry point, or files copied with their `${bundle}`
+ * tokens unsubstituted — because `bundle:add` registers the ports BEFORE it
+ * copies and parses the boilerplate. The failure then surfaces at the boot
+ * assertion, and the CLI results that would explain it had been discarded.
+ * Observed on CI more than once (#B279), where it cost a log-archive round
+ * trip per occurrence and still left the mechanism unobserved.
+ *
+ * Only a command that exited non-zero (or died) gets its full tails printed —
+ * a clean roster stays one line each, so the common case does not bury the
+ * container output the boot assertion already prints.
+ *
+ * @inner
+ * @param {object} scene - A scene whose scaffold() populated `scene.cliResults`.
+ * @returns {string} A message fragment; never throws.
+ *
+ * @example
+ * assert.equal(r.alive, true, 'the scene must come up' + scaffoldDetail(scene));
+ */
+function scaffoldDetail(scene) {
+    var results = scene && scene.cliResults;
+    if (!results) { return '\n  [no scaffold CLI results retained]'; }
+    var out = '\n  scaffold CLI results:';
+    ['project', 'bundle', 'view'].forEach(function (key) {
+        var r = results[key];
+        if (!r) { out += '\n    ' + key + ': (not run)'; return; }
+        out += '\n    ' + key + ': status=' + r.status
+            + (r.signal ? ' signal=' + r.signal : '')
+            + (r.error ? ' spawnError=' + r.error.message : '');
+        if (r.status !== 0 || r.signal || r.error) { out += cliDetail(r); }
+    });
+    return out;
+}
+
 /** Scaffolds the scene, verified through on-disk state (CLI exit codes are not trusted). */
 function scaffold(scene) {
     fs.mkdirSync(scene.PROJ_DIR, { recursive: true });
     fs.mkdirSync(scene.CWD, { recursive: true });
-    var rProject = cli(scene, ['project:add', '@' + scene.PROJ, '--path=' + scene.PROJ_DIR]);
+    // #B279 — retain each CLI result on the scene. scaffold() renders cliDetail()
+    // only on its OWN assertions, so when those pass but the scene is still
+    // broken the failure surfaces later (at boot) with the CLI record already
+    // discarded. Assigned as each command runs, so a scaffold that throws
+    // part-way still carries the results it did obtain. Nothing reads these:
+    // they feed failure MESSAGES only, so "CLI exit codes are not trusted" holds.
+    scene.cliResults = {};
+    var rProject = scene.cliResults.project =
+        cli(scene, ['project:add', '@' + scene.PROJ, '--path=' + scene.PROJ_DIR]);
 
     var projects = path.join(scene.GINA_HOME, 'projects.json');
     assert.ok(fs.existsSync(projects), 'project:add did not bootstrap the isolated home' + cliDetail(rProject));
@@ -360,12 +406,13 @@ function scaffold(scene) {
         fs.symlinkSync(GINA_ROOT, path.join(scene.PROJ_DIR, 'node_modules', 'gina'));
     }
 
-    var rBundle = cli(scene, ['bundle:add', BUNDLE, '@' + scene.PROJ, '--start-port-from=' + scene.portFrom]);
+    var rBundle = scene.cliResults.bundle =
+        cli(scene, ['bundle:add', BUNDLE, '@' + scene.PROJ, '--start-port-from=' + scene.portFrom]);
     var rev = JSON.parse(fs.readFileSync(path.join(scene.GINA_HOME, 'ports.reverse.json'), 'utf8'));
     assert.ok(rev[BUNDLE + '@' + scene.PROJ],
         'bundle:add did not register ' + BUNDLE + '@' + scene.PROJ + cliDetail(rBundle));
 
-    var rView = cli(scene, ['view:add', BUNDLE, '@' + scene.PROJ]);
+    var rView = scene.cliResults.view = cli(scene, ['view:add', BUNDLE, '@' + scene.PROJ]);
     scene.port = rev[BUNDLE + '@' + scene.PROJ].dev['http/1.1'].http;
     scene.envJson = path.join(scene.PROJ_DIR, 'env.json');
     assert.ok(fs.existsSync(scene.envJson), 'the scaffold must produce a project env.json' + cliDetail(rView));
@@ -457,7 +504,8 @@ describe('#B183 §04b — live: a bundle declared for another env refuses, it do
             scaffold(scene);
             r = await boot(scene, 40000);
             assert.equal(r.alive, true,
-                'the unmutated scene must come up, or a dead #B183 arm would prove nothing about #B183.\n' + r.txt.slice(-1500));
+                'the unmutated scene must come up, or a dead #B183 arm would prove nothing about #B183.\n'
+                + r.txt.slice(-1500) + scaffoldDetail(scene));
         } finally {
             teardown(scene, r);
         }

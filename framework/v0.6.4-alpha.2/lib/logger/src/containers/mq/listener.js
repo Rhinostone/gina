@@ -174,6 +174,29 @@ function MQListener(opt, cb) {
             conn.sessionId = uuid();
             // conn.request = 'report'; // by default
             sessions[conn.sessionId] = conn;
+
+            // #B279 — a speaker that goes away abruptly (a CLI that finished or
+            // was killed) leaves this connection socket registered but broken.
+            // The next write to it — the handshake below, or `self.report()`'s
+            // `sessions[sessionId].write()` — then raises EPIPE/ECONNRESET on the
+            // socket, and with no 'error' listener node THROWS it: the whole
+            // process dies. That is not theoretical — it is how a `bundle:add`
+            // died mid-command on CI, before writing ports.reverse.json, because
+            // every `bin/cli` invocation starts this listener on the shared MQ
+            // port and parallel test files speak to each other's listener.
+            // `server.on('error')` below does NOT cover this: every accepted
+            // connection is its own EventEmitter.
+            // A departed client is normal TCP lifecycle rather than a listener
+            // fault (`lib/proc.js` reaches the same conclusion for the server
+            // socket), so drop the session and carry on. Dropping matters: an
+            // abruptly-killed peer may never emit 'end', which is what otherwise
+            // clears `sessions` — leaving a dead socket for the next write.
+            // Registered BEFORE the handshake write, which is itself a site.
+            conn.on('error', function(err) {
+                delete sessions[this.sessionId];
+                console.debug('[MQListener] (error) speaker `'+ this.sessionId +'` dropped: '+ (err.code || err.message));
+            });
+
             conn.write(JSON.stringify({ sessionId: conn.sessionId }) +'\r\n' );
 
             //feedback.
