@@ -469,7 +469,19 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge'
          * a body scroll-lock attribute (CSS), and best-effort `inert` on background
          * siblings. Torn down by removeNonModalShims() on close.
          *
+         * "Background siblings" has to include any OTHER popin still open inside the
+         * shared container: popinOpen() never closes the popin it supersedes, so a
+         * second non-modal dialog would otherwise leave the first one fully
+         * keyboard-reachable behind it. The container itself must stay reachable — it
+         * holds $el — so it is descended into rather than skipped.
+         *
+         * Only `[open]` dialogs are inerted. A closed `<dialog>` is already
+         * `display:none` per the UA stylesheet, so it is unreachable without help.
+         *
          * @inner
+         * @param {object} $popin - popin descriptor; the Escape handler closes by $popin.name
+         * @param {HTMLElement} $el - the dialog element being shown non-modally
+         * @returns {void}
          */
         function applyNonModalShims($popin, $el) {
             if ( !$el ) {
@@ -488,11 +500,30 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge'
             $el.__ginaOnKeydown = onKeydown;
             $el.addEventListener('keydown', onKeydown);
 
-            // Best-effort background inert (skip the dialog, its container and ancestors).
+            // Best-effort background inert (skip the dialog and its ancestors; descend
+            // into the container so a superseded popin does not stay reachable).
             var siblings = document.body.children;
             var b = 0, len = siblings.length;
             for (; b < len; ++b) {
-                if ( siblings[b] === $el || siblings[b] === instance.target || siblings[b].contains($el) ) {
+                if ( siblings[b] === instance.target ) {
+                    // The container holds $el, so it cannot be inerted wholesale — but any
+                    // OTHER popin still open inside it would remain keyboard-reachable
+                    // behind this one. Closed dialogs are already display:none (UA
+                    // stylesheet), so [open] is the whole set that needs help.
+                    var $open = siblings[b].querySelectorAll('dialog[open]');
+                    var d = 0, dLen = $open.length;
+                    for (; d < dLen; ++d) {
+                        if ( $open[d] === $el || $open[d].contains($el) ) {
+                            continue;
+                        }
+                        if ( $open[d].getAttribute('inert') == null ) {
+                            $open[d].setAttribute('inert', '');
+                            $open[d].setAttribute('data-gina-popin-inert', 'true');
+                        }
+                    }
+                    continue;
+                }
+                if ( siblings[b] === $el || siblings[b].contains($el) ) {
                     continue;
                 }
                 if ( siblings[b].getAttribute('inert') == null ) {
