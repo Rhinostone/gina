@@ -364,7 +364,11 @@ function Check(opt, cmd) {
      * @param {string} projectPath
      * @param {object|null} manifest
      * @param {string} bundleName
-     * @returns {{declared:boolean, layers:Array<{path:string, found:boolean, keys:number}>, map:(object|null), origin:(object|null), errors:string[]}}
+     * @returns {{declared:boolean, layers:Array<{path:string, found:boolean, unreadable:boolean, code:(string|null), keys:number}>, map:(object|null), origin:(object|null), errors:string[]}}
+     *   A layer is `unreadable` when it exists but could not be opened (`code` is the
+     *   `fs` error, e.g. `'EACCES'`). That case also pushes an entry onto `errors`,
+     *   because the runtime refuses to boot on it (#B267) — reporting it as a mere
+     *   absence would green-light a config that cannot start.
      */
     var resolveSecretsFileChain = function (projectPath, manifest, bundleName) {
         var out = { declared: false, layers: [], map: null, origin: null, errors: [] };
@@ -412,15 +416,29 @@ function Check(opt, cmd) {
                     + ' reads those from whatever launches the bundle');
                 return out;
             }
-            var layerMap = secrets.parseEnvFile(path);
+            var layerRead = secrets.readEnvFile(path);
             out.layers.push({
-                path  : path,
-                found : layerMap !== null,
-                keys  : layerMap === null ? 0 : Object.keys(layerMap).length
+                path       : path,
+                found      : layerRead.found,
+                unreadable : (!layerRead.found && layerRead.code !== 'ENOENT'),
+                code       : layerRead.code,
+                keys       : layerRead.found ? Object.keys(layerRead.map).length : 0
             });
-            if (layerMap === null) continue;   // absent file: contributes nothing, not an error
-            for (var key in layerMap) {
-                map[key]    = layerMap[key];   // later path wins
+            if (!layerRead.found) {
+                // #B267 parity — the runtime REFUSES to boot on a declared path that
+                // exists but cannot be read. Reporting that as a plain absence here
+                // would hand back a clean bill of health for a config that cannot
+                // boot at all, which is precisely the checker-vs-runtime disagreement
+                // this command exists to prevent.
+                if (layerRead.code !== 'ENOENT') {
+                    out.errors.push('`' + path + '` exists but cannot be read ('
+                        + layerRead.code + ') — the runtime REFUSES to boot on this;'
+                        + ' fix the file permissions or ownership');
+                }
+                continue;                      // absent file: contributes nothing, not an error
+            }
+            for (var key in layerRead.map) {
+                map[key]    = layerRead.map[key];   // later path wins
                 origin[key] = path;
             }
         }
@@ -794,7 +812,11 @@ function Check(opt, cmd) {
         }
         for (var i = 0; i < sf.layers.length; i++) {
             console.log('      [' + (i + 1) + '] ' + sf.layers[i].path + '   '
-                + (sf.layers[i].found ? 'loaded (' + sf.layers[i].keys + ' keys)' : 'ABSENT'));
+                + (sf.layers[i].found
+                    ? 'loaded (' + sf.layers[i].keys + ' keys)'
+                    : (sf.layers[i].unreadable
+                        ? 'UNREADABLE (' + sf.layers[i].code + ')'
+                        : 'ABSENT')));
         }
     };
 

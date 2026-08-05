@@ -67,6 +67,58 @@ function parseEnv(raw) {
 }
 
 /**
+ * @typedef {object} EnvFileRead
+ * @property {boolean}                   found - `true` when the file was read and parsed
+ * @property {Object<string,string>|null} map  - Parsed map when `found`, else `null`
+ * @property {string|null}               code  - `null` when `found`; else the `fs` error
+ *   code — `'ENOENT'` for a genuinely absent path, `'EACCES'` / `'EISDIR'` / … for a
+ *   path that exists but could not be read
+ */
+
+/**
+ * Read and parse a `.env`-style file, reporting WHY a read failed.
+ *
+ * `parseEnvFile` collapses every failure to `null`, which makes a file that is
+ * *missing* indistinguishable from one that exists but cannot be opened. Those
+ * two deserve opposite handling: a missing layer is a legitimate state (a project
+ * may ship a base file and add the per-scope one only on some targets), whereas a
+ * layer that exists and cannot be read is an operator error — and silently
+ * skipping it drops the bundle onto whatever lower-precedence layer remains,
+ * which for a `["<base>", "<per-scope>"]` chain means quietly running on the
+ * SHARED credential instead of the scope-specific one (#B267).
+ *
+ * Callers that must distinguish the two use this; `parseEnvFile` is kept as the
+ * map-or-`null` convenience on top of it.
+ *
+ * @memberof module:lib/secrets/env-file
+ * @function readEnvFile
+ * @param {string} filePath - Absolute path to the file
+ * @returns {EnvFileRead} Discriminated read result
+ *
+ * @example
+ * var res = readEnvFile('/run/secrets.env');
+ * if (!res.found && res.code !== 'ENOENT') {
+ *     throw new Error('secrets file exists but cannot be read: ' + res.code);
+ * }
+ *
+ * @example
+ * // A genuinely absent layer is not an error — it simply contributes nothing:
+ * readEnvFile('/run/never-created.env');   // → { found: false, map: null, code: 'ENOENT' }
+ */
+function readEnvFile(filePath) {
+    var raw;
+    try {
+        raw = fs.readFileSync(filePath, 'utf8');
+    } catch (e) {
+        // `e.code` is what discriminates: ENOENT (absent, fine) vs EACCES / EISDIR /
+        // ENOTDIR / ELOOP (present but unusable). A dangling symlink reports ENOENT,
+        // which is the correct reading — its target genuinely is not there.
+        return { found: false, map: null, code: (e && e.code) ? e.code : 'EUNKNOWN' };
+    }
+    return { found: true, map: parseEnv(raw), code: null };
+}
+
+/**
  * Read and parse a `.env`-style file.
  *
  * Returns `null` — rather than throwing or returning an empty map — when the
@@ -74,6 +126,11 @@ function parseEnv(raw) {
  * but empty". That distinction is load-bearing: an unreadable path is an
  * operator error worth reporting, whereas an empty file is a legitimate state
  * that should simply contribute no keys.
+ *
+ * ⚠️ This collapses *why* the read failed. A caller that must tell a missing
+ * file apart from an unreadable one — which is the difference between "skip this
+ * layer" and "refuse to boot" — wants {@link module:lib/secrets/env-file.readEnvFile}
+ * instead.
  *
  * @memberof module:lib/secrets/env-file
  * @function parseEnvFile
@@ -87,16 +144,12 @@ function parseEnv(raw) {
  * }
  */
 function parseEnvFile(filePath) {
-    var raw;
-    try {
-        raw = fs.readFileSync(filePath, 'utf8');
-    } catch (e) {
-        return null;
-    }
-    return parseEnv(raw);
+    var res = readEnvFile(filePath);
+    return res.found ? res.map : null;
 }
 
 module.exports = {
     parseEnv: parseEnv,
-    parseEnvFile: parseEnvFile
+    parseEnvFile: parseEnvFile,
+    readEnvFile: readEnvFile
 };

@@ -560,9 +560,13 @@ describe('09 - scope overlay + env-file', function () {
         assert.ok(envAt < fileAt, 'environment must be read before the file chain');
     });
 
-    it('check.js builds the file chain with the shared whisper + secrets.parseEnvFile (no second resolver)', function () {
+    it('check.js builds the file chain with the shared whisper + secrets.readEnvFile (no second resolver)', function () {
         assert.match(checkSrc, /whisper\(\s*buildReps\(/);
-        assert.match(checkSrc, /secrets\.parseEnvFile\(\s*path\s*\)/);
+        // #B267 moved this call site from `parseEnvFile` (map-or-null) to the
+        // discriminated `readEnvFile`, so the checker can tell an absent layer
+        // from an unreadable one exactly as the runtime does. Still the SHARED
+        // parser from lib/secrets — which is what this pin actually guards.
+        assert.match(checkSrc, /secrets\.readEnvFile\(\s*path\s*\)/);
     });
 
     it('check.js never sources ${homedir} from projects.json (the field the config loader never reads)', function () {

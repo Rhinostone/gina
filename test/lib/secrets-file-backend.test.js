@@ -217,3 +217,157 @@ describe('05 - config guards', function () {
         assert.doesNotThrow(function () { secrets.selectBackend(cfg(BASE)); });
     });
 });
+
+
+/**
+ * #B267 — an unreadable layer must NOT be mistaken for an absent one.
+ *
+ * The distinction is the difference between "skip this layer" and "refuse to
+ * boot". Collapsing them let a `["<base>", "<per-scope>"]` chain whose per-scope
+ * file lost read permission fall back to the SHARED credential silently, with
+ * only a suppressed debug line to say so. §06 is what should stop anyone
+ * restoring that behaviour.
+ */
+describe('06 - #B267 an unreadable layer is fatal, an absent one is not', function () {
+
+    var NOACC, canTestPerms;
+
+    before(function () {
+        NOACC = path.join(TMP, 'noaccess.env');
+        fs.writeFileSync(NOACC, 'OVERRIDDEN=from_unreadable\n');
+        fs.chmodSync(NOACC, 0);
+        // Running as root defeats chmod; detect rather than assert a false pass.
+        canTestPerms = false;
+        try { fs.readFileSync(NOACC, 'utf8'); } catch (e) { canTestPerms = true; }
+    });
+
+    after(function () {
+        try { fs.chmodSync(NOACC, 0o600); } catch (e) { /* best effort */ }
+    });
+
+    it('readEnvFile reports ENOENT for a genuinely absent path', function () {
+        var res = envFile.readEnvFile(path.join(TMP, 'never-created.env'));
+        assert.equal(res.found, false);
+        assert.equal(res.code, 'ENOENT');
+        assert.equal(res.map, null);
+    });
+
+    it('readEnvFile reports EACCES for a path that exists but cannot be read', function () {
+        if (!canTestPerms) { return; }   // root: chmod is not enforced
+        var res = envFile.readEnvFile(NOACC);
+        assert.equal(res.found, false);
+        assert.equal(res.code, 'EACCES');
+    });
+
+    it('CONTROL: readEnvFile reports found for a readable path', function () {
+        var res = envFile.readEnvFile(BASE);
+        assert.equal(res.found, true);
+        assert.equal(res.code, null);
+        assert.equal(res.map.SHARED, 'base_shared');
+    });
+
+    it('parseEnvFile keeps its map-or-null contract on top of readEnvFile', function () {
+        assert.strictEqual(envFile.parseEnvFile(path.join(TMP, 'never-created.env')), null);
+        assert.notStrictEqual(envFile.parseEnvFile(BASE), null);
+    });
+
+    it('building a chain whose layer is UNREADABLE throws, naming the path', function () {
+        if (!canTestPerms) { return; }
+        assert.throws(
+            function () { secrets.selectBackend(cfg([BASE, NOACC])); },
+            function (err) {
+                return /cannot be read/.test(err.message)
+                    && err.message.indexOf(NOACC) > -1
+                    && /EACCES/.test(err.message);
+            }
+        );
+    });
+
+    it('CONTROL: a chain whose layer is merely ABSENT still builds', function () {
+        assert.doesNotThrow(function () {
+            secrets.selectBackend(cfg([BASE, path.join(TMP, 'never-created.env')]));
+        });
+    });
+
+    it('does NOT silently degrade to the shared value when the override is unreadable', function () {
+        if (!canTestPerms) { return; }
+        // Healthy chain resolves the scope-specific value...
+        var healthy = secrets.selectBackend(cfg([BASE, SCOPE]));
+        assert.equal(healthy.resolve('OVERRIDDEN'), 'from_scope');
+        // ...and an unreadable override must REFUSE rather than return the base value.
+        assert.throws(function () { secrets.selectBackend(cfg([BASE, NOACC])); });
+    });
+
+    it('a path that is a DIRECTORY is fatal too, not treated as absent', function () {
+        var asDir = path.join(TMP, 'adir.env');
+        if (!fs.existsSync(asDir)) { fs.mkdirSync(asDir); }
+        var res = envFile.readEnvFile(asDir);
+        assert.equal(res.found, false);
+        assert.notEqual(res.code, 'ENOENT');
+        assert.throws(function () { secrets.selectBackend(cfg([asDir])); }, /cannot be read/);
+    });
+});
+
+
+/**
+ * #B268 — a SET-but-EMPTY environment variable is treated as absent, so the file
+ * fills it. That is deliberate (Docker Compose `environment: ["X=${X}"]` with the
+ * outer variable unset produces exactly this shape, and refusing would break it),
+ * but it is also what a failed `export X="$(fetch …)"` produces — so the fallback
+ * must WARN. These tests pin both halves: the value that is returned, and the fact
+ * that it is announced.
+ */
+describe('07 - #B268 an empty env var falls through to the file, but warns', function () {
+
+    var EMPTYENV, realWarn, warnings;
+
+    before(function () {
+        EMPTYENV = path.join(TMP, 'emptyenv.env');
+        fs.writeFileSync(EMPTYENV, 'EMPTY_CASE=value_from_file\nABSENT_CASE=file_value\n');
+    });
+
+    function capture(fn) {
+        warnings = [];
+        realWarn = console.warn;
+        console.warn = function () { warnings.push(Array.prototype.join.call(arguments, ' ')); };
+        try { return fn(); } finally { console.warn = realWarn; }
+    }
+
+    it('a NON-EMPTY env value still wins, and warns about nothing', function () {
+        process.env.EMPTY_CASE = 'value_from_env';
+        var backend = secrets.selectBackend(cfg([EMPTYENV]));
+        var got = capture(function () { return backend.resolve('EMPTY_CASE'); });
+        delete process.env.EMPTY_CASE;
+        assert.equal(got, 'value_from_env');
+        assert.equal(warnings.length, 0);
+    });
+
+    it('an EMPTY env value falls through to the file (behaviour preserved)', function () {
+        process.env.EMPTY_CASE = '';
+        var backend = secrets.selectBackend(cfg([EMPTYENV]));
+        var got = capture(function () { return backend.resolve('EMPTY_CASE'); });
+        delete process.env.EMPTY_CASE;
+        assert.equal(got, 'value_from_file');
+    });
+
+    it('...and that fall-through WARNS, naming the key but never the value', function () {
+        process.env.EMPTY_CASE = '';
+        var backend = secrets.selectBackend(cfg([EMPTYENV]));
+        capture(function () { return backend.resolve('EMPTY_CASE'); });
+        delete process.env.EMPTY_CASE;
+        assert.equal(warnings.length, 1, 'expected exactly one warning');
+        assert.ok(/EMPTY_CASE/.test(warnings[0]), 'warning must name the key');
+        assert.ok(/present but EMPTY/i.test(warnings[0]));
+        assert.ok(warnings[0].indexOf('value_from_file') === -1,
+            'warning must never contain the resolved secret value');
+    });
+
+    it('CONTROL: an ABSENT env var falls through with NO warning', function () {
+        delete process.env.ABSENT_CASE;
+        var backend = secrets.selectBackend(cfg([EMPTYENV]));
+        var got = capture(function () { return backend.resolve('ABSENT_CASE'); });
+        assert.equal(got, 'file_value');
+        assert.equal(warnings.length, 0,
+            'an absent env var is the ordinary case and must stay quiet');
+    });
+});

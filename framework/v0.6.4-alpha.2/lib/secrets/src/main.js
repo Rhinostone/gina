@@ -359,5 +359,10 @@ module.exports = {
     // of a given file agrees on what it means. See that module's header for
     // why one implementation matters here.
     parseEnv: envFile.parseEnv,
-    parseEnvFile: envFile.parseEnvFile
+    parseEnvFile: envFile.parseEnvFile,
+    // `readEnvFile` is the discriminated form — it reports WHY a read failed, so
+    // a caller can tell a genuinely absent layer (skip it) from one that exists
+    // and cannot be read (refuse). Both the runtime backend and `secrets:check`
+    // need that distinction to agree about the same file (#B267).
+    readEnvFile: envFile.readEnvFile
 };
