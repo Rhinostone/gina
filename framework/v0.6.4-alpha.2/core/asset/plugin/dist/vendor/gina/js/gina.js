@@ -20908,11 +20908,12 @@ if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
     // Publish as AMD module
     define('gina/validator', ['utils/events', 'utils/dom', 'utils/effects', 'utils/data', 'lib/form-validator', 'lib/routing', 'lib/loading-state'], function(){ return ValidatorPlugin })
 };
-define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], function (require) {
+define('gina/popin', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge', 'utils/events' ], function (require) {
 
     // TODO - Integrate dialog-polyfill : https://github.com/GoogleChrome/dialog-polyfill/blob/master/dist/dialog-polyfill.js
     var Domain          = require('lib/domain');
     var domainInstance  = null;
+    var loadingState    = require('lib/loading-state');
     var merge           = require('lib/merge');
 
     require('utils/events'); // events
@@ -22767,6 +22768,43 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
         }
 
         /**
+         * armPopinTrigger
+         *
+         * Makes the control that opened a popin inoperable for the duration of the load
+         * and marks it with the shared `data-gina-loading`.
+         *
+         * That attribute is NOT a duplicate of the container's `data-gina-popin-loading`:
+         * they sit on different elements and answer different questions — the container
+         * one says "this popin is filling", this one says "this control is busy". The
+         * second is the same attribute the validator and link plugins write, so a single
+         * stylesheet covers every busy control a project has, whichever plugin started
+         * the work.
+         *
+         * Scoped to the TRIGGER rather than absorbing the whole arm block, deliberately:
+         * the two arm sites must keep their own literal `showLoadingShell($popin, $el)`
+         * call, which is what `popin.test.js` pins to prove the skeleton shows at both.
+         *
+         * @inner
+         * @param {HTMLElement} [$popinTrigger] - the control that opened it, when it has an id
+         * @returns {void}
+         *
+         * @example
+         * armPopinTrigger(document.getElementById($popin.openTrigger));
+         */
+        function armPopinTrigger($popinTrigger) {
+            if ( !$popinTrigger ) {
+                return;
+            }
+            // For A tag: aria-disabled=true
+            if ( /^A$/i.test($popinTrigger.tagName) ) {
+                $popinTrigger.setAttribute('aria-disabled', true);
+            } else {
+                $popinTrigger.setAttribute('disabled', true);
+            }
+            loadingState.arm($popinTrigger);
+        }
+
+        /**
          * popinLoad
          *
          * @param {string} name
@@ -22943,14 +22981,7 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
                 if ( /^(1|3)$/.test(xhr.readyState) ) {
                     $popin.target.setAttribute('data-gina-popin-loading', true);
                     showLoadingShell($popin, $el);
-                    if ($popinTrigger) {
-                        // For A tag: aria-disabled=true
-                        if ( /^A$/i.test($popinTrigger.tagName) ) {
-                            $popinTrigger.setAttribute('aria-disabled', true);
-                        } else {
-                            $popinTrigger.setAttribute('disabled', true);
-                        }
-                    }
+                    armPopinTrigger($popinTrigger);
                 }
 
                 // catching ready state cb
@@ -22959,18 +22990,12 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
                     if ( /^(1|3)$/.test(xhr.readyState) ) {
                         $popin.target.setAttribute('data-gina-popin-loading', true);
                         showLoadingShell($popin, $el);
-                        if ($popinTrigger) {
-                            // For A tag: aria-disabled=true
-                            if ( /^A$/i.test($popinTrigger.tagName) ) {
-                                $popinTrigger.setAttribute('aria-disabled', true);
-                            } else {
-                                $popinTrigger.setAttribute('disabled', true);
-                            }
-                        }
+                        armPopinTrigger($popinTrigger);
                     }
                     if (xhr.readyState == 4) {
                         // Fixed: clear loading state on response complete — data-gina-popin-loading
                         // was set on readyState 1|3 but never removed, leaving the overlay blocked.
+                        // Covers every status including 0, since the branch is on readyState alone.
                         $popin.target.removeAttribute('data-gina-popin-loading');
                         if ($popinTrigger) {
                             if ( /^A$/i.test($popinTrigger.tagName) ) {
@@ -22978,6 +23003,7 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
                             } else {
                                 $popinTrigger.removeAttribute('disabled');
                             }
+                            loadingState.disarm($popinTrigger);
                         }
                         // 200, 201, 201' etc ...
                         var result = null;
@@ -23558,6 +23584,12 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
                     // Fixed: clear loading state on reset — defensive cleanup for navigation
                     // within a popin that was in loading state when reset was called.
                     $el.removeAttribute('data-gina-popin-loading');
+                    // Trigger-scoped release. This function is ALSO reached from routing
+                    // transitions that never call popinClose, so without this the control
+                    // that opened a popin torn down by a route change would stay armed.
+                    // Resolved here rather than passed in: popinUnbind only has $popin, and
+                    // `disarm` is a no-op on the null a trigger-less popin resolves to.
+                    loadingState.disarm( document.getElementById($popin.openTrigger) );
 
                     // removing from FormValidator instance
                     if ($validatorInstance) {
@@ -23670,6 +23702,7 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
                         } else {
                             $popinTrigger.removeAttribute('disabled', true);
                         }
+                        loadingState.disarm($popinTrigger);
                         // a11y: return focus to the trigger that opened the popin.
                         if ( typeof($popinTrigger.focus) == 'function' ) {
                             $popinTrigger.focus();
