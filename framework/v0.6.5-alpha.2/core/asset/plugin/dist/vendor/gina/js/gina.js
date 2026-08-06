@@ -10289,13 +10289,24 @@ define('gina/link', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge',
 
 
 
-                    if ( /^link\.click\./.test(event.target.id) ) {
+                    // #B302 — dispatch on REGISTRATION, never on the id's SHAPE. `bindLinks`
+                    // KEEPS an author-supplied `id` (only an empty/missing/`popin.link` id gets
+                    // the generated `link.click.gina-link-<instance>-<uuid>` form), so gating
+                    // here on that shape made `<a id="my-link" data-gina-link>text</a>` a DEAD
+                    // link: it registered its `$links` entry and its custom-event listener
+                    // normally, this proxy then refused to trigger it, and the per-anchor
+                    // listener above had already suppressed the default — so the click did
+                    // nothing at all. `instance.$links` is the very lookup `getLinkById` is,
+                    // and it is PER-INSTANCE, so it answers "is this one of MY links?"
+                    // directly — subsuming the old second, instance-scoping regex — and it
+                    // holds for BOTH id shapes. Note the child proxy (`proxyClick`) has always
+                    // been shape-agnostic (it takes the id as a parameter), which is why a
+                    // nested-element click on such an anchor already worked; this makes the
+                    // direct-click path agree with it rather than adding a new mechanism.
+                    // A click on non-link markup yields an id absent from `$links` — no-op.
+                    if ( typeof(instance.$links[event.target.id]) != 'undefined' ) {
                         cancelEvent(event);
-                        var _evt = event.target.id;
-
-                        if ( new RegExp( '^link.click.gina-link-' + instance.id).test(_evt) )
-                            triggerEvent(gina, event.target, _evt, event.detail);
-
+                        triggerEvent(gina, event.target, event.target.id, event.detail);
                     }
                 });
 

@@ -302,6 +302,15 @@ const server = http.createServer(function (req, res) {
             return send(res, 200, 'application/json; charset=utf-8',
                 isNavPage ? JSON.stringify(NAV_ROUTING) : '{}');
         }
+        // #B302 — the link preset-id harness. `/link/sink` is the request the plugin's XHR
+        // lands on; the specs assert on the REQUEST, so the body only has to be valid.
+        if (url === '/link' || url === '/link.html') {
+            return send(res, 200, 'text/html; charset=utf-8',
+                fs.readFileSync(path.join(FIXTURES, 'link-preset-id.html')));
+        }
+        if (url === '/link/sink') {
+            return send(res, 200, 'application/json; charset=utf-8', '{"ok":true}');
+        }
         // #SPA1 — the nav harness. One shell per URL (full document), or the layoutless
         // region when the request carries the negotiation header.
         var nav = url.match(/^\/nav(?:\/(one|two|bare|plain))?$/);
