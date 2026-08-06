@@ -9488,6 +9488,27 @@ function ValidatorPlugin(rules, data, formId, culture) {
                                     // trigger end of validation
                                     // console.debug(field +' is the last element to be validated for formId: '+ formId, cb._errors, instance.$forms[formId].errors);
                                     isFormValid = ( cb._errors.count() > 0 ) ? false : true;
+                                    // #B295 — `cb._errors` is `d.getErrors(field)`, which
+                                    // form-validator.js scopes to a SINGLE field, so the flag
+                                    // above means "this field passed", never "the form is
+                                    // valid". Everything below is guarded on `!isFormValid`,
+                                    // so a form that has just become valid got NO update at
+                                    // all: `updateSubmitTriggerState` was never called and the
+                                    // bind-time `aria-disabled` marker survived on a valid
+                                    // form, while `$forms[id].errors` kept listing the field.
+                                    // That was cosmetic until #B246 made the click gate read
+                                    // the marker — then the first click after the query
+                                    // settles is silently eaten.
+                                    // Hand the verdict to the fresh whole-form pass below,
+                                    // exactly as the not-last-field branch already does. It is
+                                    // the only source that can be trusted here: measured with
+                                    // another field left invalid, that pass reports its error
+                                    // while both the field-scoped `cb._errors` AND the in-pass
+                                    // `d.getErrors()` report none — so deciding from either of
+                                    // those would enable the trigger on an invalid form.
+                                    if (isFormValid) {
+                                        needsGlobalReValidation = true;
+                                    }
                                     if (!isFormValid && /^true|false$/i.test(instance.$forms[formId].isValidating)) {
                                         console.debug('[1] Should update error display now ', cb._errors);
                                         instance.$forms[formId].errors = merge(cb._errors, instance.$forms[formId].errors);
