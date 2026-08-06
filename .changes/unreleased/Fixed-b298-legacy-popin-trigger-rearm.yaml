@@ -1,0 +1,13 @@
+kind: Fixed
+body: 'A popin trigger that gina has disabled while its popin loads can no longer be
+  clicked a second time to start a second load. An anchor using the older
+  data-gina-popin-name markup was marked aria-disabled for the duration of the load, but
+  the code that dispatched its clicks tested only the plain disabled attribute, which an
+  anchor never carries here — so a second click during a slow load issued a second
+  request. In practice this reached triggers that opt out of preloading with
+  data-gina-dialog-preload="false", which is the setting used for links whose request has
+  side effects on the server, so the duplicate request could cost more than bandwidth.
+  Clicks landing on an icon or other markup nested inside the trigger are covered too.
+  Buttons and other real form controls were never affected, because the browser suppresses
+  those clicks itself.'
+time: 2026-08-06T23:20:10+01:00

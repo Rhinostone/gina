@@ -22457,6 +22457,30 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge'
                         // attach click events
                         addListener(gina, $el, evt, function(e) {
                             cancelEvent(e);
+                            // #B298 — the legacy twin of openFromTrigger's own entry gate; the
+                            // predicate is copied verbatim from there, native arm included (see
+                            // its comment for why `disabled` counts only where the browser does
+                            // not enforce it). armPopinTrigger marks an <a> trigger
+                            // `aria-disabled` for the duration of the load, but the only dispatch
+                            // route for a legacy trigger — the document click proxy — tests the
+                            // native attribute alone, which an <a> never carries; a second click
+                            // during the load therefore reached here and started a second XHR.
+                            //
+                            // Gating HERE rather than in the proxy is load-bearing, not stylistic:
+                            // a trigger's direct children each get their own listener from
+                            // proxyClick, which fires the custom event DIRECTLY and never passes
+                            // the proxy predicate at all. Both routes converge on this handler,
+                            // and `currentTarget` is the element bindOpen bound, so a click that
+                            // lands on child markup cannot dodge the gate. Measured: a
+                            // proxy-level gate still let the child-click route fire twice.
+                            var $trigger = e.currentTarget;
+                            if (
+                                !('disabled' in $trigger)
+                                && $trigger.getAttribute('disabled') != null && $trigger.getAttribute('disabled') != 'false'
+                                || $trigger.getAttribute('aria-disabled') == 'true'
+                            ) {
+                                return;
+                            }
                             // console.debug("[POPIN CLICK #3]", $popin.openTrigger, " VS ", e.currentTarget.id);
                             $popin.openTrigger = e.currentTarget.id || e.currentTarget.getAttribute('id');
 
