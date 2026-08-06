@@ -44,7 +44,7 @@ describe('01 - CSP: link plugin injects no inline onclick', function() {
 
     it('link/main.js suppresses default via a preventDefault click listener', function() {
         assert.ok(
-            read(LINK_SRC).indexOf("addListener(gina, $el, 'click', function(e) { e.preventDefault(); })") > -1,
+            read(LINK_SRC).indexOf("addListener(gina, $el, 'click', function(e) { if ( isModifiedClick(e) ) return; e.preventDefault(); })") > -1,
             'expected an addEventListener-based preventDefault listener on each bound <a>'
         );
     });

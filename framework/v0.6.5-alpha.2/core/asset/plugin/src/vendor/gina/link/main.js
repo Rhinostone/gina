@@ -124,9 +124,43 @@ define('gina/link', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge',
 
 
 
+        /**
+         * A click the user asked the BROWSER to handle specially — cmd/ctrl for a new
+         * tab, shift for a new window, alt for a download in some browsers. Binding it
+         * swallows that intent, exactly as the `download` / `target` / `#` shapes did
+         * before the bind-time guard in `bindLinks`.
+         *
+         * Mirrors the nav plugin's equivalent test, with two deliberate differences:
+         *   - nav also bails on `event.defaultPrevented`. That cannot be reused here:
+         *     this plugin's own per-anchor listener suppresses the default before the
+         *     document proxy runs, so the flag is always set by the time the proxy is
+         *     reached and the bail would fire on every single click.
+         *   - nav also bails on a non-left `event.button`. Measured unnecessary here:
+         *     a middle click fires `auxclick`, not `click`, so it never arrives.
+         *
+         * Must be consulted at every site that still holds the NATIVE event — the
+         * per-anchor listener, the document proxy and this child proxy. The custom
+         * event dispatched onward carries no modifier data at all (`triggerEvent`
+         * copies native properties only when handed a `proxiedEvent`, which no call
+         * site here does), so a check placed after that hop could never fire.
+         *
+         * @inner
+         * @private
+         * @param {object} e - the native click event
+         * @returns {boolean} true when a modifier key was held
+         *
+         * @example
+         * if ( isModifiedClick(e) ) return; // let the browser open its new tab
+         */
+        var isModifiedClick = function(e) {
+            return !!( e && (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) );
+        }
+
         var proxyClick = function($childNode, $el, evt) {
 
             addListener(gina, $childNode, 'click', function(e) {
+                if ( isModifiedClick(e) ) return;
+
                 cancelEvent(e);
 
                 triggerEvent(gina, $el, evt);
@@ -567,7 +601,10 @@ define('gina/link', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge',
                 // script-src-attr under nonce-based policies. preventDefault (NOT cancelEvent —
                 // its stopPropagation would block the document-level delegation that fires the
                 // AJAX request) covers direct AND child clicks while leaving the delegation intact.
-                addListener(gina, $el, 'click', function(e) { e.preventDefault(); });
+                // The modifier bail runs FIRST: suppressing here would kill the browser's new
+                // tab/window no matter what the document proxy later decides, because this
+                // listener is reached before it.
+                addListener(gina, $el, 'click', function(e) { if ( isModifiedClick(e) ) return; e.preventDefault(); });
 
                 $newLink = null;
 
@@ -597,6 +634,10 @@ define('gina/link', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge',
                 evt = 'click';// click proxy
                 // for proxies, use linkInstance.id as target is always `document`
                 addListener(gina, instance.target, evt, function(event) {
+
+                    // A modified click belongs to the browser. Bail before the id backfill
+                    // below, so deferring leaves no trace on the element either.
+                    if ( isModifiedClick(event) ) return;
 
                     if ( typeof(event.target.id) == 'undefined' ) {
                         event.target.setAttribute('id', evt +'.'+ uuid() );
