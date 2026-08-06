@@ -19492,9 +19492,24 @@ function ValidatorPlugin(rules, data, formId, culture) {
      * Tells whether a submit trigger is currently marked as disabled.
      * `updateSubmitTriggerState()` marks an invalid form's trigger with
      * `aria-disabled="true"` rather than the native `disabled` property, so a
-     * native-only check can never see it. The predicate shape mirrors the popin
-     * plugin's own trigger gate, so both subsystems agree on what "disabled"
-     * means for a trigger.
+     * marker-only check must look at the ARIA attribute. The predicate shape
+     * mirrors the popin plugin's own trigger gate, so both subsystems agree on
+     * what "disabled" means for a trigger.
+     *
+     * #B293 — the native `disabled` attribute counts ONLY on an element where
+     * `disabled` is not a real IDL property. On a genuine form control the
+     * browser already suppresses the click entirely (measured: a natively
+     * disabled <button> delivers no click event to JS at all), so this gate
+     * never even runs for one — which means the only way the native arm could
+     * fire there was a listener setting the attribute DURING the dispatch. That
+     * is exactly the shape of the near-universal double-submit guard
+     * (`onclick -> this.setAttribute('disabled', …)`), which is bound to the
+     * button and therefore runs before gina's delegated proxy reaches this
+     * check. Accepting it killed the submit outright: `send()` never ran, the
+     * consumer's own handler cleared the attribute again, and every subsequent
+     * click repeated the cycle with nothing marked and a normal-looking button.
+     * On an <a> or a custom element the browser enforces nothing, so there the
+     * attribute is still the only honest signal and is still read.
      *
      * @param {object} $el - candidate trigger (DOMObject)
      *
@@ -19503,14 +19518,23 @@ function ValidatorPlugin(rules, data, formId, culture) {
      * @example
      * isTriggerDisabled($button); // true while aria-disabled="true" is set
      *
+     * @example
+     * // <button disabled> never reaches here (the browser eats the click), and a
+     * // `disabled` set mid-click by a double-submit guard is deliberately ignored
+     * isTriggerDisabled($guardedButton); // false
+     *
      * @inner
      */
     var isTriggerDisabled = function($el) {
         if ( !$el || typeof($el.getAttribute) != 'function' ) {
             return false;
         }
+        // #B293: `disabled` is only meaningful where the browser does not enforce it.
+        // was: $el.getAttribute('disabled') != null && $el.getAttribute('disabled') != 'false'
+        var nativeCounts = !('disabled' in $el);
         return (
-            $el.getAttribute('disabled') != null && $el.getAttribute('disabled') != 'false'
+            nativeCounts
+            && $el.getAttribute('disabled') != null && $el.getAttribute('disabled') != 'false'
             ||
             $el.getAttribute('aria-disabled') == 'true'
         );
