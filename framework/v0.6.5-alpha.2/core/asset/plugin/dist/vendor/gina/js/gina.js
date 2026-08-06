@@ -10089,8 +10089,34 @@ define('gina/link', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge',
         /**
          * bindLinks
          *
+         * Binds every `<a data-gina-link>` under `$target` so its clicks issue an XHR
+         * instead of navigating. An anchor spelling `data-gina-link="false"` opts out.
+         *
+         * Three shapes are skipped at bind time (#B288) because they ask the BROWSER for
+         * something an XHR cannot deliver — a `download` save, a `target` window, or a
+         * pure `#` in-page fragment move. A skipped anchor is left completely untouched
+         * (no generated id, no click listeners) and therefore behaves exactly like
+         * un-marked markup. The test is made against the RESOLVED url, so the documented
+         * `<a href="#" data-gina-link-url="/real/target">` placeholder idiom still binds.
+         *
+         * Cross-origin anchors are deliberately NOT skipped — `linkRequest` supports them
+         * (it drops credentials and relies on the target's CORS headers). Non-left-button
+         * clicks need no guard: a middle click fires `auxclick`, not `click`.
+         *
          * @param {object} $target - DOM element
          * @param {object} [options]
+         *
+         * @example
+         * // bound — same-origin GET over XHR
+         * // <a href="/reports/42" data-gina-link>Open</a>
+         *
+         * // bound — placeholder href, real target in the data attribute
+         * // <a href="#" data-gina-link data-gina-link-url="/reports/42">Open</a>
+         *
+         * // NOT bound — the browser saves, moves in-page, or opens a window itself
+         * // <a href="/report.pdf" data-gina-link download>Save</a>
+         * // <a href="/reports/42" data-gina-link target="_blank">New tab</a>
+         * // <a href="#section-3" data-gina-link>Jump</a>
          * */
         var bindLinks = function($target, options) {
 
@@ -10134,8 +10160,35 @@ define('gina/link', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge',
                     props.url = $el.getAttribute('href')
                 }
 
-
-
+                // #B288 — leave the browser's own affordances alone. Three anchor shapes
+                // ask the BROWSER to do something an XHR cannot do, and binding them
+                // silently swallowed the user's intent (all three measured in a real
+                // browser against the shipped bundle):
+                //   `download` — the user asked for a saved file; the native save streams
+                //                and names it, where the XHR path buffers the whole body
+                //                in memory first.
+                //   `target`   — asks for another window/tab; an XHR opens neither, so the
+                //                click did nothing observable at all.
+                //   a pure `#` — an in-page fragment move; there is no resource to request,
+                //                and the plugin issued a GET for the literal "#name".
+                // Skipped at BIND time, so a skipped anchor gets neither the id nor either
+                // click listener and behaves exactly as un-marked markup — gating only the
+                // request would leave the default still suppressed and produce a dead link
+                // (the #B141 failure this plugin already shipped once).
+                // Keyed on the RESOLVED url, never on `href`: `data-gina-link-url` wins
+                // (see just above), so the documented placeholder idiom
+                // `<a href="#" data-gina-link data-gina-link-url="/real/target">` still binds.
+                // Deliberately NOT guarded here: cross-origin (a supported link feature —
+                // see the CORS branch in `linkRequest`) and non-left-button clicks (a middle
+                // click fires `auxclick`, not `click`, so it never reaches this plugin —
+                // measured: the browser opens the tab and no request is made).
+                if (
+                       $el.getAttribute('download') != null
+                    || $el.getAttribute('target') != null
+                    || /^#/.test( props.url || '' )
+                ) {
+                    continue;
+                }
 
                 elId = $el.getAttribute('id');
                 if ( typeof(elId) == 'undefined' || elId == null || elId == '' || /popin\.link/.test(elId) ) {
