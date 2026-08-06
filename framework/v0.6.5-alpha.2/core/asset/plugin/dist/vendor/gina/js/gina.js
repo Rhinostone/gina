@@ -22657,14 +22657,33 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge'
                             event.target.id = event.target.getAttribute('id')
                         }
 
-                        if ( /^popin\.close\./.test(event.target.id) ) {
+                        // #B299/#B301: reaching this branch ALREADY proves the element is a
+                        // `.gina-popin-close` — register('close', …) has a single call site, fed
+                        // only from `$el.querySelectorAll('.gina-popin-close')`. Re-deriving that
+                        // fact from the id prefix was the defect twice over: a consumer-supplied
+                        // id matches neither prefix (#B299), and `event.target` is whatever was
+                        // actually CLICKED, so an icon nested inside the button matched neither
+                        // either (#B301 — the ordinary `<button class="gina-popin-close"><svg/></button>`
+                        // shape, and the wider of the two). Both left the button inert and silent,
+                        // since `cancelEvent` at the top of this listener had already swallowed the
+                        // default. So read the element `register()` actually bound —
+                        // `event.currentTarget` — and treat a `popin.click.*` id as the SOLE
+                        // exception, which preserves the dual-role element (a trigger that is also
+                        // a close button; `bindOpen` scans the whole document, so it is reachable)
+                        // exactly as before.
+                        // The element's id is deliberately NOT touched: the `$close` teardown
+                        // sweep removes this listener via `gina.events[eId] == eId`, i.e. it
+                        // depends on the event name and the element id being the same string.
+                        var _isClickTrigger = /^popin\.click\./.test(event.currentTarget.id);
+
+                        if ( !_isClickTrigger ) {
                             cancelEvent(event);
                             // Just in case we left the popin with a link:target = _blank
                             $popin.isRedirecting = false;
                             popinClose($popin.name);
                         }
 
-                        if ( /^popin\.click\./.test(event.target.id) ) {
+                        if ( _isClickTrigger ) {
                             cancelEvent(event);
                             var _evt = event.target.id;
 
