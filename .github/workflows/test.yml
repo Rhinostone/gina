@@ -39,7 +39,7 @@ jobs:
             "name": "gina-framework",
             "version": "${VERSION}",
             "dependencies": {
-              "@rhinostone/swig": "^1.6.0"
+              "@rhinostone/swig": "^2.7.2"
             }
           }
           EOF
@@ -47,14 +47,12 @@ jobs:
           (cd "${FW_DIR}" && npm install --ignore-scripts)
 
       - name: Run tests
-        run: |
-          node --test \
-            test/core/*.test.js \
-            test/lib/*.test.js \
-            test/bin/*.test.js \
-            test/integration/helper.test.js \
-            test/integration/container-boot.test.js \
-            framework/v*/test/unit/*.test.js
+        # The canonical file list lives in package.json's `test` script — the
+        # single source of truth for CI, CONTRIBUTING.md and local runs alike.
+        # It used to be inlined here while `npm test` pointed at a glob that
+        # matched nothing (0 tests, exit 0 — a silent green), and CONTRIBUTING
+        # named a third, wider set. Keep the list in package.json only.
+        run: npm test
 
       # Published-types gate (#DTO3b): gna.d.ts drift + a consumer fixture
       # compiled by tsc THROUGH the exports map (skipLibCheck:false), with a

@@ -71,7 +71,7 @@ jobs:
             "name": "gina-framework",
             "version": "${VERSION}",
             "dependencies": {
-              "@rhinostone/swig": "^1.6.0"
+              "@rhinostone/swig": "^2.7.2"
             }
           }
           EOF

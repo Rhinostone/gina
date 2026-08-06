@@ -90,12 +90,19 @@ cd "$(npm config get prefix)/bin" && ln -s ../lib/node_modules/gina/bin/gina* .
 The test suite uses Node's built-in `node:test` runner — no additional test dependencies needed.
 
 ```bash
-# Run all tests
-node --test test/**/*.test.js framework/v*/test/unit/*.test.js
+# Run all tests — the same set CI gates on
+npm test
+
+# Run all tests with a coverage report
+npm run test:coverage
 
 # Run a single file
 node --test test/core/controller.test.js
 ```
+
+`npm test` is the single source of truth for which files make up the suite:
+CI runs exactly this script, so a green local run and a green CI run cover the
+same set.
 
 Some tests resolve the framework the way a consuming project does — via
 `require('gina')`. For that to resolve from inside the clone, the repository
@@ -221,7 +228,7 @@ Pick the kind (`Added`, `Changed`, `Fixed`, `Removed`, `Security`) and write the
 
 Before opening a PR against `develop`:
 
-- [ ] Tests pass — `node --test test/**/*.test.js framework/v*/test/unit/*.test.js`
+- [ ] Tests pass — `npm test`
 - [ ] New behaviour is covered by a test (or an explanation is provided for why it cannot be)
 - [ ] A `changie new` entry exists for any user-facing change
 - [ ] Commit messages follow the style above
