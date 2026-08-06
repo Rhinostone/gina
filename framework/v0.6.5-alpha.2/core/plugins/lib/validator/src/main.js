@@ -8035,6 +8035,24 @@ function ValidatorPlugin(rules, data, formId, culture) {
                     }
 
                     if (gina.events[_evt]) {
+                        // #B294 — submit binding is TWO-STAGE and only the first stage is
+                        // delegated. The native click proxy lives on the FORM (:8090) and
+                        // survives any re-render; the listener that does the work is
+                        // attached to the trigger NODE by `bindSubmitEl` (:8231). Because
+                        // `gina.events` is a name -> id-STRING registry, the `submit.<id>`
+                        // key outlives the node, so after an AJAX/popin re-render replaces
+                        // the trigger this gate still passes: `cancelEvent` below suppresses
+                        // the native submit and `triggerEvent` fires at a node that has no
+                        // listener. The form does not even fall back to a normal submit, and
+                        // nothing self-heals — `bindForm` latches `binded` (:8580) and is
+                        // never re-entered on DOM replacement — so the trigger was
+                        // permanently and silently dead.
+                        // Re-bind the live node when its marker is absent. A clone cannot
+                        // inherit the expando, so this fires exactly once per replacement
+                        // and is a no-op on the normal path.
+                        if ( $el && $el.__ginaSubmitBoundFor !== _evt ) {
+                            bindSubmitEl(_evt, $el);
+                        }
                         cancelEvent(event);
 
                         triggerEvent(gina, $el, _evt, event.detail);
@@ -8228,6 +8246,16 @@ function ValidatorPlugin(rules, data, formId, culture) {
                 evt = 'submit.'+ evt;
             }
             //console.debug('attaching submit event: `'+  evt +'` on `'+ $submit.id + '` element for form `'+ $submit.form.id +'`');
+            // #B294 — mark the node this listener is ACTUALLY attached to. Deliberately
+            // a JS expando and NOT a `data-*` attribute: `cloneNode(true)` copies
+            // attributes but not expandos (measured), so a re-rendered trigger arrives
+            // carrying every attribute yet WITHOUT this marker. That asymmetry is what
+            // makes it a reliable "is this the bound node?" test — and it is why the
+            // inherited `dataset.ginaFormSubmitTriggerFor` cannot serve the same purpose.
+            // Assigned after the `submit.` prefix is normalised above, so it holds the
+            // same string `clickProxyHandler` compares against. Read at the :8037
+            // dispatch gate.
+            $submit.__ginaSubmitBoundFor = evt;
             addListener(gina, $submit, evt, function(event) {
                 // start validation
                 cancelEvent(event);
