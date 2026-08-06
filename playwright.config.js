@@ -17,12 +17,7 @@ module.exports = defineConfig({
     fullyParallel: true,
     reporter: 'list',
     use: {
-        trace: 'on-first-retry',
-        // Local override: point at an already-installed chromium build so a maintainer
-        // whose cache lags the @playwright/test version doesn't have to download the
-        // exact bundled build (`npx playwright install`, ~150 MB). CI leaves PW_CHROME
-        // unset and uses the bundled build it installs, so this never affects CI.
-        ...(process.env.PW_CHROME ? { launchOptions: { executablePath: process.env.PW_CHROME } } : {})
+        trace: 'on-first-retry'
     },
     // Starts the runtime harness (test/e2e/runtime-server.js) that serves the REAL
     // built gina bundle for popin-dialog.runtime.spec.js, plus the framework-free
@@ -36,7 +31,37 @@ module.exports = defineConfig({
         timeout: 30 * 1000,
         env: { GINA_E2E_PORT: E2E_PORT }
     },
+    // Default is Chromium ONLY — the per-push E2E job stays ~10s of test time.
+    // `GINA_E2E_ENGINES=all` adds Firefox + WebKit, used by the on-demand
+    // cross-engine job (.github/workflows/e2e-cross-engine.yml).
+    //
+    // The specs cover APIs where engines historically diverged most and which jsdom
+    // implements NOT AT ALL — `showModal`/`:modal`, `inert`, `matchMedia` — so
+    // Chromium is currently the only engine that ever exercises them. Whether that
+    // single-engine coverage is hiding real divergence is an OPEN QUESTION: run the
+    // cross-engine job once and let the result decide, rather than adopting (or
+    // dismissing) permanent multi-engine CI on a guess.
+    //
+    // NB: the PW_CHROME override below is scoped to the chromium project on purpose.
+    // At top level it would also be handed to Firefox and WebKit, which would then
+    // try to launch a Chromium binary.
     projects: [
-        { name: 'chromium', use: { ...devices['Desktop Chrome'] } }
+        {
+            name: 'chromium',
+            use: {
+                ...devices['Desktop Chrome'],
+                // Local escape hatch: point at an already-installed chromium build so a
+                // maintainer whose cache lags the @playwright/test version doesn't have to
+                // download the exact bundled build (`npx playwright install`, ~150 MB). CI
+                // leaves PW_CHROME unset and uses the bundled build it installs.
+                ...(process.env.PW_CHROME ? { launchOptions: { executablePath: process.env.PW_CHROME } } : {})
+            }
+        },
+        ...((process.env.GINA_E2E_ENGINES || '').toLowerCase() === 'all'
+            ? [
+                { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
+                { name: 'webkit',  use: { ...devices['Desktop Safari'] } }
+            ]
+            : [])
     ]
 });

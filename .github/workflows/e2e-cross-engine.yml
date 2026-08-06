@@ -1,0 +1,82 @@
+name: E2E cross-engine
+
+# Runs the EXISTING e2e suite on Firefox and WebKit in addition to Chromium.
+#
+# WHY THIS IS ON-DEMAND AND NOT PER-PUSH. The client bundle depends on browser APIs
+# that jsdom implements NOT AT ALL — `showModal`/`:modal`, `inert`, `matchMedia`,
+# `navigator.clipboard`, `DataTransfer` — so the unit suite cannot exercise them and
+# Chromium is currently the only engine that ever does. Those are also, historically,
+# the APIs where engines diverged most (dialog, inert and ElementInternals all landed
+# in Safari well after Chromium).
+#
+# That makes "should we run multi-engine CI permanently?" a real question — and an
+# UNMEASURED one. Rather than adopt the cost on a plausible-sounding argument, or
+# dismiss it on an equally plausible one, this job answers it empirically: dispatch it
+# once and read the result.
+#
+#   - green  => the existing scenarios do NOT diverge across engines today. Permanent
+#               multi-engine CI buys little; keep the fast Chromium-only per-push job
+#               and re-dispatch this after client-side work that touches those APIs.
+#   - red    => the failures ARE the argument, and they name the diverging APIs.
+#               Promote the matrix into e2e.yml (or a nightly schedule) at that point.
+#
+# Deliberately NOT wired to push/pull_request: it triples browser install and run time
+# for a signal that changes rarely. Deliberately NOT `continue-on-error`: a dispatched
+# investigation should report its real verdict.
+
+on:
+  workflow_dispatch:
+    inputs:
+      engines:
+        description: 'Engine set to run'
+        required: false
+        default: 'all'
+        type: choice
+        options: ['all', 'chromium']
+
+concurrency:
+  group: e2e-cross-engine-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  cross-engine:
+    name: Playwright (${{ inputs.engines || 'all' }})
+    runs-on: ubuntu-latest
+    # Generous vs the ~1min single-engine job: three engines, three browser downloads.
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: Install dev dependencies
+        # Matches e2e.yml / bundle-freshness.yml: strict lockfile, no lifecycle scripts.
+        run: npm ci --ignore-scripts
+
+      - name: Install browsers (+ OS deps)
+        # WebKit and Firefox both need OS packages on ubuntu, hence --with-deps.
+        run: npx playwright install --with-deps chromium firefox webkit
+
+      - name: Run e2e on every engine
+        # GINA_E2E_ENGINES=all makes playwright.config.js add the firefox + webkit
+        # projects; unset (the default everywhere else) keeps it Chromium-only.
+        env:
+          GINA_E2E_ENGINES: ${{ inputs.engines || 'all' }}
+        run: npx playwright test test/e2e
+
+      - name: Upload traces on failure
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-traces-cross-engine
+          path: test-results/
+          retention-days: 7
+          if-no-files-found: ignore
