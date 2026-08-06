@@ -2740,14 +2740,36 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge'
                     loadingState.disarm( document.getElementById($popin.openTrigger) );
 
                     // removing from FormValidator instance
-                    if ($validatorInstance) {
-                        var i = 0, formsLength = $popin['$forms'].length;
-                        if ($validatorInstance['$forms'] && formsLength > 0) {
-                            for (; i < formsLength; ++i) {
-                                if ( typeof($validatorInstance['$forms'][ $popin['$forms'][i] ]) != 'undefined' )
-                                    $validatorInstance['$forms'][ $popin['$forms'][i] ].destroy();
-
-                                $popin['$forms'].splice( i, 1);
+                    if ($validatorInstance && $validatorInstance['$forms']) {
+                        // #B265: iterate a COPY, and clear the array ONCE. The previous loop
+                        // spliced `$popin['$forms']` while walking it against a length captured
+                        // BEFORE the loop, so every element shifted left under the cursor and the
+                        // read index skipped one each time: the originally odd-indexed forms were
+                        // never destroyed AND were left behind in the very array the loop exists
+                        // to empty. Their validator entries then survived pointing at nodes the
+                        // `innerHTML = ''` above had already detached, so `validateFormById`
+                        // returned the stale entry on the next open and the form — trigger
+                        // included — was silently never re-bound.
+                        var _formIds = $popin['$forms'].slice();
+                        $popin['$forms'].length = 0;
+                        for (var i = 0, _formIdsLen = _formIds.length; i < _formIdsLen; ++i) {
+                            var $formToDestroy = $validatorInstance['$forms'][ _formIds[i] ];
+                            if ( typeof($formToDestroy) == 'undefined' ) {
+                                continue;
+                            }
+                            try {
+                                $formToDestroy.destroy();
+                            } catch (destroyErr) {
+                                // One form must never abort the teardown of the others.
+                                // `destroy()` -> `unbindForm` -> `getFormById(vFormId)` throws for
+                                // a form holding a `data-gina-form-virtual` file input whose
+                                // virtual form is no longer resolvable — and by this point every
+                                // form here is detached, which is exactly when that lookup fails.
+                                // This hazard is PRE-EXISTING, not introduced by the fix above:
+                                // before it, a throw here silently left every LATER form bound.
+                                if ( typeof(console) != 'undefined' && console.warn ) {
+                                    console.warn('[gina] popin teardown: destroy() failed for form `' + _formIds[i] + '`', destroyErr);
+                                }
                             }
                         }
                     }

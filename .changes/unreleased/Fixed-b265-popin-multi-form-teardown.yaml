@@ -1,0 +1,12 @@
+kind: Fixed
+body: 'A popin holding more than one form now tears every form down when it closes. Previously
+  the teardown walked its list of forms while removing entries from that same list, so it
+  skipped every other one: those forms were never released, and their stale records were left
+  pointing at markup the popin had already discarded. On the next open the validator handed
+  back the stale record instead of binding the fresh markup, so the form — its submit control
+  included — came up silently inert, with no error and nothing to see in the page. Only popins
+  given a validator explicitly are affected; the ones gina wires up for you never reached this
+  path. Teardown is also no longer all-or-nothing: if releasing one form fails it is reported
+  and the remaining forms are still torn down, where before the first failure quietly abandoned
+  every form after it.'
+time: 2026-08-06T17:20:00+01:00
