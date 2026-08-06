@@ -88,6 +88,13 @@ const FRAGMENTS = {
     'partial-2': '<div id="partial-root"><h2 id="partial-chrome">REPLACED chrome</h2><div id="slot">SLOT-TWO</div></div>',
     'preload':   '<div id="preload-frag"><h2 id="preload-frag-title">Preloaded body</h2></div>',
     'legacy':    '<div id="legacy-frag"><h2 id="legacy-frag-title">Legacy body</h2></div>',
+    // #A11Y8 — two popin bodies, each carrying a focusable control, for the inert
+    // spec. The unit replica (test/core/popin-nonmodal-inert.test.js) runs in jsdom,
+    // which implements NO `inert`, so it can only assert that the marker attribute
+    // was set. Proving the browser actually makes the superseded dialog
+    // keyboard-unreachable needs a real engine and a real focusable target.
+    'inert-a':   '<div id="inert-a-frag"><h2 id="inert-a-title">First body</h2><button id="inert-a-btn" type="button">A action</button></div>',
+    'inert-b':   '<div id="inert-b-frag"><h2 id="inert-b-title">Second body</h2><button id="inert-b-btn" type="button">B action</button></div>',
     // client-components fixture (a): a popin body carrying a custom element.
     // Mirrors the reference component's server-rendered light DOM (the view
     // scaffold's x-checklist partial); 'component-script' additionally carries
