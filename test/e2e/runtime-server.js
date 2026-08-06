@@ -132,6 +132,13 @@ const FRAGMENTS = {
 // intentionally rule-less (it rides the payload untrusted — the hazard-b posture).
 const FACE_FORMS_JSON = JSON.stringify({ rules: { faceform: { agree: { isRequired: true } } } });
 
+// #R8 slice 2 — a non-empty forms whisper for the upload-dropzone fixture. Same
+// reason as FACE above: core.js only scans + binds forms when gina.forms.rules is
+// non-empty, and bindUploadDropzone() runs as part of that bind. The rule sits on
+// `title` rather than on the file input so the dropzone binding is not entangled
+// with a validity state the drag assertions do not care about.
+const UPLOAD_FORMS_JSON = JSON.stringify({ rules: { uploadform: { title: { isRequired: true } } } });
+
 /**
  * renderOnload — read the built onload and substitute its `{{ token }}` whispers
  * with the harness stub values above. An optional raw forms-JSON string overrides
@@ -198,6 +205,15 @@ const server = http.createServer(function (req, res) {
         // (the FACE-participation fixture, /face, references this).
         if (url === '/js/gina.onload.face.js') {
             return send(res, 200, 'application/javascript; charset=utf-8', renderOnload(FACE_FORMS_JSON));
+        }
+        // #R8 slice 2 — same onload with a non-empty forms whisper so the validator
+        // binds and bindUploadDropzone() runs (the /upload fixture references this).
+        if (url === '/js/gina.onload.upload.js') {
+            return send(res, 200, 'application/javascript; charset=utf-8', renderOnload(UPLOAD_FORMS_JSON));
+        }
+        if (url === '/upload' || url === '/upload.html') {
+            return send(res, 200, 'text/html; charset=utf-8',
+                fs.readFileSync(path.join(FIXTURES, 'upload-dropzone.html')));
         }
         if (url === '/js/gina.min.js') {
             return send(res, 200, 'application/javascript; charset=utf-8',

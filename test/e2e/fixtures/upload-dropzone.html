@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>gina upload dropzone e2e harness</title>
+    <!-- Empty data-URI icon: suppress the favicon.ico request for a clean console. -->
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="/css/vendor/gina/gina.min.css">
+
+    <!--
+        RUNTIME harness for the staged-upload DRAG-AND-DROP path (#R8 slice 2).
+        Boots the REAL built gina bundle with a NON-EMPTY forms whisper
+        (/js/gina.onload.upload.js) so core.js scans + binds forms — the validator
+        stays inert on an empty gina.forms.rules, and bindUploadDropzone() only runs
+        as part of form binding.
+
+        The drop path is unreachable from the node --test suite: it runs in jsdom,
+        which implements no `DataTransfer` at all, so the drag events cannot even be
+        constructed there. A real engine is the only place this behaviour exists.
+
+        Load order matches a real gina render: the onload defines onGinaLoaded +
+        __ginaWebroot, THEN the gina bundle boots.
+    -->
+    <script src="/js/gina.onload.upload.js"></script>
+    <script src="/js/gina.min.js"></script>
+    <script>
+        // Minimal page: the framework's own `ginaloaded` listener loses the attach
+        // race, so invoke onGinaLoaded manually to flip isFrameworkLoaded (the
+        // loader's guard makes a duplicate call a no-op).
+        (function () {
+            var tries = 0;
+            function kick() {
+                try {
+                    if (
+                        window.gina
+                        && window.gina.config
+                        && typeof window.onGinaLoaded === 'function'
+                        && !window.gina.isFrameworkLoaded
+                    ) {
+                        window.onGinaLoaded(window.gina);
+                    }
+                } catch (e) {
+                    if (window.console && console.error) {
+                        console.error('[harness] onGinaLoaded threw', e && e.stack || e);
+                    }
+                }
+                if ((!window.gina || !window.gina.isFrameworkLoaded) && tries++ < 100) {
+                    setTimeout(kick, 50);
+                }
+            }
+            kick();
+        }());
+    </script>
+    <style>
+        body { margin: 0; padding: 1rem; font-family: system-ui, sans-serif; }
+        #drop-zone { border: 2px dashed #888; padding: 2rem; margin-top: 1rem; }
+    </style>
+</head>
+<body>
+    <h1>gina upload dropzone harness</h1>
+
+    <!--
+        `data-gina-form-upload-dropzone` on the file input names the zone element by
+        id (opt-in: no default id). bindUploadDropzone() stamps the zone with
+        `data-gina-upload-dropzone` (= owner input id) and drives
+        `data-gina-upload-dropzone-state` idle -> over -> dropped.
+    -->
+    <form id="uploader" data-gina-form-rule="uploadform" data-gina-form-live-check-enabled="true" action="/upload-sink" method="post" enctype="multipart/form-data">
+        <p><label>Title <input id="title" type="text" name="title"></label></p>
+        <p><label>Document <input id="doc" type="file" name="doc" data-gina-form-upload-dropzone="drop-zone"></label></p>
+        <button id="uploader-submit" type="submit">Submit</button>
+    </form>
+
+    <div id="drop-zone">Drop a file here</div>
+</body>
+</html>
