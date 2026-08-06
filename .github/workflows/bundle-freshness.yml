@@ -78,6 +78,93 @@ jobs:
           fi
           (cd "${FW_DIR}" && npm install --ignore-scripts)
 
+      - name: Verify every .br decodes to its committed source
+        # ⚠️ ORDERING IS LOAD-BEARING: this MUST run BEFORE "Rebuild bundle".
+        # After a rebuild the working tree holds the RUNNER's freshly-compressed
+        # .br AND its freshly-minified sibling, so comparing them would pass
+        # trivially — a control that cannot fail, checking the runner's own output
+        # instead of what is committed. The pristine-tree assertion below enforces
+        # that ordering rather than trusting it, so a future step reshuffle fails
+        # loudly instead of silently neutering this gate.
+        #
+        # The freshness half for the compressed artifacts, arch-independent by
+        # construction: it never compares compressed BYTES (which diverge between
+        # arm64 and x86_64 for some inputs — see the note below), only what they
+        # DECODE TO.
+        #
+        # The chain (the two halves are a conjunction; their order does not matter):
+        # the LATER "Verify dist is in sync" step proves the committed uncompressed
+        # artifact equals the runner's rebuild, i.e. it is fresh. THIS step proves
+        # each committed .br decodes to exactly that artifact. Together they establish
+        # the .br is fresh
+        # — which is the property "freshness" actually means — without ever
+        # requiring two machines to agree on a compressed byte stream.
+        #
+        # Measured 2026-08-06: the arm64 and x86_64 artifacts for the same bundle
+        # differ in raw bytes (114651 vs 114657) and decode to the IDENTICAL
+        # content, so a byte comparison fails where this one passes. A deliberately
+        # stale .br decodes to different content and is still caught.
+        run: |
+          fail=0
+          checked=0
+
+          # 0. the dist must still be exactly as committed. If a rebuild has already
+          #    run, every pair below is the runner's own output and this gate proves
+          #    nothing — so refuse to report a green rather than report a hollow one.
+          if ! git diff --quiet -- ':(glob)framework/v*/core/asset/plugin/dist/vendor/gina/**'; then
+            echo "::error::bundle-freshness: the dist is already modified at this point."
+            echo "::error::This step must run BEFORE 'Rebuild bundle' — otherwise it compares"
+            echo "::error::the runner's fresh output against itself and always passes."
+            exit 1
+          fi
+
+          # 1. every .br must decode to its uncompressed sibling
+          while IFS= read -r f; do
+            src="${f%.br}"
+            if [ ! -f "$src" ]; then
+              echo "::error file=$f::orphan .br — no uncompressed sibling at ${src}"
+              fail=1
+              continue
+            fi
+            if ! brotli -dc "$f" | cmp -s - "$src"; then
+              echo "::error file=$f::STALE — this .br does not decode to ${src}."
+              echo "::error::A browser sending 'Accept-Encoding: br' would be served different"
+              echo "::error::content from one that does not. Rebuild and stage the dist:"
+              echo "::error::  bash framework/v*/core/asset/plugin/build --env=prod"
+              fail=1
+            fi
+            checked=$((checked + 1))
+          done < <(find framework/v*/core/asset/plugin/dist/vendor/gina -type f -name '*.br')
+
+          # 2. every artifact the build COMPRESSES must HAVE a .br. The byte-diff
+          #    above can no longer see a DELETED .br (the path is excluded there),
+          #    so without this a removed artifact would slip through silently.
+          #
+          #    The three finds below mirror the build script's own brotli calls
+          #    EXACTLY (core/asset/plugin/build: css/*.css, js/*.min.js,
+          #    html/*.html). Do not widen this to the whole dist tree: assets under
+          #    beemaster/ and inspector/ are NOT compressed by the build, and
+          #    demanding a .br for them turns this gate permanently red.
+          for pair in "css:*.css" "js:*.min.js" "html:*.html"; do
+            d="${pair%%:*}"; pat="${pair#*:}"
+            while IFS= read -r a; do
+              if [ ! -f "${a}.br" ]; then
+                echo "::error file=$a::missing ${a}.br — the build emits one for this artifact"
+                fail=1
+              fi
+            done < <(find framework/v*/core/asset/plugin/dist/vendor/gina/"$d" -type f -name "$pat" 2>/dev/null)
+          done
+
+          # 3. a run that checked nothing is a control that cannot fail — exactly how
+          #    this gate went dead once before, on a 0-match pathspec.
+          if [ "$checked" -eq 0 ]; then
+            echo "::error::bundle-freshness: found 0 .br artifacts — gate misconfigured."
+            exit 1
+          fi
+
+          [ "$fail" -eq 0 ] || exit 1
+          echo "OK: ${checked} .br artifacts each decode to their committed source."
+
       - name: Install Closure Compiler JARs
         run: bash framework/v*/core/asset/plugin/lib/js/install-closure-compiler.sh
 
@@ -143,70 +230,3 @@ jobs:
             exit 1
           fi
           echo "Bundle is fresh — uncompressed dist matches source (*.gz is not checked; *.br is checked by content in the next step, not by bytes)."
-
-      - name: Verify every .br decodes to its committed source
-        # The freshness half for the compressed artifacts, arch-independent by
-        # construction: it never compares compressed BYTES (which diverge between
-        # arm64 and x86_64 for some inputs — see the note above), only what they
-        # DECODE TO.
-        #
-        # The chain: the previous step proved the committed uncompressed artifact
-        # equals the runner's rebuild, i.e. it is fresh. This step proves each .br
-        # decodes to exactly that artifact. Together they establish the .br is fresh
-        # — which is the property "freshness" actually means — without ever
-        # requiring two machines to agree on a compressed byte stream.
-        #
-        # Measured 2026-08-06: the arm64 and x86_64 artifacts for the same bundle
-        # differ in raw bytes (114651 vs 114657) and decode to the IDENTICAL
-        # content, so a byte comparison fails where this one passes. A deliberately
-        # stale .br decodes to different content and is still caught.
-        run: |
-          fail=0
-          checked=0
-
-          # 1. every .br must decode to its uncompressed sibling
-          while IFS= read -r f; do
-            src="${f%.br}"
-            if [ ! -f "$src" ]; then
-              echo "::error file=$f::orphan .br — no uncompressed sibling at ${src}"
-              fail=1
-              continue
-            fi
-            if ! brotli -dc "$f" | cmp -s - "$src"; then
-              echo "::error file=$f::STALE — this .br does not decode to ${src}."
-              echo "::error::A browser sending 'Accept-Encoding: br' would be served different"
-              echo "::error::content from one that does not. Rebuild and stage the dist:"
-              echo "::error::  bash framework/v*/core/asset/plugin/build --env=prod"
-              fail=1
-            fi
-            checked=$((checked + 1))
-          done < <(find framework/v*/core/asset/plugin/dist/vendor/gina -type f -name '*.br')
-
-          # 2. every artifact the build COMPRESSES must HAVE a .br. The byte-diff
-          #    above can no longer see a DELETED .br (the path is excluded there),
-          #    so without this a removed artifact would slip through silently.
-          #
-          #    The three finds below mirror the build script's own brotli calls
-          #    EXACTLY (core/asset/plugin/build: css/*.css, js/*.min.js,
-          #    html/*.html). Do not widen this to the whole dist tree: assets under
-          #    beemaster/ and inspector/ are NOT compressed by the build, and
-          #    demanding a .br for them turns this gate permanently red.
-          for pair in "css:*.css" "js:*.min.js" "html:*.html"; do
-            d="${pair%%:*}"; pat="${pair#*:}"
-            while IFS= read -r a; do
-              if [ ! -f "${a}.br" ]; then
-                echo "::error file=$a::missing ${a}.br — the build emits one for this artifact"
-                fail=1
-              fi
-            done < <(find framework/v*/core/asset/plugin/dist/vendor/gina/"$d" -type f -name "$pat" 2>/dev/null)
-          done
-
-          # 3. a run that checked nothing is a control that cannot fail — exactly how
-          #    this gate went dead once before, on a 0-match pathspec.
-          if [ "$checked" -eq 0 ]; then
-            echo "::error::bundle-freshness: found 0 .br artifacts — gate misconfigured."
-            exit 1
-          fi
-
-          [ "$fail" -eq 0 ] || exit 1
-          echo "OK: ${checked} .br artifacts each decode to their committed source."
