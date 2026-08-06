@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>gina nav e2e harness</title>
+    <!-- Empty data-URI icon: suppress the favicon.ico request for a clean console. -->
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="/css/vendor/gina/gina.min.css">
+
+    <!--
+        RUNTIME harness for #SPA1 Tier 1 fragment navigation (gina/nav).
+
+        The server renders this same shell for every /nav* URL, substituting the
+        `{{ region }}` token with that URL's region content — which is exactly what a
+        negotiated route does in production: one URL, a full document for a normal
+        navigation and a layoutless fragment for an `X-Gina-Navigate` request. That
+        symmetry is what lets a fallback actually land on a real page.
+
+        Almost nothing nav does is reachable from the node --test suite: history
+        pushState/popstate, focus movement, real modifier-key clicks and genuine
+        full-page navigations are browser behaviours, and the module had no test of
+        any kind (no test/core/*nav*, no test/lib/*nav*) before this harness.
+
+        Load order matches a real gina render: the onload defines onGinaLoaded +
+        __ginaWebroot, THEN the gina bundle boots.
+    -->
+    <script>
+        // Page-instance token, generated at PARSE time of every document load. The
+        // specs read it before and after an action: unchanged => the fragment path
+        // kept the document alive; changed => a full page load happened. This is the
+        // discriminator the whole spec rests on, so it must be set before anything
+        // else can navigate.
+        window.__pageInstance = Math.random().toString(36).slice(2) + '-' + Date.now();
+    </script>
+    <script src="/js/gina.onload.js"></script>
+    <script src="/js/gina.min.js"></script>
+    <script>
+        // Minimal page: the framework's own `ginaloaded` listener loses the attach
+        // race, so invoke onGinaLoaded manually to flip isFrameworkLoaded (the
+        // loader's guard makes a duplicate call a no-op).
+        (function () {
+            var tries = 0;
+            function kick() {
+                try {
+                    if (
+                        window.gina
+                        && window.gina.config
+                        && typeof window.onGinaLoaded === 'function'
+                        && !window.gina.isFrameworkLoaded
+                    ) {
+                        window.onGinaLoaded(window.gina);
+                    }
+                } catch (e) {
+                    if (window.console && console.error) {
+                        console.error('[harness] onGinaLoaded threw', e && e.stack || e);
+                    }
+                }
+                if ((!window.gina || !window.gina.isFrameworkLoaded) && tries++ < 100) {
+                    setTimeout(kick, 50);
+                }
+            }
+            kick();
+        }());
+    </script>
+    <style>
+        body { margin: 0; padding: 1rem; font-family: system-ui, sans-serif; }
+        /* Tall enough that a scroll position exists to restore. */
+        #spacer { height: 2000px; }
+    </style>
+</head>
+<body>
+    <h1>gina nav harness</h1>
+
+    <!--
+        `data-gina-nav` is BOTH the page opt-in and the swap region: the boot shim
+        constructs gina/nav only when this marker is present (core.js), and every
+        fetched fragment replaces this element's content.
+    -->
+    <main data-gina-nav>{{ region }}</main>
+
+    <div id="spacer"></div>
+</body>
+</html>

@@ -19,7 +19,13 @@
  *   GET /js/gina.onload.js             -> built onload (dist), whisper tokens
  *                                         substituted with harness stub values
  *   GET /css/vendor/gina/gina.min.css  -> built stylesheet (dist)
- *   GET /_gina/assets/routing.json     -> {}  (the getDependencies runtime fetch)
+ *   GET /_gina/assets/routing.json     -> {} for every fixture EXCEPT the nav one,
+ *                                         which gets the #SPA1 routing table (keyed
+ *                                         off the Referer — see the handler)
+ *   GET /nav[/one|two|bare|plain]      -> the nav shell for a normal navigation, or
+ *                                         the layoutless region when the request
+ *                                         carries `X-Gina-Navigate` (`bare` answers
+ *                                         2xx WITHOUT `Vary`, the defect arm)
  *   GET /frag/<name>.html              -> in-memory AJAX fragments (below)
  *   GET /components                    -> fixtures/web-components.html (client
  *                                         components: SSR hydration + raw-HTML
@@ -139,6 +145,43 @@ const FACE_FORMS_JSON = JSON.stringify({ rules: { faceform: { agree: { isRequire
 // with a validity state the drag assertions do not care about.
 const UPLOAD_FORMS_JSON = JSON.stringify({ rules: { uploadform: { title: { isRequired: true } } } });
 
+// #SPA1 Tier 1 — the routing table gina/nav matches clicks against. Shape mirrors the
+// served map: `param` must be present (getCompiled skips paramless routes), `bundle`
+// must equal the `page.environment.bundle` whisper ('e2e'), and only `negotiate: true`
+// routes may be intercepted. `plain` is the subtract arm — same shape, no negotiate.
+//
+// NB the whisper route is a dead end here: core.js:518 has the routing whisper
+// COMMENTED OUT, and loadRoutingConf overwrites gina.config.routing with the fetched
+// body regardless. The fetch below is the only channel that reaches nav.
+const NAV_ROUTING = {
+    'nav-one'  : { bundle: 'e2e', method: 'get', url: '/nav/one',   param: {}, negotiate: true },
+    'nav-two'  : { bundle: 'e2e', method: 'get', url: '/nav/two',   param: {}, negotiate: true },
+    'nav-bare' : { bundle: 'e2e', method: 'get', url: '/nav/bare',  param: {}, negotiate: true },
+    'nav-plain': { bundle: 'e2e', method: 'get', url: '/nav/plain', param: {} }
+};
+
+// Region content per /nav* URL. The same string is served as a layoutless FRAGMENT to
+// an `X-Gina-Navigate` request and inlined into the shell for a normal navigation —
+// the production contract, and what makes a fallback land on a real document.
+// Every region carries the same `#frag-title` id so assertions do not care which
+// section rendered, only which one is showing.
+const NAV_REGIONS = {
+    'home' : '<div id="frag-home" data-gina-nav-title="Nav home"><h2 id="frag-title">HOME</h2>'
+           + '<a id="to-one" href="/nav/one">to one</a> <a id="to-bare" href="/nav/bare">to bare</a> '
+           + '<a id="to-plain" href="/nav/plain">to plain</a></div>',
+    'one'  : '<div id="frag-one" data-gina-nav-title="Section one"><h2 id="frag-title">ONE</h2>'
+           + '<a id="to-two" href="/nav/two">to two</a></div>',
+    'two'  : '<div id="frag-two" data-gina-nav-title="Section two"><h2 id="frag-title">TWO</h2>'
+           + '<a id="to-one" href="/nav/one">to one</a></div>',
+    'bare' : '<div id="frag-bare"><h2 id="frag-title">BARE</h2></div>',
+    'plain': '<div id="frag-plain"><h2 id="frag-title">PLAIN</h2></div>'
+};
+
+// Only these advertise `Vary: X-Gina-Navigate`. `bare` is the defect arm: a 2xx HTML
+// answer WITHOUT the header, which nav must refuse to swap (a server/client matching
+// disagreement) and degrade to a full page load.
+const NAV_NEGOTIATED = { 'home': true, 'one': true, 'two': true };
+
 /**
  * renderOnload — read the built onload and substitute its `{{ token }}` whispers
  * with the harness stub values above. An optional raw forms-JSON string overrides
@@ -173,6 +216,31 @@ function renderCspFixture() {
     var nonce = crypto.randomBytes(16).toString('base64');
     var src = fs.readFileSync(path.join(FIXTURES, 'web-components.csp.html'), 'utf8');
     return { nonce: nonce, body: src.replace(/\{\{\s*nonce\s*\}\}/g, nonce) };
+}
+
+/**
+ * renderNav — the /nav shell with its `{{ region }}` token replaced. One shell for
+ * every /nav* URL, so a fallback navigation renders a real document.
+ * @param {string} region raw region HTML
+ * @returns {string}
+ */
+function renderNav(region) {
+    var src = fs.readFileSync(path.join(FIXTURES, 'nav.html'), 'utf8');
+    return src.replace(/\{\{\s*region\s*\}\}/g, region);
+}
+
+/**
+ * refererPath — pathname of a Referer header, or '' when absent/unparseable. Used to
+ * decide which routing table a routing.json fetch should receive.
+ * @param {string} [referer]
+ * @returns {string}
+ */
+function refererPath(referer) {
+    try {
+        return new URL(referer).pathname;
+    } catch (err) {
+        return '';
+    }
 }
 
 /**
@@ -224,7 +292,33 @@ const server = http.createServer(function (req, res) {
                 fs.readFileSync(path.join(PLUGIN_DIST, 'css', 'gina.min.css')));
         }
         if (url === '/_gina/assets/routing.json') {
-            return send(res, 200, 'application/json; charset=utf-8', '{}');
+            // Keyed off the REFERRING page. core.js fetches this URL unconditionally at
+            // boot, so serving the nav table to everyone would silently become a new
+            // input to nine unrelated specs; every non-nav fixture keeps the empty table
+            // it has always had. A missing Referer degrades to '{}', which makes nav
+            // inert and fails its specs loudly rather than passing them for a wrong
+            // reason.
+            var isNavPage = /^\/nav(\/|$)/.test(refererPath(req.headers.referer));
+            return send(res, 200, 'application/json; charset=utf-8',
+                isNavPage ? JSON.stringify(NAV_ROUTING) : '{}');
+        }
+        // #SPA1 — the nav harness. One shell per URL (full document), or the layoutless
+        // region when the request carries the negotiation header.
+        var nav = url.match(/^\/nav(?:\/(one|two|bare|plain))?$/);
+        if (nav) {
+            var section = nav[1] || 'home';
+            if (/fragment/i.test(req.headers['x-gina-navigate'] || '')) {
+                var navHeaders = {
+                    'Content-Type' : 'text/html; charset=utf-8',
+                    'Cache-Control': 'no-store'
+                };
+                if (NAV_NEGOTIATED[section]) {
+                    navHeaders['Vary'] = 'X-Gina-Navigate';
+                }
+                res.writeHead(200, navHeaders);
+                return res.end(NAV_REGIONS[section]);
+            }
+            return send(res, 200, 'text/html; charset=utf-8', renderNav(NAV_REGIONS[section]));
         }
         // client components — framework-free fixtures + the shipped reference
         // component (see the header comment)
