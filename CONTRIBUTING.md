@@ -98,11 +98,24 @@ npm run test:coverage
 
 # Run a single file
 node --test test/core/controller.test.js
+
+# Pass extra node:test flags — via the env var, NOT `npm test -- --flag`
+GINA_TEST_FLAGS=--test-concurrency=2 npm test
 ```
 
 `npm test` is the single source of truth for which files make up the suite:
 CI runs exactly this script, so a green local run and a green CI run cover the
 same set.
+
+**Extra runner flags must go through `GINA_TEST_FLAGS`.** `node --test` stops
+parsing options at the first positional argument, so a flag placed after the
+file list is neither honoured nor rejected — it is silently ignored and the run
+still exits 0. That makes `npm test -- --test-concurrency=2` a no-op that looks
+like it worked. The `test` script interpolates `$GINA_TEST_FLAGS` *before* the
+file list, which is why `npm run test:coverage` is defined as
+`GINA_TEST_FLAGS=--experimental-test-coverage npm test`. Measured over 199
+files: `--test-concurrency=1` before the list takes 47s, after the list 15s,
+and with no flag at all 17s.
 
 Some tests resolve the framework the way a consuming project does — via
 `require('gina')`. For that to resolve from inside the clone, the repository
