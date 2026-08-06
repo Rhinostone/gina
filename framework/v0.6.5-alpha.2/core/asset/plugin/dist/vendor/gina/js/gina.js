@@ -22275,7 +22275,17 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge'
          */
         function openFromTrigger($trigger) {
             if (
-                $trigger.getAttribute('disabled') != null && $trigger.getAttribute('disabled') != 'false'
+                // #B296: the native `disabled` attribute is only meaningful where the browser
+                // does NOT enforce it. On a real form control the browser suppresses the click
+                // outright (measured: 0 clicks reach JS), so this arm could only ever fire on a
+                // `disabled` written DURING the dispatch — the shape of every consumer
+                // double-submit guard — which silently ate the open and left nothing marked.
+                // Elements the browser does not enforce (`<a>`, custom elements, spans) keep it,
+                // which is also what still honours armPopinTrigger's own `:1923` native write on
+                // a non-<a> trigger. Mirrors the validator's isTriggerDisabled (#B293).
+                // was: $trigger.getAttribute('disabled') != null && ... != 'false'
+                !('disabled' in $trigger)
+                && $trigger.getAttribute('disabled') != null && $trigger.getAttribute('disabled') != 'false'
                 || $trigger.getAttribute('aria-disabled') == 'true'
             ) {
                 return;
@@ -22511,7 +22521,15 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge'
             // for proxies, use popinInstance.id as target is always `document`
             addListener(gina, document, evt, function(event) {
 
-                if ( event.target.getAttribute('disabled') != null && event.target.getAttribute('disabled') != 'false' ) {
+                // #B296: native `disabled` counts only where the browser does not enforce it —
+                // see the openFromTrigger gate for the full rationale. This is the SOLE dispatch
+                // path for legacy `data-gina-popin-name` triggers (bindDelegatedOpen returns
+                // early for them at the `data-gina-dialog` check), so the same guard shape is
+                // latent here. Reachability of THIS site was traced, not exercised.
+                if (
+                    !('disabled' in event.target)
+                    && event.target.getAttribute('disabled') != null && event.target.getAttribute('disabled') != 'false'
+                ) {
                     return false;
                 }
 
@@ -22601,7 +22619,16 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge'
                 addListener(gina, $element, 'click', function(event) {
                     cancelEvent(event);
                     // ignore disabled
-                    if ( event.target.getAttribute('disabled') != null && event.target.getAttribute('disabled') != 'false' ) {
+                    // #B296: native `disabled` counts only where the browser does not enforce it —
+                    // see the openFromTrigger gate. MEASURED reachable here: an in-popin
+                    // `.gina-popin-close` <button> plus a CAPTURE-phase consumer guard leaves the
+                    // popin open with nothing marked. A target-phase guard bound after gina's own
+                    // listener (:1327) does NOT reproduce it — gina runs first — so this site is
+                    // narrower than openFromTrigger's, but real.
+                    if (
+                        !('disabled' in event.target)
+                        && event.target.getAttribute('disabled') != null && event.target.getAttribute('disabled') != 'false'
+                    ) {
                         return false;
                     }
                     // NB.: `type == 'action'` will be handled by the form validator
