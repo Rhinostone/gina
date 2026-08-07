@@ -22028,9 +22028,18 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge'
          * @param {object} $popin - the registered popin.
          * @param {function} [onMiss] - the caller's click-time load, run only if an adopted
          *   in-flight preload ends up failing.
+         * @param {function} [onSettled] - #B285: fired when this consume stops owing
+         *   anything — synchronously after a ready (cached) apply, or when an adopted
+         *   in-flight preload resolves (success AND failure, before the body/miss
+         *   handling — the same release-before-apply order as popinLoad's readyState-4
+         *   site). Deliberately a bare notifier: the CALLERS own any busy affordance,
+         *   so this function stays loading-state-agnostic.
          * @returns {boolean} true if the preload was (or will be) consumed.
          */
-        function consumePreload(url, $popin, onMiss) {
+        function consumePreload(url, $popin, onMiss, onSettled) {
+            var _settle = function () {
+                if ( typeof(onSettled) == 'function' ) { onSettled(); }
+            };
             var slot = preloadCache[url];
             if ( typeof(slot) == 'undefined' ) {
                 return false;
@@ -22047,6 +22056,9 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge'
                     preloadWaiters[url] = [];
                 }
                 preloadWaiters[url].push(function (body) {
+                    // #B285 — the adopted wait is over (body or failure): settle FIRST,
+                    // matching the cold path's release-before-apply order.
+                    _settle();
                     if ( body == null ) {
                         if ( typeof(onMiss) == 'function' ) { onMiss(); }
                     } else {
@@ -22069,6 +22081,10 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge'
             var $el = ensurePopinDialog($popin);
             if (GINA_ENV_IS_DEV) { updateToolbar(body); }
             handleLoadedBody(body, $popin, $el);
+            // #B285 — synchronous settle: tells the caller no wait ever began, so it
+            // must not arm. Load-bearing, not politeness: without this the caller
+            // could not distinguish ready from in-flight and would arm forever.
+            _settle();
             return true;
         }
 
@@ -22406,7 +22422,26 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge'
                 // sibling trigger's warm), so skip the consume entirely — its GET
                 // always happens at open time.
                 var _noPreload = /^false$/i.test($trigger.getAttribute('data-gina-dialog-preload'));
-                if ( !_noPreload && consumePreload(descriptor.src, existing, onMiss) ) {
+                // #B285 — an ADOPTED in-flight preload is a genuine wait: arm the trigger
+                // for its duration exactly as the cold click-time XHR does, and release
+                // when the adoption settles (the failure leg re-arms through popinLoad's
+                // own path). The ready branch settles synchronously inside consumePreload,
+                // so _adoptedWait is already false when it returns and nothing is armed —
+                // nothing is owed when nothing is waited for.
+                var _adoptedWait = true;
+                var _armedForAdoption = false;
+                var _onAdoptionSettled = function () {
+                    _adoptedWait = false;
+                    if (_armedForAdoption) {
+                        _armedForAdoption = false;
+                        releasePopinTrigger($trigger);
+                    }
+                };
+                if ( !_noPreload && consumePreload(descriptor.src, existing, onMiss, _onAdoptionSettled) ) {
+                    if (_adoptedWait) {
+                        armPopinTrigger($trigger);
+                        _armedForAdoption = true;
+                    }
                     return;
                 }
                 onMiss();
@@ -22584,7 +22619,24 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge'
                             // always-refetch means the GET happens at open time, never from
                             // the cache (see the openFromTrigger twin).
                             var _noPreload = /^false$/i.test(this.getAttribute('data-gina-dialog-preload'));
-                            if ( !_noPreload && consumePreload(url, $popin, doLoad) ) {
+                            // #B285 — same adopted-wait arm as the openFromTrigger twin: a
+                            // click adopting a still-in-flight preload waits for real; arm
+                            // for the wait, release on settle (a failed adoption's doLoad
+                            // re-arms through popinLoad's own path).
+                            var _adoptedWait = true;
+                            var _armedForAdoption = false;
+                            var _onAdoptionSettled = function () {
+                                _adoptedWait = false;
+                                if (_armedForAdoption) {
+                                    _armedForAdoption = false;
+                                    releasePopinTrigger($trigger);
+                                }
+                            };
+                            if ( !_noPreload && consumePreload(url, $popin, doLoad, _onAdoptionSettled) ) {
+                                if (_adoptedWait) {
+                                    armPopinTrigger($trigger);
+                                    _armedForAdoption = true;
+                                }
                                 return;
                             }
                             doLoad();
@@ -23301,6 +23353,34 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge'
                 $popinTrigger.setAttribute('disabled', true);
             }
             loadingState.arm($popinTrigger);
+        }
+
+        /**
+         * releasePopinTrigger
+         *
+         * armPopinTrigger's mirror: removes the attribute the arm set
+         * (`aria-disabled` on an `<a>`, native `disabled` everywhere else) and
+         * releases the shared `data-gina-loading` marker. Same shape as
+         * popinLoad's own readyState-4 release; used by the adopted-preload
+         * wait (#B285), whose release has no XHR of its own to hang it on.
+         *
+         * @inner
+         * @param {HTMLElement} [$popinTrigger] - the control armPopinTrigger marked
+         * @returns {void}
+         *
+         * @example
+         * releasePopinTrigger($popinTrigger);
+         */
+        function releasePopinTrigger($popinTrigger) {
+            if ( !$popinTrigger ) {
+                return;
+            }
+            if ( /^A$/i.test($popinTrigger.tagName) ) {
+                $popinTrigger.removeAttribute('aria-disabled');
+            } else {
+                $popinTrigger.removeAttribute('disabled');
+            }
+            loadingState.disarm($popinTrigger);
         }
 
         /**
