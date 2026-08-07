@@ -40,16 +40,15 @@
  * ## Configuring the attribute name
  *
  * The name is read from `gina.config.loadingAttribute`, lazily, at every call —
- * `gina.config` is populated after the bundle loads (via `setOptions`), so a value
+ * `gina.config` is populated by the loader after the bundle loads, so a value
  * captured at module-definition time would be stale. A project already built on
  * `data-loading` opts in with:
  *
- * ```html
- * <script src="/js/vendor/gina/gina.min.js"
- *         data-gina-config="{ loadingAttribute: 'data-loading' }"></script>
+ * ```js
+ * gina.setOptions({ loadingAttribute: 'data-loading' });
  * ```
  *
- * or `gina.setOptions({ loadingAttribute: 'data-loading' })`. There is no
+ * There is no
  * auto-detection: a DOM probe reads nothing at rest (the attribute only exists
  * while something is loading) and a stylesheet probe races late-loaded sheets and
  * throws on cross-origin ones. Configuration is explicit by design.

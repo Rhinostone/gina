@@ -8991,12 +8991,29 @@ define('gina', [ 'require', 'lib/merge', 'lib/uuid', 'lib/routing', 'utils/event
 
         /**
          * setOptions
-         * Override default config options or add new options properties
+         * Overrides default config options or adds new option properties on the
+         * exposed `gina.config` — the object every plugin and library reads.
+         * Applied in place with override semantics: a top-level scalar from
+         * `options` replaces the existing value, a top-level object is merged one
+         * level deep, and keys absent from `options` are never removed.
          *
-         * @param {object} options
+         * N.B.: the framework boot passes the exposed config itself through this
+         * function; that call is a no-op by design. In a child frame inheriting a
+         * parent frame's instance, the inherited handler configures the parent.
+         *
+         * @param {object} options - e.g. `{ loadingAttribute: 'data-loading' }`
+         *
+         * @example
+         *  gina.setOptions({ loadingAttribute: 'data-loading' });
+         *  // gina.config.loadingAttribute is now 'data-loading'
          * */
         var setOptions = function(options) {
-            proto.config = merge(proto.config, options, true)
+            if ( !options || typeof(options) != 'object' || options === $instance.config ) {
+                // nothing to merge: no options given, or the boot passing the
+                // exposed config back to itself
+                return
+            }
+            $instance.config = merge($instance.config, options, true)
         }
 
         // instance proto
@@ -9316,16 +9333,15 @@ if ( _isNode ) {
  * ## Configuring the attribute name
  *
  * The name is read from `gina.config.loadingAttribute`, lazily, at every call —
- * `gina.config` is populated after the bundle loads (via `setOptions`), so a value
+ * `gina.config` is populated by the loader after the bundle loads, so a value
  * captured at module-definition time would be stale. A project already built on
  * `data-loading` opts in with:
  *
- * ```html
- * <script src="/js/vendor/gina/gina.min.js"
- *         data-gina-config="{ loadingAttribute: 'data-loading' }"></script>
+ * ```js
+ * gina.setOptions({ loadingAttribute: 'data-loading' });
  * ```
  *
- * or `gina.setOptions({ loadingAttribute: 'data-loading' })`. There is no
+ * There is no
  * auto-detection: a DOM probe reads nothing at rest (the attribute only exists
  * while something is loading) and a stylesheet probe races late-loaded sheets and
  * throws on cross-origin ones. Configuration is explicit by design.
@@ -27420,8 +27436,9 @@ if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
  *
  *      <script type="text/javascript" src="/js/vendor/gina/gina.min.js"></script>
  *
- *  You can add or edit config options through the `data-gina-config`
- *      <script type="text/javascript" src="/js/vendor/gina/gina.min.js" data-gina-config="{ env: 'dev', envIsDev: true, webroot: '/' }"></script>
+ *  Config options come from the server-rendered page environment. Once the
+ *  framework has loaded, option properties can be added or overridden through
+ *      gina.setOptions({ ... })
  *
  *  Through RequireJS
  *

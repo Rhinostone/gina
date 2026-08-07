@@ -6,8 +6,9 @@
  *
  *      <script type="text/javascript" src="/js/vendor/gina/gina.min.js"></script>
  *
- *  You can add or edit config options through the `data-gina-config`
- *      <script type="text/javascript" src="/js/vendor/gina/gina.min.js" data-gina-config="{ env: 'dev', envIsDev: true, webroot: '/' }"></script>
+ *  Config options come from the server-rendered page environment. Once the
+ *  framework has loaded, option properties can be added or overridden through
+ *      gina.setOptions({ ... })
  *
  *  Through RequireJS
  *
