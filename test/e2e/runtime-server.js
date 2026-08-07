@@ -368,6 +368,24 @@ const server = http.createServer(function (req, res) {
             res.write(':ok\n\n');
             var agentInit = { gina: { environment: AGENT_ENV }, user: { environment: AGENT_ENV } };
             res.write('event: data\ndata: ' + JSON.stringify(agentInit) + '\n\n');
+            // Second `data` frame — the render-emit path (`inspector#data`,
+            // core/server.js:4758-4762 fires the FULL payload on every HTML
+            // render). `user.data` is what the SPA's data tab renders
+            // (inspector.js renderTab `case 'data'`); the root-level `engine`
+            // primitive gives specs a deterministic `.bm-copyable` leaf that
+            // is visible without expanding any fold.
+            var agentRender = {
+                gina: { environment: AGENT_ENV },
+                user: {
+                    environment: AGENT_ENV,
+                    data: {
+                        engine: 'e2e-harness',
+                        page:   { title: 'e2e fixture' },
+                        order:  { id: 42, ref: 'A-1' }
+                    }
+                }
+            };
+            res.write('event: data\ndata: ' + JSON.stringify(agentRender) + '\n\n');
             res.write('event: log\ndata: ' + JSON.stringify({
                 t: Date.now(), l: 'info', b: AGENT_ENV.bundle, s: 'agent stream ready', src: 'server'
             }) + '\n\n');
