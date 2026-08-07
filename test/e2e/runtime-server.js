@@ -40,6 +40,8 @@
  *                                         the layoutless region when the request
  *                                         carries `X-Gina-Navigate` (`bare` answers
  *                                         2xx WITHOUT `Vary`, the defect arm)
+ *   GET /link-gate                     -> fixtures/link-disabled-gate.html (#B310
+ *                                         link disabled-gate harness; same sink)
  *   GET /frag/<name>.html              -> in-memory AJAX fragments (below)
  *   GET /components                    -> fixtures/web-components.html (client
  *                                         components: SSR hydration + raw-HTML
@@ -461,6 +463,11 @@ const server = http.createServer(function (req, res) {
         }
         if (url === '/link/sink') {
             return send(res, 200, 'application/json; charset=utf-8', '{"ok":true}');
+        }
+        // #B310 — the link disabled-gate harness. Same sink as /link.
+        if (url === '/link-gate' || url === '/link-gate.html') {
+            return send(res, 200, 'text/html; charset=utf-8',
+                fs.readFileSync(path.join(FIXTURES, 'link-disabled-gate.html')));
         }
         // #SPA1 — the nav harness. One shell per URL (full document), or the layoutless
         // region when the request carries the negotiation header.

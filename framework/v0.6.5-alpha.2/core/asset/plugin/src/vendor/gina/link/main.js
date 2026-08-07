@@ -156,12 +156,56 @@ define('gina/link', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge',
             return !!( e && (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) );
         }
 
+        /**
+         * isLinkDisabled
+         *
+         * Tells whether a bound link is currently marked disabled — #B310's
+         * click-time gate. The predicate is the popin trigger gate's (#B296),
+         * itself mirroring the validator's (#B293), so all three subsystems
+         * agree on what "disabled" means for a trigger: the aria-disabled
+         * marker always counts; the native attribute counts only where
+         * `disabled` is not a real IDL property (on an anchor it never is, so
+         * both arms are live here), because a genuine form control's
+         * browser-enforced disable never lets the click reach JS at all.
+         *
+         * Consulted at the TWO dispatch sites that turn a click into a
+         * request — the document proxy and the child-node proxy — AFTER their
+         * cancelEvent: a registered link keeps suppressing its default, gated
+         * or not, so a disabled link goes nowhere rather than falling back to
+         * navigation. Deliberately NOT consulted in linkRequest (the public
+         * API + the redirect funnel — a programmatic call is not operating
+         * the control, the same scope reasoning as the validator's gesture
+         * gate) nor in the per-anchor CSP suppression listener (a gated link
+         * still suppresses its default).
+         *
+         * @inner
+         * @private
+         * @param {object} $el - the bound anchor
+         * @returns {boolean} true when the link is marked disabled
+         *
+         * @example
+         * if ( isLinkDisabled($el) ) return; // swallow the click, send nothing
+         */
+        var isLinkDisabled = function($el) {
+            return !!(
+                $el
+                && (
+                    !('disabled' in $el)
+                    && $el.getAttribute('disabled') != null && $el.getAttribute('disabled') != 'false'
+                    || $el.getAttribute('aria-disabled') == 'true'
+                )
+            );
+        }
+
         var proxyClick = function($childNode, $el, evt) {
 
             addListener(gina, $childNode, 'click', function(e) {
                 if ( isModifiedClick(e) ) return;
 
                 cancelEvent(e);
+                // #B310 — the disabled gate, AFTER cancelEvent: a registered
+                // link keeps suppressing its default, gated or not.
+                if ( isLinkDisabled($el) ) return;
 
                 triggerEvent(gina, $el, evt);
             });
@@ -663,6 +707,11 @@ define('gina/link', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge',
                     // A click on non-link markup yields an id absent from `$links` — no-op.
                     if ( typeof(instance.$links[event.target.id]) != 'undefined' ) {
                         cancelEvent(event);
+                        // #B310 — the disabled gate, AFTER cancelEvent (same
+                        // reasoning as proxyClick's): suppressed, not sent.
+                        if ( isLinkDisabled(event.target) ) {
+                            return;
+                        }
                         triggerEvent(gina, event.target, event.target.id, event.detail);
                     }
                 });

@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>gina link disabled-gate e2e harness</title>
+    <!-- Empty data-URI icon: suppress the favicon.ico request for a clean console. -->
+    <link rel="icon" href="data:,">
+
+    <!--
+        RUNTIME harness for #B310 — a `data-gina-link` anchor marked disabled
+        (aria-disabled="true", or the native attribute an anchor never enforces)
+        still fired its XHR: the link plugin had NO disabled gate at all (the only
+        click-time bail was the modifier guard).
+
+        WHY A FIXTURE AND NOT A UNIT TEST: same reason as the preset-id harness —
+        the defect lives in event dispatch (document proxy + child proxy), which
+        only a real click on a real anchor in a real engine exercises; the link
+        unit files are source pins.
+
+        ANCHOR SHAPES: #gated-link and #native-gated carry BARE TEXT so the anchor
+        is the event target (the document-proxy path); #gated-child wraps a <span>
+        so dispatch goes through proxyClick (the child path). Both dispatch sites
+        carry the gate, so both must refuse.
+
+        The link plugin has NO framework auto-boot (#B141): the inline script below
+        is the bundle-handler equivalent, same as the preset-id harness.
+    -->
+    <script src="/js/gina.onload.js"></script>
+    <script src="/js/gina.min.js"></script>
+    <script>
+        (function () {
+            var tries = 0;
+            function kick() {
+                try {
+                    if (
+                        window.gina
+                        && window.gina.config
+                        && typeof window.onGinaLoaded === 'function'
+                        && !window.gina.isFrameworkLoaded
+                    ) {
+                        window.onGinaLoaded(window.gina);
+                    }
+                } catch (e) {
+                    if (window.console && console.error) {
+                        console.error('[harness] onGinaLoaded threw', e && e.stack || e);
+                    }
+                }
+                if ((!window.gina || !window.gina.isFrameworkLoaded) && tries++ < 100) {
+                    setTimeout(kick, 50);
+                    return;
+                }
+                activateLink();
+            }
+            function activateLink() {
+                try {
+                    var LinkHandler = window.require('gina/link');
+                    new LinkHandler({}).on('ready', function (e) {
+                        if (e && e.preventDefault) { e.preventDefault(); }
+                    });
+                    window.__linkActivated = true;
+                } catch (err) {
+                    window.__linkActivateError = String(err && err.message || err);
+                }
+            }
+            kick();
+        }());
+    </script>
+    <style>body { margin: 0; padding: 1rem; font-family: system-ui, sans-serif; } a { display: block; margin: .5rem 0; }</style>
+</head>
+<body>
+    <h1>gina link disabled-gate harness</h1>
+
+    <!-- #B310 target: aria-disabled, BARE TEXT so the anchor is the event target
+         (the document-proxy dispatch path). -->
+    <a id="gated-link" data-gina-link aria-disabled="true" href="/link/sink?arm=gated">gated link</a>
+
+    <!-- The child path: same marker, but the <span> is the event target, so
+         dispatch goes through proxyClick — the second gated site. -->
+    <a id="gated-child" data-gina-link aria-disabled="true" href="/link/sink?arm=gatedchild"><span id="gated-span">gated link, child</span></a>
+
+    <!-- The predicate's other live arm: the native attribute, which an anchor
+         never enforces (`disabled` is not an IDL property on <a>). -->
+    <a id="native-gated" data-gina-link disabled href="/link/sink?arm=native">natively marked link</a>
+
+    <!-- Un-gated control: proves a zero above is the gate, not a broken scene. -->
+    <a id="open-link" data-gina-link href="/link/sink?arm=open">open control</a>
+</body>
+</html>
