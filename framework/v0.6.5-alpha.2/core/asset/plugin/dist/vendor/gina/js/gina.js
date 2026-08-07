@@ -19327,13 +19327,38 @@ function ValidatorPlugin(rules, data, formId, culture) {
                 , isBinded          = $form.binded
             ;
 
-            // check submit trigger status
-            var submitTrigger = new DOMParser()
-                .parseFromString($target.innerHTML, 'text/html')
-                .getElementById($formInstance.submitTrigger);
-            // prevent submit if disabled
-            if ( submitTrigger && submitTrigger.disabled) {
-                cancelEvent(e);
+            // #B308 — the disabled gate for USER GESTURES, with #B246's own predicate
+            // read from the LIVE registered trigger, and #B246's own answer (cancel +
+            // reveal). `e.isTrusted` scopes it: Enter-key submission and a wrapped-label
+            // click (`<button type="submit"><span>`, whose click target has no `.type`
+            // and so surfaces here instead of at the click proxy) arrive as trusted
+            // submits; gina's own `triggerEvent` (`$forms[id].submit()`) dispatches an
+            // untrusted CustomEvent and stays on the fresh-validate path below — a
+            // programmatic submit is not operating the control, and the fresh pass is
+            // the honest gate there. The reveal re-derives validity from live values,
+            // so a stale marker heals and the NEXT gesture goes through.
+            // Replaces the DOMParser innerHTML-copy guard below: the copy was blind to
+            // the `aria-disabled` marker (the gate's own vocabulary, written by
+            // updateSubmitTriggerState) while SIGHTED on a native `disabled` written
+            // mid-dispatch by a double-submit guard — the exact attribute #B293 ruled
+            // must not count on a real form control — so a wrapped-label trigger plus
+            // a double-submit guard was a dead submit.
+            // was:
+            // // check submit trigger status
+            // var submitTrigger = new DOMParser()
+            //     .parseFromString($target.innerHTML, 'text/html')
+            //     .getElementById($formInstance.submitTrigger);
+            // // prevent submit if disabled
+            // if ( submitTrigger && submitTrigger.disabled) {
+            //     cancelEvent(e);
+            // }
+            if ($formInstance && e.isTrusted) {
+                var $registeredTrigger = document.getElementById($formInstance.submitTrigger) || null;
+                if ( isTriggerDisabled($registeredTrigger) ) {
+                    cancelEvent(e);
+                    revealValidationState($formInstance);
+                    return false;
+                }
             }
 
             // prevent event to be triggered twice
@@ -19349,12 +19374,10 @@ function ValidatorPlugin(rules, data, formId, culture) {
             // the event surfaces here instead. There is no clicked element on this path,
             // so the registered trigger is the best and only referent. Placed after the
             // disabled + defaultPrevented guards above, which both return first.
-            // NB. the disabled check at the top of this handler reads a DOMParser copy of
-            // the form's innerHTML, so it sees neither a live `disabled` set by JS nor the
-            // `aria-disabled` marker `updateSubmitTriggerState` uses. Re-check the live
-            // node with #B246's predicate: without it, every Enter-key submit on an
-            // invalid live-check form would flash the trigger armed for the length of the
-            // validation pass before the rejected branch released it.
+            // NB. the #B308 gesture gate above already cancelled any TRUSTED submit on
+            // a marked trigger, so this skip now guards the UNTRUSTED path: a
+            // programmatic submit on a marked form runs the fresh validate pass below
+            // and must not flash the trigger armed for the length of that pass.
             if ($formInstance) {
                 var $loadingTrigger = document.getElementById($formInstance.submitTrigger);
                 if ( !isTriggerDisabled($loadingTrigger) ) {

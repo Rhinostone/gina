@@ -225,14 +225,18 @@ describe('02 - disabled trigger: click received then intercepted — errors show
         assert.equal(sent.length, 1, 'a valid form sends');
     });
 
-    it('the DOMParser submit-proxy no longer sees a native-disabled trigger (its cancelEvent gate is not tripped)', function () {
+    it('the marker serializes as an aria attribute, never as native disabled (#B308 retired the DOMParser proxy guard this used to shield)', function () {
         var ctx = makeForm('true', BUTTON);
         applySubmitTriggerState(ctx.form, ctx.trigger, false);
-        // main.js submit proxy: new DOMParser().parseFromString(form.innerHTML,...).getElementById(id).disabled
+        // Serialization contract: updateSubmitTriggerState writes aria-disabled + the
+        // class, never the native property, so an innerHTML round-trip carries the
+        // marker as an attribute only. (#B308 note: the submit proxy's old DOMParser
+        // guard — which read exactly this serialization — is retired; the proxy now
+        // gates trusted gestures on the LIVE trigger with isTriggerDisabled.)
         var parsed = new ctx.window.DOMParser()
             .parseFromString(ctx.form.innerHTML, 'text/html')
             .getElementById('parentSubmit');
-        assert.equal(parsed.disabled, false, 'no `disabled` attribute serialized -> the submit-proxy gate does not cancel');
+        assert.equal(parsed.disabled, false, 'no `disabled` attribute serialized (native disable is never written)');
         assert.equal(parsed.getAttribute('aria-disabled'), 'true', 'the aria marker IS serialized (attribute, not native disable)');
     });
 });
