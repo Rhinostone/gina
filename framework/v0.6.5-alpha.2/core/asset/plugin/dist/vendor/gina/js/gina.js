@@ -13027,7 +13027,20 @@ function ValidatorPlugin(rules, data, formId, culture) {
                     if ($submitTrigger) {
                         // For A tag: aria-disabled=true
                         if ( /^A$/i.test($submitTrigger.tagName) ) {
-                            $submitTrigger.removeAttribute('aria-disabled');
+                            // #B309 — replay the live-check gate's last verdict instead of
+                            // blanket-removing: on <a> triggers the gate and the in-flight
+                            // lock SHARE aria-disabled with opposite lifecycles, and nothing
+                            // re-marks after settle (send() contains no gate-refresh call
+                            // sites), so a mid-flight invalidation was silently un-gated
+                            // here. Buttons are untouched below: their lock is native
+                            // `disabled`, so the gate's aria mark already survives.
+                            // was:
+                            // $submitTrigger.removeAttribute('aria-disabled');
+                            if ($form._gateMarked === true) {
+                                $submitTrigger.setAttribute('aria-disabled', 'true');
+                            } else {
+                                $submitTrigger.removeAttribute('aria-disabled');
+                            }
                         } else {
                             $submitTrigger.removeAttribute('disabled');
                         }
@@ -13105,9 +13118,19 @@ function ValidatorPlugin(rules, data, formId, culture) {
                     if ($submitTrigger) {
                         // For A tag: aria-disabled=true
                         if ( /^A$/i.test($submitTrigger.tagName) ) {
-                            $submitTrigger.removeAttribute('aria-disabled', true);
+                            // #B309 — same verdict replay as the loadend release above
+                            // (kept in step; the two are idempotent), and the stray 2nd
+                            // argument to the unary removeAttribute is gone in passing.
+                            // was:
+                            // $submitTrigger.removeAttribute('aria-disabled', true);
+                            if ($form._gateMarked === true) {
+                                $submitTrigger.setAttribute('aria-disabled', 'true');
+                            } else {
+                                $submitTrigger.removeAttribute('aria-disabled');
+                            }
                         } else {
-                            $submitTrigger.removeAttribute('disabled', true);
+                            // was: $submitTrigger.removeAttribute('disabled', true);
+                            $submitTrigger.removeAttribute('disabled');
                         }
                     }
                     $form.target.removeAttribute('data-gina-form-loading');
@@ -19598,9 +19621,19 @@ function ValidatorPlugin(rules, data, formId, culture) {
                 $submitTrigger.disabled = false;
                 $submitTrigger.removeAttribute('aria-disabled');
                 $submitTrigger.classList.remove('gina-form-submit-disabled');
+                // #B309 — shadow of this gate's LAST verdict, replayed by send()'s
+                // two settle releases (the loadend fail-safe + the readyState-4
+                // twin): on <a> submit triggers the gate and the in-flight lock
+                // share aria-disabled with opposite lifecycles, so a release must
+                // know whether the gate re-marked mid-flight. Stamped in BOTH
+                // branches, so the shadow is in sync with the marker by
+                // construction — including the mid-flight re-mark window.
+                $formInstance._gateMarked = false;
             } else { // hide submitTrigger (perceivable but not operable, NOT native-disabled)
                 $submitTrigger.setAttribute('aria-disabled', 'true');
                 $submitTrigger.classList.add('gina-form-submit-disabled');
+                // #B309 — see the show branch's stamp note.
+                $formInstance._gateMarked = true;
             }
         }
     }

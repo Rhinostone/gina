@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Fixed the send-settle releases clobbering the live-check gate on `<a data-gina-form-submit>` triggers — the gate and the in-flight lock share `aria-disabled` with opposite lifecycles, and both releases removed the attribute unconditionally, so a form invalidated mid-flight (an edited-empty field plus an impatient second click, whose refusal re-derives validity) settled with the gate class present but the attribute gone: marked to the framework, operable to assistive tech and the trigger gates. The releases now replay the gate verdict stamped at its last evaluation; button triggers are untouched (their lock is native `disabled`), and the stray second arguments to two unary `removeAttribute` calls are gone in passing.'
+time: 2026-08-07T13:30:41+01:00
