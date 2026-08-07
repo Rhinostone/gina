@@ -22,6 +22,16 @@
  *   GET /_gina/assets/routing.json     -> {} for every fixture EXCEPT the nav one,
  *                                         which gets the #SPA1 routing table (keyed
  *                                         off the Referer — see the handler)
+ *   GET /_gina/inspector[/...]         -> Inspector SPA off the committed dist —
+ *                                         same tree, path handling and mime map as
+ *                                         the real handler (core/server.js:4622)
+ *   GET /_gina/agent                   -> SSE stub: connected `data` frame (bundle
+ *                                         identity e2e@dev) + one `log` frame; no
+ *                                         `upgrade` listener, so the SPA's WS
+ *                                         attempt fails into its real SSE fallback
+ *   GET /_gina/logs                    -> SSE stub, one canned log frame
+ *   GET /_gina/indexes                 -> { connectors: {} } (zero-connector shape)
+ *   GET /_gina/reveal                  -> 404 no-snapshot shape
  *   GET /nav[/one|two|bare|plain]      -> the nav shell for a normal navigation, or
  *                                         the layoutless region when the request
  *                                         carries `X-Gina-Navigate` (`bare` answers
@@ -52,6 +62,13 @@ const crypto = require('crypto');
 const ROOT        = path.join(__dirname, '..', '..');
 const VERSION     = require(path.join(ROOT, 'package.json')).version;
 const PLUGIN_DIST = path.join(ROOT, 'framework', 'v' + VERSION, 'core', 'asset', 'plugin', 'dist', 'vendor', 'gina');
+// Inspector SPA assets — the SAME committed dist the real bundle serves
+// (core/server.js:4622-4656 reads this exact tree with zero templating, so
+// the bytes the specs drive are byte-identical to a booted bundle's).
+const INSPECTOR_DIST = path.join(PLUGIN_DIST, 'inspector');
+// Identity the stubbed agent stream reports; specs assert `e2e@dev` on
+// `#bm-label`, so keep the two in sync.
+const AGENT_ENV = { bundle: 'e2e', env: 'dev' };
 const BOILERPLATE_PUBLIC = path.join(ROOT, 'framework', 'v' + VERSION, 'core', 'template', 'boilerplate', 'bundle_public');
 const FIXTURES    = path.join(__dirname, 'fixtures');
 const PORT        = process.env.GINA_E2E_PORT ? parseInt(process.env.GINA_E2E_PORT, 10) : 3179;
@@ -301,6 +318,94 @@ const server = http.createServer(function (req, res) {
             var isNavPage = /^\/nav(\/|$)/.test(refererPath(req.headers.referer));
             return send(res, 200, 'application/json; charset=utf-8',
                 isNavPage ? JSON.stringify(NAV_ROUTING) : '{}');
+        }
+
+        // ── Inspector SPA + data-endpoint stubs ─────────────────────────────
+        // Assets come off the committed dist through the same path handling as
+        // the real handler (core/server.js:4622-4656: prefix strip, index.html
+        // default, mime map, #B179 confinement) — byte-identical by
+        // construction. The DATA endpoints are stubs whose frame shapes are
+        // pinned to the real handlers (line refs on each); they feed the
+        // standalone `?target=` acquisition path. Server-frame DRIFT is not
+        // caught here — the real handlers are covered by test/core/
+        // inspector.test.js; if that contract moves, move these stubs with it.
+        // No `upgrade` listener exists on this server, so the SPA's default
+        // WebSocket agent attempt fails and its documented WS→SSE fallback
+        // (inspector.js tryAgentWS → tryAgent) runs for real against the stub.
+        if (/^\/_gina\/inspector(\/.*)?$/.test(url)) {
+            var insPath = url.replace(/^.*\/_gina\/inspector\/?/, '');
+            if (!insPath) insPath = 'index.html';
+            var insFile = path.normalize(path.join(INSPECTOR_DIST, insPath));
+            // #B179 mirror — reject anything canonicalising outside the asset
+            // root BEFORE any fs access; same 404 as a missing file.
+            if (insFile.indexOf(INSPECTOR_DIST + path.sep) !== 0 || !fs.existsSync(insFile)) {
+                return send(res, 404, 'text/plain; charset=utf-8', 'Not found: ' + url);
+            }
+            var insExt  = insPath.split('.').pop();
+            var insMime = {
+                'html':  'text/html; charset=utf8',
+                'js':    'application/javascript; charset=utf8',
+                'css':   'text/css; charset=utf8',
+                'svg':   'image/svg+xml',
+                'woff2': 'font/woff2',
+                'woff':  'font/woff'
+            };
+            var insBinary = /^(woff2?|png|ico|gif|jpe?g)$/.test(insExt);
+            return send(res, 200, insMime[insExt] || 'application/octet-stream',
+                fs.readFileSync(insFile, insBinary ? undefined : 'utf8'));
+        }
+        if (url === '/_gina/agent') {
+            // SSE agent stub — mirrors the real handler's connect sequence
+            // (core/server.js:4732-4760): `:ok` preamble, then the no-snapshot
+            // "connected" `data` frame carrying the bundle identity, then one
+            // `log` frame in the shape of core/server.js:4765-4780.
+            res.writeHead(200, {
+                'content-type': 'text/event-stream; charset=utf-8',
+                'cache-control': 'no-cache, no-store',
+                'connection': 'keep-alive',
+                'access-control-allow-origin': '*'
+            });
+            res.write(':ok\n\n');
+            var agentInit = { gina: { environment: AGENT_ENV }, user: { environment: AGENT_ENV } };
+            res.write('event: data\ndata: ' + JSON.stringify(agentInit) + '\n\n');
+            res.write('event: log\ndata: ' + JSON.stringify({
+                t: Date.now(), l: 'info', b: AGENT_ENV.bundle, s: 'agent stream ready', src: 'server'
+            }) + '\n\n');
+            var agentKa = setInterval(function () {
+                try { res.write(':ka\n\n'); } catch (e) { /* closing */ }
+            }, 15000);
+            req.on('close', function () { clearInterval(agentKa); });
+            return; // keep the connection open — no res.end()
+        }
+        if (url === '/_gina/logs') {
+            // SSE log stream stub — frame shape of core/server.js:4657-4700.
+            // Bound mode (`tryServerLogs`) reads this endpoint; the agent path
+            // above carries logs itself.
+            res.writeHead(200, {
+                'content-type': 'text/event-stream; charset=utf-8',
+                'cache-control': 'no-cache, no-store',
+                'connection': 'keep-alive',
+                'access-control-allow-origin': '*'
+            });
+            res.write(':ok\n\n');
+            res.write('data: ' + JSON.stringify({
+                t: Date.now(), l: 'info', b: AGENT_ENV.bundle, s: 'log stream ready', src: 'server'
+            }) + '\n\n');
+            var logsKa = setInterval(function () {
+                try { res.write(':ka\n\n'); } catch (e) { /* closing */ }
+            }, 15000);
+            req.on('close', function () { clearInterval(logsKa); });
+            return; // keep the connection open — no res.end()
+        }
+        if (url === '/_gina/indexes') {
+            // Zero-connector shape of core/server.js:4831-4838.
+            return send(res, 200, 'application/json; charset=utf-8',
+                JSON.stringify({ connectors: {} }));
+        }
+        if (url === '/_gina/reveal') {
+            // No-snapshot branch of core/server.js:4896-4901.
+            return send(res, 404, 'application/json; charset=utf-8',
+                JSON.stringify({ error: 'no snapshot available' }));
         }
         // #B302 — the link preset-id harness. `/link/sink` is the request the plugin's XHR
         // lands on; the specs assert on the REQUEST, so the body only has to be valid.
