@@ -7500,6 +7500,47 @@ function setupXhr(options) {
 }
 
 /**
+ * getFilenameFromContentDisposition
+ *
+ * Extracts the `filename` parameter from a response `Content-Disposition`
+ * header for the XHR blob-download path. Both RFC 6266 value forms are
+ * accepted: a bare token (`filename=report.pdf`, read up to the next `;`)
+ * and a quoted-string (`filename="monthly report.pdf"`, delimiters stripped,
+ * `\"` and `\\` unescaped). Returns an empty string when the header is
+ * missing or carries no `filename` parameter (e.g. a bare `attachment`), so
+ * the caller can hand the browser an empty `download` attribute and let it
+ * derive a name instead of throwing mid-handler. The extended RFC 5987
+ * parameter (`filename` followed by a star) is never matched — the star
+ * breaks the `filename=` adjacency — so a header carrying both parameters
+ * yields the plain one instead of folding the two values together.
+ *
+ * @function getFilenameFromContentDisposition
+ * @param {string|null} contentDisposition - raw header value, e.g. from `xhr.getResponseHeader('Content-Disposition')`
+ * @returns {string} filename - the decoded filename, or `''` when none is present
+ *
+ * @example
+ *  getFilenameFromContentDisposition('attachment; filename="monthly report.pdf"');
+ *  // -> 'monthly report.pdf'
+ * @example
+ *  getFilenameFromContentDisposition('attachment');
+ *  // -> ''
+ */
+function getFilenameFromContentDisposition(contentDisposition) {
+    if (!contentDisposition) {
+        return '';
+    }
+    var found = contentDisposition.match(/filename\s*=\s*(?:"((?:[^"\\]|\\.)*)"|([^;]+))/i);
+    if (!found) {
+        return '';
+    }
+    if ( typeof(found[1]) != 'undefined' ) {
+        // quoted-string: delimiters are not part of the name; unescape quoted pairs
+        return found[1].replace(/\\(.)/g, '$1');
+    }
+    return found[2].replace(/^\s+|\s+$/g, '');
+}
+
+/**
  * handleXhr
  *
  * @param {object} xhr - instance
@@ -7650,7 +7691,7 @@ function handleXhr(xhr, $el, options, require) {
                         var url = window.URL.createObjectURL(blob);
                         a.href = url;
                         var contentDisposition = xhr.getResponseHeader('Content-Disposition');
-                        a.download = contentDisposition.match('\=(.*)')[0].substring(1);
+                        a.download = getFilenameFromContentDisposition(contentDisposition);
                         //programatically click the link to trigger the download
                         a.click();
                         //release the reference to the file by revoking the Object URL
@@ -13101,7 +13142,7 @@ function ValidatorPlugin(rules, data, formId, culture) {
                                 var url = window.URL.createObjectURL(blob);
                                 a.href = url;
                                 var contentDisposition = xhr.getResponseHeader("Content-Disposition");
-                                a.download = contentDisposition.match('\=(.*)')[0].substring(1);
+                                a.download = getFilenameFromContentDisposition(contentDisposition);
                                 //programatically click the link to trigger the download
                                 a.click();
 

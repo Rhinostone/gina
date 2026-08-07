@@ -2258,7 +2258,7 @@ function ValidatorPlugin(rules, data, formId, culture) {
                                 var url = window.URL.createObjectURL(blob);
                                 a.href = url;
                                 var contentDisposition = xhr.getResponseHeader("Content-Disposition");
-                                a.download = contentDisposition.match('\=(.*)')[0].substring(1);
+                                a.download = getFilenameFromContentDisposition(contentDisposition);
                                 //programatically click the link to trigger the download
                                 a.click();
 
