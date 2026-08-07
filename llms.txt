@@ -768,7 +768,7 @@ Dev-mode query instrumentation captures every database query tied to the current
 - **`$popin.$headers`** — tracks injected `<script>` and `<link>` element IDs. Cleaned up in `popinClose`.
 - **`ginaToolbar` integration** — 13 refs; `popinClose` is the only `restore()` call site. `update()` calls sync XHR overlay data to the Inspector.
 
-**Events** (`src/vendor/gina/utils/events.js`) — core event system with XHR lifecycle management (`setupXhr`, `handleXhr`). Bundled into `gina.min.js`.
+**Events** (`src/vendor/gina/utils/events.js`) — core event system with XHR lifecycle management (`setupXhr`, `handleXhr`). Bundled into `gina.min.js`. Blob-download filenames parse through the top-level `getFilenameFromContentDisposition()` (token or RFC 6266 quoted-string, extended parameter never folded, `''` — no throw — when the parameter is absent), shared as a bundle global with the validator's own XHR handler, and matching the server's quoted `filename=` emission (`Controller::downloadFromURL`/`downloadFromLocal` via `formatAttachmentDisposition()`, `"` and `\` escaped).
 
 **Binding** (`src/vendor/gina/helpers/binding.js`) — processes binding descriptor arrays (call/handler/payload). AMD module.
 

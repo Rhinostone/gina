@@ -303,6 +303,28 @@ var _defineLazyLocales = function(conf, srcRows) {
 };
 var _isProdScope    = process.env.NODE_SCOPE_IS_PRODUCTION && process.env.NODE_SCOPE_IS_PRODUCTION.toLowerCase() === 'true';
 
+/**
+ * formatAttachmentDisposition
+ *
+ * Builds an `attachment` Content-Disposition value whose `filename`
+ * parameter is emitted as an RFC 6266 quoted-string — `"` and `\` are
+ * backslash-escaped so the value cannot terminate early. A bare token
+ * cannot legally carry spaces, `;` or `,`, and user-supplied document
+ * titles make those the common case; quoting keeps the header conformant
+ * for every filename shape.
+ *
+ * @function formatAttachmentDisposition
+ * @private
+ * @param {string} filename - name the client should save the download as
+ * @returns {string} headerValue - e.g. `attachment; filename="monthly report.pdf"`
+ *
+ * @example
+ *  formatAttachmentDisposition('monthly report.pdf');
+ *  // -> 'attachment; filename="monthly report.pdf"'
+ */
+function formatAttachmentDisposition(filename) {
+    return 'attachment; filename="' + String(filename).replace(/[\\"]/g, '\\$&') + '"';
+}
 
 /**
  * @class SuperController
@@ -3096,6 +3118,9 @@ function SuperController(options) {
      * @param {string} url - eg.: https://upload.wikimedia.org/wikipedia/fr/2/2f/Firefox_Old_Logo.png
      * @param {object} [options]
      *
+     * N.B.: when `options.contentDisposition` is left at its `attachment`
+     * default, the emitted header carries the target filename as an RFC 6266
+     * quoted-string (see `formatAttachmentDisposition`).
      * */
     this.downloadFromURL = async function(url, options, cb) {
 
@@ -3213,7 +3238,7 @@ function SuperController(options) {
             filename = opt.file;
 
         if ( opt.contentDisposition == 'attachment') {
-            opt.contentDisposition += '; filename=' + filename;
+            opt.contentDisposition = formatAttachmentDisposition(filename);
         }
 
         var ext             = filename.match(/\.\w+$/)[0].substring(1)
@@ -3336,8 +3361,10 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
      *      - To avoid this, add to your download link the attribute `data-gina-link`
      *        This will convert the regular HTTP Request to an XML Request
      *
+     * N.B.: the `content-disposition` header carries the file's basename as
+     * an RFC 6266 quoted-string (see `formatAttachmentDisposition`).
+     *
      * @param {string} filename
-     * @param {object} options
      **/
     this.downloadFromLocal = function(filename) {
 
@@ -3359,7 +3386,7 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
 
             contentType = local.options.conf.server.coreConfiguration.mime[ext];
             local.res.setHeader('content-type', contentType);
-            local.res.setHeader('content-disposition', 'attachment; filename=' + file);
+            local.res.setHeader('content-disposition', formatAttachmentDisposition(file));
 
             var filestream = fs.createReadStream(filename);
             filestream.pipe(local.res);
