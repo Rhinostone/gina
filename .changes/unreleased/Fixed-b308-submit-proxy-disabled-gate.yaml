@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Fixed the form submit proxy enforcing its disabled gate on a DOMParser copy of the form that only saw native `disabled` — a gated (`aria-disabled`) submit trigger still ran the full validation cycle and sent from trusted gestures (a wrapped-label click, or Enter on a form whose trigger is not a native submit button), while a native `disabled` written mid-dispatch by a double-submit guard could kill the submit outright. User gestures now hit the live registered trigger with the same predicate and answer as the click path (cancel + reveal errors + focus the first invalid field); programmatic `$forms[id].submit()` deliberately keeps the fresh-validate path.'
-time: 2026-08-07T11:42:28+01:00

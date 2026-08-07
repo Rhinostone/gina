@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Fixed popin triggers showing no busy state when their open adopts a still-in-flight hover/focus preload (the common path when warm-on-intent preloading is on): the trigger is now armed for the adopted wait exactly like a cold click-time load — aria-disabled on links, native disabled on other controls, plus the shared data-gina-loading marker — and released when the preload settles, success or failure alike. An instant open from an already-cached preload never flashes a busy state, and a second click during the wait is refused by the existing trigger gates.'
-time: 2026-08-07T05:34:28+01:00

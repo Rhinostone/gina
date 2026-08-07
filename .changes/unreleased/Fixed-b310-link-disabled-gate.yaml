@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Fixed `data-gina-link` anchors having no disabled gate at all — an anchor marked `aria-disabled="true"` (or carrying the native attribute, which an anchor never enforces) still fired its XHR on click, from both the direct-click and the child-element dispatch paths. Both sites now refuse the click with the same trigger-disabled predicate the popin and validator gates use, while still suppressing the default navigation; programmatic `gina.link.request()` deliberately stays ungated.'
-time: 2026-08-07T13:39:07+01:00

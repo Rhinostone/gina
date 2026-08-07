@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'The SQLite and DuckDB connector JSDoc and the connectors.json schema no longer describe the default database-file location as version-segmented (~/.gina/{version}/{database}.sqlite or .duckdb): the framework resolves the gina home without a version segment, so the documented default now matches the real path — ~/.gina/{database}.sqlite and ~/.gina/{database}.duckdb (#B317).'
-time: 2026-08-07T20:37:36+01:00

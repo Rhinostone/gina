@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Fixed the `npm test` script, which pointed at a glob (`test*.test.js`) matching no files: it reported 0 tests and exited 0, a silent green that could pass for a healthy run. It now runs the full suite — the same set CI gates on — and package.json is the single source of truth for that file list, with the Tests workflow and CONTRIBUTING.md both deferring to it instead of carrying their own divergent copies. Also added `npm run test:coverage` (node:test built-in coverage) and a `pretest:e2e` step that installs the matching Chromium build, so `npm run test:e2e` works from a clean checkout instead of failing every scenario with a missing-browser error.'
-time: 2026-08-06T01:09:07+01:00

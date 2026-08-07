@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'A second click on an anchor submit trigger while its request was in flight ran the validation reveal, whose valid-form heal erased the in-flight lock''s `aria-disabled` mid-request — announcing the control operable again while the send was still running, and re-running validation (including async `query` rules) per extra click (#B313). With the not-ready marker moved to its own channel, the lock owns `aria-disabled` exclusively and survives mid-flight clicks; the settle releases are plain unconditional removals again (the conditional verdict replay they carried is retired as no longer needed).'
-time: 2026-08-07T15:17:18+01:00
