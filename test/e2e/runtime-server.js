@@ -32,6 +32,10 @@
  *   GET /_gina/logs                    -> SSE stub, one canned log frame
  *   GET /_gina/indexes                 -> { connectors: {} } (zero-connector shape)
  *   GET /_gina/reveal                  -> 404 no-snapshot shape
+ *   GET /inspector-host                -> a page carrying the REAL statusbar
+ *                                         (dist html/statusbar.html, nonce tags
+ *                                         stripped) + a window.__ginaData script,
+ *                                         in the render-swig injection order
  *   GET /nav[/one|two|bare|plain]      -> the nav shell for a normal navigation, or
  *                                         the layoutless region when the request
  *                                         carries `X-Gina-Navigate` (`bare` answers
@@ -419,6 +423,30 @@ const server = http.createServer(function (req, res) {
             // Zero-connector shape of core/server.js:4831-4838.
             return send(res, 200, 'application/json; charset=utf-8',
                 JSON.stringify({ connectors: {} }));
+        }
+        if (url === '/inspector-host') {
+            // A page carrying the REAL statusbar — mirrors the render-swig
+            // injection (controller.render-swig.js ~1524: reads
+            // dist/vendor/gina/html/statusbar.html per render and splices it
+            // into the layout after the __ginaData script). The only swig tags
+            // in that template are the {% if page.cspNonce %} nonce pair (the
+            // #TPL2 leaf-template guarantee), so a no-CSP fixture renders it
+            // by stripping the tags. The statusbar bails without
+            // window.__ginaData.user (statusbar.html:4-5), so the data script
+            // must precede it — same order as the real injection.
+            var sbTpl = fs.readFileSync(path.join(PLUGIN_DIST, 'html', 'statusbar.html'), 'utf8')
+                .replace(/\{%[^%]*%\}/g, '')
+                .replace(/\{\{[^}]+\}\}/g, '');
+            var hostData = {
+                gina: { environment: AGENT_ENV },
+                user: { environment: AGENT_ENV, data: { engine: 'e2e-harness' } }
+            };
+            return send(res, 200, 'text/html; charset=utf-8',
+                '<!doctype html><html><head><meta charset="utf-8"><title>inspector host</title></head><body>\n'
+                + '<h1>inspector host page</h1>\n'
+                + '<script>window.__ginaData = ' + JSON.stringify(hostData) + ';</script>\n'
+                + sbTpl
+                + '\n</body></html>');
         }
         if (url === '/_gina/reveal') {
             // No-snapshot branch of core/server.js:4896-4901.
