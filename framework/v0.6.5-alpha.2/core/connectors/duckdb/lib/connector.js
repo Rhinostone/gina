@@ -30,7 +30,7 @@ var inherits     = lib.inherits;
  * }
  *
  * `database` names the logical model directory (`models/<database>/entities/`).
- * `file` is the actual DuckDB file path. Defaults to `~/.gina/{version}/{database}.duckdb`
+ * `file` is the actual DuckDB file path. Defaults to `~/.gina/{database}.duckdb`
  * when absent. Use `':memory:'` for an ephemeral in-process database.
  * `readOnly` opens the database in read-only mode (driver `access_mode: 'READ_ONLY'`) —
  * writes are refused by the engine, and any number of read-only PROCESSES can share
@@ -45,7 +45,7 @@ var inherits     = lib.inherits;
  * @constructor
  * @param {object}  conf             - Connector config from connectors.json
  * @param {string}  conf.database    - Logical database name (models/ directory)
- * @param {string}  [conf.file]      - DuckDB file path (defaults to ~/.gina/{v}/{database}.duckdb; ':memory:' supported)
+ * @param {string}  [conf.file]      - DuckDB file path (defaults to ~/.gina/{database}.duckdb; ':memory:' supported)
  * @param {boolean} [conf.readOnly]  - Open read-only (access_mode READ_ONLY; default false)
  */
 function DuckdbConnector(conf) {
@@ -67,7 +67,7 @@ function DuckdbConnector(conf) {
             return;
         }
 
-        // Resolve file path: conf.file > ~/.gina/{version}/{database}.duckdb
+        // Resolve file path: conf.file > ~/.gina/{database}.duckdb
         // ':memory:' passes through to the driver verbatim.
         var dbFile = conf.file || _(getPath('gina').home + '/' + conf.database + '.duckdb', true);
 

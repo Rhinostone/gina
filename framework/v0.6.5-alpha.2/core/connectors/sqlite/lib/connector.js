@@ -28,14 +28,14 @@ var inherits        = lib.inherits;
  * }
  *
  * `database` names the logical model directory (`models/<database>/entities/`).
- * `file` is the actual SQLite file path. Defaults to `~/.gina/{version}/{database}.sqlite`
+ * `file` is the actual SQLite file path. Defaults to `~/.gina/{database}.sqlite`
  * when absent. Use `':memory:'` for an ephemeral in-process database (tests).
  *
  * @class SqliteConnector
  * @constructor
  * @param {object} conf            - Connector config from connectors.json
  * @param {string} conf.database   - Logical database name (models/ directory)
- * @param {string} [conf.file]     - SQLite file path (defaults to ~/.gina/{v}/{database}.sqlite)
+ * @param {string} [conf.file]     - SQLite file path (defaults to ~/.gina/{database}.sqlite)
  */
 function SqliteConnector(conf) {
     var self = this;
@@ -53,7 +53,7 @@ function SqliteConnector(conf) {
             return;
         }
 
-        // Resolve file path: conf.file > ~/.gina/{version}/{database}.sqlite
+        // Resolve file path: conf.file > ~/.gina/{database}.sqlite
         var dbFile = conf.file || _(getPath('gina').home + '/' + conf.database + '.sqlite', true);
 
         try {
