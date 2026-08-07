@@ -1902,7 +1902,12 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
             }
 
 
-            var isValid = ( typeof(this.value) != 'undefined' && this.value != null && this.value != '' && !/^\s+/.test(this.value) ) ? true : false;
+            // was: var isValid = ( typeof(this.value) != 'undefined' && this.value != null && this.value != '' && !/^\s+/.test(this.value) ) ? true : false;
+            // #B245 - the leading anchor alone made ANY leading-whitespace-padded value
+            // read as empty ("  x" was rejected while "x  " passed, and a paired `trim`
+            // healed the data AFTER the error was recorded); emptiness means
+            // whitespace-ONLY, so anchor both ends. All-whitespace still fails.
+            var isValid = ( typeof(this.value) != 'undefined' && this.value != null && this.value != '' && !/^\s+$/.test(this.value) ) ? true : false;
             var errors  = self[this['name']]['errors'] || {};
 
 
@@ -2246,7 +2251,10 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
         self[el]['trim'] = function(isApplicable) {
             if ( typeof(isApplicable) == 'boolean' && isApplicable ) {
                 //if ( typeof(this.value) == 'string' ) {
-                    this.value = this.value.replace(/^\s+|\s+$/, '');
+                    // was: this.value = this.value.replace(/^\s+|\s+$/, '');
+                    // #B245 - without the global flag, replace() rewrote only the FIRST
+                    // match: "  x  " came back "x  " (leading stripped, trailing kept).
+                    this.value = this.value.replace(/^\s+|\s+$/g, '');
                     local.data[this.name] = local.data[this.name] = this.value;
                 //}
                 return self[this.name]

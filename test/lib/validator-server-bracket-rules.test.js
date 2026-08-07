@@ -154,16 +154,18 @@ describe('validator-server-bracket-rules §02 — bracket/nested rule keys enfor
         assert.equal(r.data.q25a.q25b, flat.data.q25f, 'the trimmed value, exactly as the flat path produces it');
     });
 
-    it('02.6 - defect-parity: the newly-joined key inherits the flat path quirks (#B245)', function () {
-        // {isRequired, trim} + LEADING padding is wrongly invalid on the FLAT path
-        // today (#B245 — filed, own arc). Parity means the bracket key now gets the
-        // SAME wrong verdict instead of being silently skipped; #B245's fix will
-        // flip both at once.
+    it('02.6 - defect-parity: the newly-joined key tracks the flat path across the #B245 fix', function () {
+        // {isRequired, trim} + LEADING padding was wrongly invalid on the FLAT path
+        // (#B245 — the leading-only emptiness anchor; fixed). Parity means the
+        // bracket key gets the SAME verdict either side of the fix: pre-fix both
+        // rejected (the shape this arm pinned then), post-fix both accept and
+        // store the trimmed value.
         var flat = drive({ q26f: { isRequired: true, trim: true } }, { q26f: '  x  ' });
         var r = drive({ 'q26a[q26b]': { isRequired: true, trim: true } }, { 'q26a[q26b]': '  x  ' });
         assert.equal(r.valid, flat.valid, 'same verdict as flat');
-        assert.equal(flat.valid, false, 'the #B245 baseline this arm mirrors (goes green when #B245 lands, flipping both)');
-        assert.deepEqual(r.errs['q26a[q26b]'], flat.errs.q26f, 'same error set, restored addressing');
+        assert.equal(flat.valid, true, 'the #B245 fix baseline: leading-padded non-empty input is accepted');
+        assert.equal(r.data.q26a.q26b, flat.data.q26f, 'same healed value, restored addressing');
+        assert.equal(flat.data.q26f, 'x', 'trim owns the stored shape (both ends stripped since #B245)');
     });
 });
 

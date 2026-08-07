@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'FormValidator''s `trim` strips leading AND trailing whitespace when both are present: the replacement previously rewrote only the first match, so a both-sides-padded value kept its trailing run (#B245).'
+time: 2026-08-07T16:15:11+01:00

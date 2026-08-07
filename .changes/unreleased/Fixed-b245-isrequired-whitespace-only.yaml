@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'FormValidator''s `isRequired` no longer rejects a leading-whitespace-padded non-empty value: emptiness now means undefined, null, the empty string, or whitespace-only. The documented `isRequired` + `trim` pairing therefore cleans a stray leading space off the stored value instead of recording "Cannot be left empty" against a value the same pass had just trimmed (#B245).'
+time: 2026-08-07T16:15:11+01:00
