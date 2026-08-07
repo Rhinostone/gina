@@ -3758,6 +3758,10 @@
      * Called from `pollData()` (every tick + every bound-channel apply) and at
      * the end of the init acquisition, so a mode transition (e.g. an adopted
      * channel handing over to the legacy fallback) surfaces within one tick.
+     * Agent mode (`?target=`) reaches neither of those — it schedules no poll
+     * timer — so init calls this directly on its branch; without that call the
+     * `agent` badge would be unreachable from a URL-entered standalone session
+     * (#B306).
      *
      * @inner
      */
@@ -5945,6 +5949,20 @@
                     }
                 }
             }
+        } else {
+            // #B306 — agent mode skips every acquisition-path badge call above
+            // AND never schedules pollData (see the polling block below), so
+            // this is the only place the badge's `agent` branch is reachable on
+            // this entry path. Without it the same mode renders when reached via
+            // the connect form (whose timer is already ticking when `source`
+            // becomes 'agent') but stays hidden under a URL `?target=` — badged
+            // or silent depending purely on how the Inspector was opened, which
+            // defeats #B231's "visible instead of silent" purpose. `tryAgent()`
+            // has already settled `source` to 'agent' by the time it returns
+            // true — including when `tryAgentWS()` claimed the channel first, on
+            // which path it short-circuits via its own `source === 'agent'`
+            // guard — so the badge reads the final mode, not an interim one.
+            updateSourceModeBadge();
         }
 
         // ── Persist window geometry on resize/move ──────────────────────────
@@ -5966,9 +5984,17 @@
         window.addEventListener('resize', debouncedSaveGeometry);
         window.addEventListener('beforeunload', saveGeometry);
 
-        // In agent mode, data arrives via SSE push — no polling needed.
-        // pollData() still runs on the timer as a no-op (source === 'agent'
-        // early-returns) so the refresh button works for manual re-renders.
+        // In agent mode, data arrives via SSE push — no polling needed, and the
+        // timer is deliberately NOT scheduled.
+        //
+        // #B306 — the comment previously here claimed the opposite ("pollData()
+        // still runs on the timer as a no-op … so the refresh button works").
+        // Both halves were wrong, so do not "reconcile" this guard to match it:
+        // pollData() is NOT a no-op under `source === 'agent'` — it re-renders
+        // the active tab from cache before returning — so a ticking timer would
+        // repaint every pollDataMs and fight scroll position, expanded folds and
+        // text selection. And the refresh button needs no timer either: it calls
+        // pollData() directly.
         if (!isAgent) {
             pollDataTimer = setInterval(pollData, pollDataMs);
             setInterval(pollLogs, POLL_LOGS_MS);

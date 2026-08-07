@@ -108,14 +108,44 @@ test.describe('Inspector SPA boot — standalone ?target= mode', () => {
         await expect(page.locator('#bm-label')).toHaveText('e2e@dev');
         // #B231 gave DEGRADED modes a warn-tinted badge; standalone agent mode
         // must never carry it, and the "No source" panel must never surface.
-        // Deliberately NOT asserted: the badge SHOWING the word `agent`. In
-        // `?target=` mode pollData is never scheduled (inspector.js init:
-        // `if (!isAgent)` wraps the setInterval), so updateSourceModeBadge's
-        // reachable-by-code `agent` branch is unreachable from this entry path
-        // and the badge stays hidden — filed as a by-catch rather than pinned
-        // here, so a fix that renders `agent` does not break this spec.
+        // This test owns only the NEGATIVE half of the badge contract; §05/§06
+        // own the positive one (that it actually reads `agent`). Keeping them
+        // apart is deliberate — "not warn-tinted" is also satisfied by a badge
+        // that never renders at all, which is exactly the state #B306 fixed, so
+        // this assertion alone could never have distinguished the two.
         await expect(page.locator('#bm-source-mode')).not.toHaveClass(/bm-source-mode-warn/);
         await expect(page.locator('#bm-no-source')).toBeHidden();
         await expect(page.locator('#bm-dot')).toHaveClass(/\bok\b/);
+    });
+
+    // §05/§06 pin #B306. Before the fix, `updateSourceModeBadge()` was reachable
+    // ONLY from the acquisition branch and from `pollData()` — both of which
+    // agent mode skips (the poll timer is scheduled inside `if (!isAgent)`) — so
+    // `#bm-source-mode` kept the `hidden` attribute it ships with in index.html
+    // and standalone mode was silent about being agent-sourced. §04 above asserts
+    // the NEGATIVE (never warn-tinted); these assert the POSITIVE branch, which
+    // is what actually distinguishes the fix from the bug: a badge that is merely
+    // not-warn is also satisfied by a badge that never renders at all.
+
+    test('05 — forced SSE badges the source mode as `agent`', async ({ page }) => {
+        await page.goto(SPA + '?target=' + encodeURIComponent(BASE) + '&transport=sse');
+        await expect(page.locator('#bm-label')).toHaveText('e2e@dev');
+        const badge = page.locator('#bm-source-mode');
+        await expect(badge).toBeVisible();
+        await expect(badge).toHaveText('agent');
+        // `agent` is a non-degraded mode: plain class, no warn tint (that tint is
+        // reserved for the bundle-global fallback).
+        await expect(badge).not.toHaveClass(/bm-source-mode-warn/);
+    });
+
+    test('06 — the default WS→SSE fallback path badges `agent` too', async ({ page }) => {
+        // Distinct code path, not a duplicate of §05: on the default transport
+        // `tryAgentWS()` claims `source` first, so `tryAgent()` returns via its
+        // early `if (source === 'agent') return true;` guard rather than running
+        // its body. Both must still yield a badged mode — the defect was in the
+        // caller's `isAgent` branching, so it applied to whichever transport won.
+        await page.goto(SPA + '?target=' + encodeURIComponent(BASE));
+        await expect(page.locator('#bm-label')).toHaveText('e2e@dev');
+        await expect(page.locator('#bm-source-mode')).toHaveText('agent');
     });
 });
