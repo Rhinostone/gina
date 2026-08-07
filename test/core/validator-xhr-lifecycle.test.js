@@ -97,17 +97,15 @@ describe('01 - #B175 source pins', function () {
         assert.notStrictEqual(block.indexOf("removeAttribute('aria-disabled')"), -1);
         assert.notStrictEqual(block.indexOf("removeAttribute('disabled')"), -1);
         assert.notStrictEqual(block.indexOf("removeAttribute('data-gina-form-loading')"), -1);
-        // #B309 (approved realignment of the release-only pin): the release
-        // carries exactly ONE setAttribute — the gate-restore arm that replays
-        // the live-check verdict on an <a> trigger. Anything beyond that single
-        // arm would be the release arming state of its own again.
+        // #B312 (approved realignment): the #B309 gate-restore arm is retired —
+        // the live-check gate marks its own `data-gina-form-submit-gated`
+        // channel now, so the release is an unconditional removeAttribute pair
+        // and never arms state of its own.
         var sets = block.split('setAttribute').length - 1;
-        assert.strictEqual(sets, 1,
-            'exactly one setAttribute: the gate-restore arm, nothing else');
-        assert.notStrictEqual(block.indexOf('_gateMarked === true'), -1,
-            'the restore is gated on the stamped verdict');
-        assert.notStrictEqual(block.indexOf("setAttribute('aria-disabled', 'true')"), -1,
-            'and it restores the aria marker, never anything native');
+        assert.strictEqual(sets, 0,
+            'zero setAttribute: the release removes state, it never arms any');
+        assert.strictEqual(block.indexOf('_gateMarked === true'), -1,
+            'the #B309 conditional replay is gone as code');
     });
 
     it('01.3 - isSending spans send()->settled (no readyState-1 clear)', function () {

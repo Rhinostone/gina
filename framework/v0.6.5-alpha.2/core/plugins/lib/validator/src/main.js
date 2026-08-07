@@ -2143,20 +2143,16 @@ function ValidatorPlugin(rules, data, formId, culture) {
                     if ($submitTrigger) {
                         // For A tag: aria-disabled=true
                         if ( /^A$/i.test($submitTrigger.tagName) ) {
-                            // #B309 — replay the live-check gate's last verdict instead of
-                            // blanket-removing: on <a> triggers the gate and the in-flight
-                            // lock SHARE aria-disabled with opposite lifecycles, and nothing
-                            // re-marks after settle (send() contains no gate-refresh call
-                            // sites), so a mid-flight invalidation was silently un-gated
-                            // here. Buttons are untouched below: their lock is native
-                            // `disabled`, so the gate's aria mark already survives.
-                            // was:
-                            // $submitTrigger.removeAttribute('aria-disabled');
-                            if ($form._gateMarked === true) {
-                                $submitTrigger.setAttribute('aria-disabled', 'true');
-                            } else {
-                                $submitTrigger.removeAttribute('aria-disabled');
-                            }
+                            // #B312 — unconditional again: the live-check gate now marks
+                            // `data-gina-form-submit-gated` (its own channel, untouched
+                            // here), so the in-flight lock is aria-disabled's only
+                            // framework writer on this trigger and the #B309 verdict
+                            // replay — a conditional re-mark read from the form's
+                            // `_gateMarked` shadow (commit cf366c34a) — had nothing left
+                            // to replay and is retired. An authored aria mark set
+                            // mid-flight is still released here; that was equally true
+                            // of the replay.
+                            $submitTrigger.removeAttribute('aria-disabled');
                         } else {
                             $submitTrigger.removeAttribute('disabled');
                         }
@@ -2234,16 +2230,14 @@ function ValidatorPlugin(rules, data, formId, culture) {
                     if ($submitTrigger) {
                         // For A tag: aria-disabled=true
                         if ( /^A$/i.test($submitTrigger.tagName) ) {
-                            // #B309 — same verdict replay as the loadend release above
-                            // (kept in step; the two are idempotent), and the stray 2nd
-                            // argument to the unary removeAttribute is gone in passing.
+                            // #B312 — unconditional again, in step with the loadend
+                            // release above (the #B309 verdict replay is retired with
+                            // the shared attribute — the gate marks its own channel
+                            // now), and the stray 2nd argument fixed by #B309 stays
+                            // gone.
                             // was:
                             // $submitTrigger.removeAttribute('aria-disabled', true);
-                            if ($form._gateMarked === true) {
-                                $submitTrigger.setAttribute('aria-disabled', 'true');
-                            } else {
-                                $submitTrigger.removeAttribute('aria-disabled');
-                            }
+                            $submitTrigger.removeAttribute('aria-disabled');
                         } else {
                             // was: $submitTrigger.removeAttribute('disabled', true);
                             $submitTrigger.removeAttribute('disabled');
@@ -8019,20 +8013,18 @@ function ValidatorPlugin(rules, data, formId, culture) {
                         _evt = 'reset.'+_evt
                     }
 
-                    // #B246 — a disabled submit trigger must not run the submit cycle.
-                    // `updateSubmitTriggerState()` marks an invalid form's trigger with
-                    // `aria-disabled="true"` and never with native `disabled`, precisely so
-                    // the click still reaches us. Nothing READ that marker, so the trigger
-                    // stayed fully operable: a click ran the collect -> validate ->
-                    // `validate.<id>` chain and only the `isValid()` gate stopped the send.
-                    // The trigger was inert in appearance ONLY, and that also contradicted
-                    // the `aria-disabled` contract it advertises to assistive tech (which
-                    // requires the author to suppress the action).
+                    // #B246 — a gated or disabled submit trigger must not run the submit
+                    // cycle. `updateSubmitTriggerState()` marks an invalid form's trigger
+                    // with `data-gina-form-submit-gated` + a class (#B312 — the
+                    // framework's own channel, no ARIA claim, precisely so the click
+                    // still reaches us and the vocabulary stays honest), and
+                    // `isTriggerDisabled` ALSO honours an AUTHORED aria/native disabled
+                    // mark and the anchor in-flight lock.
                     //
                     // Intercept HERE — before the `submit.<id>` dispatch below — so
                     // `bindSubmitEl`'s handler never runs, `isSubmitting` is never latched
                     // and no send path is reachable. The click is still answered with a
-                    // display-only reveal, so the user learns WHY the trigger is disabled
+                    // display-only reveal, so the user learns WHY the trigger is refused
                     // (which is what the operable-trigger design was bought for).
                     // Checked on the CLICKED element, not `$formInstance.submitTrigger`:
                     // a form may carry several submit buttons and only one registers.
@@ -8477,8 +8469,9 @@ function ValidatorPlugin(rules, data, formId, culture) {
             // the honest gate there. The reveal re-derives validity from live values,
             // so a stale marker heals and the NEXT gesture goes through.
             // Replaces the DOMParser innerHTML-copy guard below: the copy was blind to
-            // the `aria-disabled` marker (the gate's own vocabulary, written by
-            // updateSubmitTriggerState) while SIGHTED on a native `disabled` written
+            // the gate's marker (then `aria-disabled`, written by
+            // updateSubmitTriggerState — since #B312 the gate marks its own
+            // `data-gina-form-submit-gated` channel) while SIGHTED on a native `disabled` written
             // mid-dispatch by a double-submit guard — the exact attribute #B293 ruled
             // must not count on a real form control — so a wrapped-label trigger plus
             // a double-submit guard was a dead submit.
@@ -8693,6 +8686,33 @@ function ValidatorPlugin(rules, data, formId, culture) {
 
     } // EO bindForm()
 
+    /**
+     * updateSubmitTriggerState
+     *
+     * Syncs a form's registered submit trigger with the live-check verdict:
+     * while the form is invalid and live checking is on, the trigger is marked
+     * `data-gina-form-submit-gated="true"` plus a styling class (#B312); both
+     * marks are removed the moment the form validates. The marker is the
+     * framework's OWN channel — the trigger carries no ARIA disabled claim,
+     * because it stays genuinely operable: a click on a gated trigger is
+     * answered by the display-only reveal (#B246), and `isValid()` remains the
+     * real send gate.
+     *
+     * `aria-disabled` is deliberately neither written nor cleared here: an
+     * authored mark belongs to the author (the gates enforce it, and nothing
+     * here strips it), and the anchor in-flight lock's mark belongs to the
+     * settle releases in `send()`.
+     *
+     * @param {object|HTMLFormElement} $formInstanceOrTarget - form instance, or its form target
+     * @param {boolean|string} isFormValid - the fresh validity verdict
+     *
+     * @returns {void}
+     *
+     * @example
+     * updateSubmitTriggerState(instance.$forms['checkout'], true);
+     *
+     * @inner
+     */
     var updateSubmitTriggerState = function($formInstanceOrTarget, isFormValid) {
         //console.debug('submitTrigger[isFormValid='+ isFormValid +']: ', $formInstance.submitTrigger)
         var $formInstance = null; // #B176: was an implicit global (undeclared assignment)
@@ -8711,23 +8731,29 @@ function ValidatorPlugin(rules, data, formId, culture) {
         ) {
             console.warn('This might be normal, so do not worry if this form is handled by your javascript: `'+ $formInstance.id +'`\nGina could not complete `updateSubmitTriggerState()`: `submitTrigger` might not be attached to form instance `'+ $formInstance.id +'`\nTo disable this warning, You just need to disable `Form Live Checking on your form by adding to your <form>: `data-gina-form-live-check-enabled=false``')
         } else if ( document.getElementById($formInstance.submitTrigger) ) {
-            // Represent the "invalid + live-check-on" state with aria-disabled + a class
-            // INSTEAD of the native `disabled` property. A natively-disabled <button>
-            // emits no click event at all, so the click cannot be observed and the user
-            // gets no feedback about WHY the trigger is dead. aria-disabled keeps the
-            // trigger focusable and perceivable, and clickProxyHandler INTERCEPTS the
-            // click (#B246) to answer it with a display-only reveal: every invalid field
-            // is rendered and the first is focused, while the submit cycle is never
-            // entered. The trigger is therefore genuinely not operable — which is what
-            // the aria-disabled contract promises assistive tech, and what the earlier
-            // "keep it operable so the click can still validate" shape got wrong: it
-            // left the real submit path reachable from a control announced as disabled.
-            // Mirrors gina's own <a>-tag submit-trigger handling, which already uses
-            // aria-disabled in-flight. The show branch KEEPS clearing native `disabled` so a trigger
-            // rendered `disabled` in markup still enables on valid / when live-check is off.
+            // Represent the "invalid + live-check-on" state with the framework's own
+            // marker — `data-gina-form-submit-gated` + a class — INSTEAD of any
+            // disabled vocabulary (#B312). A natively-disabled <button> emits no click
+            // event at all, so the click could not be observed and the user would get
+            // no feedback about WHY nothing happens; and an ARIA disabled claim would
+            // be dishonest here — the control stays genuinely operable, keeping the
+            // trigger focusable and perceivable, and clickProxyHandler answers its
+            // clicks (#B246) with a display-only reveal: every invalid field is
+            // rendered and the first is focused, while `isValid()` remains the real
+            // send gate. `aria-disabled` is left to its two honest writers — markup or
+            // script AUTHORS (the gates enforce an authored mark, and the show branch
+            // never strips one) and the anchor in-flight lock in `send()` (armed and
+            // released at the request boundary).
+            // was (#B76, retired by #B312): the hide branch wrote an
+            // `aria-disabled="true"` claim and the show branch removed it — one
+            // attribute carrying the gate verdict, authored marks AND the in-flight
+            // lock, a sharing whose collisions produced #B309/#B311/#B313.
             // Tag-agnostic: setAttribute/classList work for both <button> and <a> submit
-            // triggers. Consumers must style the [aria-disabled="true"] /
-            // .gina-form-submit-disabled state (the framework ships no button CSS).
+            // triggers. The show branch KEEPS clearing native `disabled` so a trigger
+            // rendered `disabled` in markup still enables on valid / when live-check is off.
+            // The framework ships a default look for the gated state (see
+            // loading-state.scss); consumers may override or extend via the
+            // [data-gina-form-submit-gated="true"] / .gina-form-submit-disabled hooks.
             var $submitTrigger = document.getElementById($formInstance.submitTrigger);
             if (
                 /^true$/i.test(isFormValid)
@@ -8735,21 +8761,11 @@ function ValidatorPlugin(rules, data, formId, culture) {
                 !/^(true)$/i.test($formInstance.target.dataset.ginaFormLiveCheckEnabled)
             ) { // show submitTrigger
                 $submitTrigger.disabled = false;
-                $submitTrigger.removeAttribute('aria-disabled');
+                $submitTrigger.removeAttribute('data-gina-form-submit-gated');
                 $submitTrigger.classList.remove('gina-form-submit-disabled');
-                // #B309 — shadow of this gate's LAST verdict, replayed by send()'s
-                // two settle releases (the loadend fail-safe + the readyState-4
-                // twin): on <a> submit triggers the gate and the in-flight lock
-                // share aria-disabled with opposite lifecycles, so a release must
-                // know whether the gate re-marked mid-flight. Stamped in BOTH
-                // branches, so the shadow is in sync with the marker by
-                // construction — including the mid-flight re-mark window.
-                $formInstance._gateMarked = false;
-            } else { // hide submitTrigger (perceivable but not operable, NOT native-disabled)
-                $submitTrigger.setAttribute('aria-disabled', 'true');
+            } else { // hide submitTrigger (gated: marked not-ready, still operable)
+                $submitTrigger.setAttribute('data-gina-form-submit-gated', 'true');
                 $submitTrigger.classList.add('gina-form-submit-disabled');
-                // #B309 — see the show branch's stamp note.
-                $formInstance._gateMarked = true;
             }
         }
     }
@@ -8757,12 +8773,16 @@ function ValidatorPlugin(rules, data, formId, culture) {
     /**
      * isTriggerDisabled
      *
-     * Tells whether a submit trigger is currently marked as disabled.
-     * `updateSubmitTriggerState()` marks an invalid form's trigger with
-     * `aria-disabled="true"` rather than the native `disabled` property, so a
-     * marker-only check must look at the ARIA attribute. The predicate shape
-     * mirrors the popin plugin's own trigger gate, so both subsystems agree on
-     * what "disabled" means for a trigger.
+     * Tells whether a submit trigger must currently be refused. Three marks
+     * count, each with one honest writer (#B312): `updateSubmitTriggerState()`
+     * gates an invalid form's trigger with the framework's own
+     * `data-gina-form-submit-gated="true"` channel; an AUTHORED
+     * `aria-disabled="true"` counts and is never cleared by the framework —
+     * an author's disabled claim is enforced, not second-guessed; and the
+     * anchor in-flight lock marks `aria-disabled` for the request window. The
+     * aria/native arms keep the same shape as the popin and link plugins' own
+     * gates, so the three subsystems still agree on what an authored
+     * "disabled" means for a trigger; the gated arm is validator-only.
      *
      * #B293 — the native `disabled` attribute counts ONLY on an element where
      * `disabled` is not a real IDL property. On a genuine form control the
@@ -8781,10 +8801,10 @@ function ValidatorPlugin(rules, data, formId, culture) {
      *
      * @param {object} $el - candidate trigger (DOMObject)
      *
-     * @returns {boolean} true when the trigger must not be operated
+     * @returns {boolean} true when the trigger's activation must be refused
      *
      * @example
-     * isTriggerDisabled($button); // true while aria-disabled="true" is set
+     * isTriggerDisabled($button); // true while the trigger is gated, or carries an authored aria-disabled="true"
      *
      * @example
      * // <button disabled> never reaches here (the browser eats the click), and a
@@ -8805,6 +8825,8 @@ function ValidatorPlugin(rules, data, formId, culture) {
             && $el.getAttribute('disabled') != null && $el.getAttribute('disabled') != 'false'
             ||
             $el.getAttribute('aria-disabled') == 'true'
+            ||
+            $el.getAttribute('data-gina-form-submit-gated') == 'true'
         );
     };
 

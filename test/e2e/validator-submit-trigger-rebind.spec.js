@@ -61,7 +61,7 @@ async function makeValid(page) {
     await page.click('#parent x-agree button');
     await page.waitForFunction(() => {
         const b = document.getElementById('parent-submit');
-        return b && b.getAttribute('aria-disabled') !== 'true';
+        return b && b.getAttribute('data-gina-form-submit-gated') !== 'true';
     }, null, { timeout: 10000 });
 }
 

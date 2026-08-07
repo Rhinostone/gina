@@ -66,5 +66,34 @@
     opacity: 0.7;
   }
 }
+/* ==========================================================================
+   Submit-gated state — the default look for `data-gina-form-submit-gated`.
+
+   Written by the form validator on a form's registered submit trigger while
+   the form is invalid and live checking is on (#B312); removed the moment the
+   form validates. The trigger stays fully operable — a click is answered with
+   the validation reveal — so this look signals "not ready yet", never
+   "inert". Hosted in this stylesheet because of the same build-discovery
+   constraint documented in the header above.
+   ========================================================================== */
+/*
+ * Same deliberate omissions as the loading look, for the same reasons — and
+ * above all NO `pointer-events: none`, which would swallow the very click the
+ * validator answers with the error reveal.
+ *
+ * The trigger is NOT `aria-disabled` (it is genuinely operable), so
+ * disabled-control contrast exemptions do NOT apply: if your design needs
+ * strict contrast on the trigger's label, override the opacity — the selector
+ * is a single attribute (specificity 0,1,0), so any class of your own wins.
+ *
+ * `[data-gina-form-submit-gated="true"]` matches the value; the validator
+ * removes the attribute when the form turns valid, so a bare presence
+ * selector would also behave — but match the value anyway, consistent with
+ * the loading marker above.
+ */
+[data-gina-form-submit-gated=true] {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
 
 /*# sourceMappingURL=loading-state.css.map */

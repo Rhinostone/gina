@@ -57,7 +57,7 @@ async function makeValid(page) {
     await page.click('#parent x-agree button');
     await page.waitForFunction(() => {
         const b = document.getElementById('parent-submit');
-        return b && b.getAttribute('aria-disabled') !== 'true';
+        return b && b.getAttribute('data-gina-form-submit-gated') !== 'true';
     }, null, { timeout: 10000 });
 }
 
@@ -92,9 +92,9 @@ test.describe('#B293 — a consumer double-submit guard must not kill the submit
         // the guard sets native `disabled` mid-dispatch; nothing is marked beforehand
         const before = await page.evaluate(() => {
             const b = document.getElementById('parent-submit');
-            return { aria: b.getAttribute('aria-disabled'), disabled: b.getAttribute('disabled') };
+            return { gated: b.getAttribute('data-gina-form-submit-gated'), disabled: b.getAttribute('disabled') };
         });
-        expect(before.aria, 'no gina marker before the click').toBeNull();
+        expect(before.gated, 'no gina marker before the click').toBeNull();
         expect(before.disabled, 'no native disabled before the click').toBeNull();
 
         await page.click('#parent-submit');
@@ -116,14 +116,17 @@ test.describe('#B293 — a consumer double-submit guard must not kill the submit
         const posts = countPosts(page);
         await gotoFaceAndBoot(page);
 
-        // the FACE is deliberately NOT engaged, so gina marks the trigger
-        const aria = await page.evaluate(() =>
-            document.getElementById('parent-submit').getAttribute('aria-disabled'));
-        expect(aria, 'gina marks an invalid form aria-disabled').toBe('true');
+        // the FACE is deliberately NOT engaged, so gina marks the trigger.
+        // #B312: this arm is the REGRESSION ARM for isTriggerDisabled's gated
+        // disjunct — if the predicate ever loses the data-marker arm, this is
+        // the test that goes red (an invalid form would then send).
+        const gated = await page.evaluate(() =>
+            document.getElementById('parent-submit').getAttribute('data-gina-form-submit-gated'));
+        expect(gated, 'gina marks an invalid form\'s trigger gated (#B312)').toBe('true');
 
-        await page.click('#parent-submit', { force: true });   // aria-disabled fails actionability
+        await page.click('#parent-submit', { force: true });   // force kept (harmless): the gated marker no longer fails actionability (#B312)
         await page.waitForTimeout(900);
-        expect(posts.length, 'the aria-disabled arm must still gate an invalid form').toBe(0);
+        expect(posts.length, 'the gated arm must still gate an invalid form').toBe(0);
     });
 
     test('04 - positive control: the instrument can observe a send', async ({ page }) => {

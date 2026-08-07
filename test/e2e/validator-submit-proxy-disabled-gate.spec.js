@@ -8,7 +8,8 @@
  *
  * THE DEFECT. The proxy's old guard parsed a DOMParser copy of the form's
  * innerHTML and tested only native `.disabled` on the copy — blind to the
- * `aria-disabled` marker (the gate's own vocabulary), while SIGHTED on a native
+ * `aria-disabled` marker (then the gate's own vocabulary; since #B312 the gate
+ * marks `data-gina-form-submit-gated`), while SIGHTED on a native
  * `disabled` written mid-dispatch by a double-submit guard (the exact attribute
  * #B293 ruled must not count on a real form control). A wrapped-label click
  * (`<button type="submit"><span>`, whose click surfaces as a submit event
@@ -122,7 +123,7 @@ async function injectGatedForm(page, formId, triggerHtml) {
         (formId) => !!(window.gina.validator.$forms && window.gina.validator.$forms[formId]),
         formId, { timeout: 10000 });
     await page.waitForFunction(
-        (formId) => document.getElementById(formId + '-submit').getAttribute('aria-disabled') === 'true',
+        (formId) => document.getElementById(formId + '-submit').getAttribute('data-gina-form-submit-gated') === 'true',
         formId, { timeout: 10000 });
 }
 
@@ -180,9 +181,8 @@ test.describe('#B308 — the submit proxy honors the disabled gate for user gest
 
         // Click the SPAN: no `.type`, so the click proxy's submit branch never fires
         // and the gesture surfaces as a native (trusted) submit event at the proxy.
-        // force: Playwright's actionability walks up to the aria-disabled button and
-        // refuses (element not enabled) — a real pointer is NOT blocked there, so
-        // force keeps the trusted input pipeline and lets gina do the refusing.
+        // force kept (harmless): the gated marker no longer fails actionability
+        // (#B312) — gina still does the refusing at the proxy gate.
         await page.click('#wrapped-span', { force: true });
         await page.waitForTimeout(700);
 
@@ -276,7 +276,7 @@ test.describe('#B308 — the submit proxy honors the disabled gate for user gest
             document.getElementById('wrapped-agree').value = 'valid data';
         });
         await page.waitForFunction(
-            () => document.getElementById('wrapped-submit').getAttribute('aria-disabled') !== 'true',
+            () => document.getElementById('wrapped-submit').getAttribute('data-gina-form-submit-gated') !== 'true',
             null, { timeout: 10000 });
         await armValidateCounter(page, 'wrapped');
 

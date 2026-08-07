@@ -167,11 +167,11 @@ test.describe('#B295 — an async query rule must leave validity state accurate'
             const b = document.getElementById('parent-submit');
             const f = window.gina.validator.$forms['parent'];
             return {
-                aria: b.getAttribute('aria-disabled'),
+                gated: b.getAttribute('data-gina-form-submit-gated'),
                 errorKeys: f && f.errors ? Object.keys(f.errors) : []
             };
         });
-        expect(state.aria, 'a valid form must not stay aria-disabled').not.toBe('true');
+        expect(state.gated, 'a valid form must not stay gated (#B312 marker)').not.toBe('true');
         expect(state.errorKeys, 'a valid form must not keep a stale error record').toEqual([]);
     });
 
@@ -183,9 +183,9 @@ test.describe('#B295 — an async query rule must leave validity state accurate'
         // async field itself becomes valid — the case where a field-scoped verdict lies
         await fillNoteAndSettle(page, seen, true);
 
-        const aria = await page.evaluate(() =>
-            document.getElementById('parent-submit').getAttribute('aria-disabled'));
-        expect(aria, 'an untouched invalid field must keep the trigger marked').toBe('true');
+        const gated = await page.evaluate(() =>
+            document.getElementById('parent-submit').getAttribute('data-gina-form-submit-gated'));
+        expect(gated, 'an untouched invalid field must keep the trigger marked').toBe('true');
 
         await page.click('#parent-submit', { force: true });
         await page.waitForTimeout(1200);
