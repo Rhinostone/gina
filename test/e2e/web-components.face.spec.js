@@ -88,9 +88,9 @@ test.describe('#CC2 FACE participation (real bundle)', () => {
         // initially invalid: agree='' fails isRequired, so the submit control is gated
         const before = await page.evaluate(() => {
             const btn = document.getElementById('parent-submit');
-            return { ariaDisabled: btn.getAttribute('aria-disabled') };
+            return { gated: btn.getAttribute('data-gina-form-submit-gated') };
         });
-        expect(before.ariaDisabled).toBe('true');
+        expect(before.gated).toBe('true');
 
         // a REAL click on the FACE's toggle (send/live-check read window.event)
         await page.click('#parent x-agree button');
@@ -102,14 +102,14 @@ test.describe('#CC2 FACE participation (real bundle)', () => {
         })).toBe(false);
 
         await expect.poll(async () => page.evaluate(() =>
-            document.getElementById('parent-submit').getAttribute('aria-disabled')
+            document.getElementById('parent-submit').getAttribute('data-gina-form-submit-gated')
         )).not.toBe('true');
     });
 
     test('submit: the engaged FACE value rides the always-XHR payload', async ({ page }) => {
         await page.click('#parent x-agree button');   // engage → valid
         await expect.poll(async () => page.evaluate(() =>
-            document.getElementById('parent-submit').getAttribute('aria-disabled')
+            document.getElementById('parent-submit').getAttribute('data-gina-form-submit-gated')
         )).not.toBe('true');
 
         const [req] = await Promise.all([
@@ -136,7 +136,7 @@ test.describe('#CC2 FACE participation (real bundle)', () => {
         await page.fill('#note', 'hello');
         await page.click('#parent x-agree button');   // engage the required FACE → form valid
         await expect.poll(async () => page.evaluate(() =>
-            document.getElementById('parent-submit').getAttribute('aria-disabled')
+            document.getElementById('parent-submit').getAttribute('data-gina-form-submit-gated')
         )).not.toBe('true');
 
         const [req] = await Promise.all([

@@ -97,9 +97,15 @@ describe('01 - #B175 source pins', function () {
         assert.notStrictEqual(block.indexOf("removeAttribute('aria-disabled')"), -1);
         assert.notStrictEqual(block.indexOf("removeAttribute('disabled')"), -1);
         assert.notStrictEqual(block.indexOf("removeAttribute('data-gina-form-loading')"), -1);
-        // Release-only: the fail-safe must never arm anything
-        assert.strictEqual(block.indexOf('setAttribute'), -1,
-            'the loadend release must not arm');
+        // #B312 (approved realignment): the #B309 gate-restore arm is retired —
+        // the live-check gate marks its own `data-gina-form-submit-gated`
+        // channel now, so the release is an unconditional removeAttribute pair
+        // and never arms state of its own.
+        var sets = block.split('setAttribute').length - 1;
+        assert.strictEqual(sets, 0,
+            'zero setAttribute: the release removes state, it never arms any');
+        assert.strictEqual(block.indexOf('_gateMarked === true'), -1,
+            'the #B309 conditional replay is gone as code');
     });
 
     it('01.3 - isSending spans send()->settled (no readyState-1 clear)', function () {

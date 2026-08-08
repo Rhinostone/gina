@@ -1526,7 +1526,7 @@ describe('26 - Popin: #B54 click consumes the in-flight preload (one click = one
 
     it('source: consumePreload takes an onMiss and parks a waiter for an in-flight (null) slot', function () {
         var src = getPopinSrc();
-        assert.match(src, /function\s+consumePreload\s*\(\s*url\s*,\s*\$popin\s*,\s*onMiss\s*\)/, 'consumePreload(url, $popin, onMiss)');
+        assert.match(src, /function\s+consumePreload\s*\(\s*url\s*,\s*\$popin\s*,\s*onMiss\s*,\s*onSettled\s*\)/, 'consumePreload(url, $popin, onMiss, onSettled)');
         assert.match(src, /typeof\(slot\)\s*==\s*'undefined'[\s\S]{0,40}return false/, 'undefined slot returns false (caller loads)');
         assert.ok(src.indexOf('slot === null') > -1, 'in-flight (null) slot is handled distinctly');
         assert.ok(/preloadWaiters\[url\]\.push/.test(src), 'in-flight slot parks a waiter rather than firing a GET');
@@ -1535,11 +1535,11 @@ describe('26 - Popin: #B54 click consumes the in-flight preload (one click = one
     it('source: the legacy bindOpen click path consumes the preload before loading', function () {
         var src = getPopinSrc();
         assert.ok(/var\s+doLoad\s*=\s*function/.test(src), 'legacy click wraps its load in doLoad');
-        assert.match(src, /consumePreload\(url,\s*\$popin,\s*doLoad\)/, 'legacy click consumes the preload, falling back to doLoad');
+        assert.match(src, /consumePreload\(url,\s*\$popin,\s*doLoad,\s*_onAdoptionSettled\)/, 'legacy click consumes the preload, falling back to doLoad, and hands the #B285 settle callback');
     });
 
     it('source: the new-API openFromTrigger passes an onMiss fallback to consumePreload', function () {
-        assert.match(getPopinSrc(), /consumePreload\(descriptor\.src,\s*existing,\s*onMiss\)/, 'openFromTrigger passes onMiss');
+        assert.match(getPopinSrc(), /consumePreload\(descriptor\.src,\s*existing,\s*onMiss,\s*_onAdoptionSettled\)/, 'openFromTrigger passes onMiss, and hands the #B285 settle callback');
     });
 
     it('source: a preOpen popin still gets its skeleton while the adopted preload is in flight', function () {
@@ -2505,5 +2505,97 @@ describe('32 - #B225: preload-consumed opens set the dev toolbar overlay', funct
             'the adopted-branch dev-gated set must survive minification — rebuild the plugin bundle');
         assert.ok((min.match(/GINA_ENV_IS_DEV/g) || []).length >= 9,
             'the dev-gate count must include the two consume sites (7 pre-fix, 9 post)');
+    });
+});
+
+describe('33 - #B285: consumePreload reports settling (onSettled contract)', function () {
+
+    /** Started-flag brace walker (same shape as §32's — no braces inside string
+     *  literals in consumePreload). */
+    function extractFn33(src, decl) {
+        var i = src.indexOf(decl);
+        if (i < 0) throw new Error('decl not found: ' + decl);
+        if (src.indexOf(decl, i + 1) > -1) throw new Error('decl not unique: ' + decl);
+        var depth = 0, started = false, j = i;
+        for (; j < src.length; j++) {
+            var c = src[j];
+            if (c === '{') { depth++; started = true; }
+            else if (c === '}') {
+                depth--;
+                if (started && depth === 0) { j++; break; }
+            }
+        }
+        if (!started || depth !== 0) throw new Error('unbalanced braces for: ' + decl);
+        return src.slice(i, j);
+    }
+
+    /** Executes the SHIPPED consumePreload bytes (no replica) with a recording
+     *  scope — the same seven injections as §32's driveConsume. The #B285 settle
+     *  callback is passed at CALL time (4th argument), so this runner needs no
+     *  extra injected symbol and §32's ≤3-arg calls keep running the same bytes. */
+    function driveConsume33(src, opts) {
+        var fnText = extractFn33(src, 'function consumePreload(');
+        var log = [];
+        var runner = new Function(
+            'preloadCache', 'preloadWaiters', 'showLoadingShell',
+            'ensurePopinDialog', 'handleLoadedBody', 'GINA_ENV_IS_DEV', 'updateToolbar',
+            'return (' + fnText + ');'
+        );
+        var fn = runner(
+            opts.cache, opts.waiters || {},
+            function () { log.push(['shell']); },
+            function () { return { el: true }; },
+            function (body) { log.push(['loaded', body]); },
+            opts.dev,
+            function (body) { log.push(['toolbar', body]); }
+        );
+        return { fn: fn, log: log };
+    }
+
+    it('ready-branch consume settles SYNCHRONOUSLY, after its dispatch', function () {
+        var d = driveConsume33(getPopinSrc(), { cache: { '/u': 'BODY' }, dev: false });
+        var settled = [];
+        var consumed = d.fn('/u', { options: {} }, null, function () { settled.push(d.log.length); });
+        assert.equal(consumed, true, 'ready slot must be consumed');
+        assert.deepEqual(d.log, [['loaded', 'BODY']], 'the cached body must dispatch');
+        assert.deepEqual(settled, [1],
+            'onSettled must fire exactly once, synchronously, AFTER handleLoadedBody — the caller must be able to tell "no wait ever began" before consumePreload returns');
+    });
+
+    it('adopting an in-flight preload does NOT settle at park time — the wait has only begun', function () {
+        var waiters = {};
+        var d = driveConsume33(getPopinSrc(), { cache: { '/u': null }, waiters: waiters, dev: false });
+        var settled = [];
+        var consumed = d.fn('/u', { options: {} }, function () { d.log.push(['miss']); }, function () { settled.push(d.log.length); });
+        assert.equal(consumed, true, 'in-flight slot must be adopted');
+        assert.equal((waiters['/u'] || []).length, 1, 'a waiter must be parked');
+        assert.deepEqual(settled, [], 'parking must NOT settle — this gap is exactly what the caller arms for');
+    });
+
+    it('the adopted waiter settles FIRST, before the body dispatch (release-before-apply, like the cold readyState-4 site)', function () {
+        var waiters = {};
+        var d = driveConsume33(getPopinSrc(), { cache: { '/u': null }, waiters: waiters, dev: false });
+        var settled = [];
+        d.fn('/u', { options: {} }, function () { d.log.push(['miss']); }, function () { settled.push(d.log.length); });
+        waiters['/u'][0]('BODY');
+        assert.deepEqual(settled, [0], 'settle must precede the dispatch (log empty at settle time)');
+        assert.deepEqual(d.log, [['loaded', 'BODY']], 'the adopted body must still dispatch');
+    });
+
+    it('a FAILED adoption settles too, before onMiss runs — the release cannot leak on the miss leg', function () {
+        var waiters = {};
+        var d = driveConsume33(getPopinSrc(), { cache: { '/u': null }, waiters: waiters, dev: false });
+        var settled = [];
+        d.fn('/u', { options: {} }, function () { d.log.push(['miss']); }, function () { settled.push(d.log.length); });
+        waiters['/u'][0](null);
+        assert.deepEqual(settled, [0], 'the null (failure) leg must settle before the fallback');
+        assert.deepEqual(d.log, [['miss']], 'the caller click-time load must still run');
+    });
+
+    it('the 4th argument is optional — a 3-arg call keeps every prior shape (harness-compat control)', function () {
+        var d = driveConsume33(getPopinSrc(), { cache: { '/u': 'BODY' }, dev: false });
+        assert.equal(d.fn('/u', { options: {} }), true);
+        assert.deepEqual(d.log, [['loaded', 'BODY']],
+            'no settle callback, identical behavior — this is what keeps the older ≤3-arg harness calls green untouched');
     });
 });

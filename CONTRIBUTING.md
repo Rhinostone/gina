@@ -90,12 +90,32 @@ cd "$(npm config get prefix)/bin" && ln -s ../lib/node_modules/gina/bin/gina* .
 The test suite uses Node's built-in `node:test` runner — no additional test dependencies needed.
 
 ```bash
-# Run all tests
-node --test test/**/*.test.js framework/v*/test/unit/*.test.js
+# Run all tests — the same set CI gates on
+npm test
+
+# Run all tests with a coverage report
+npm run test:coverage
 
 # Run a single file
 node --test test/core/controller.test.js
+
+# Pass extra node:test flags — via the env var, NOT `npm test -- --flag`
+GINA_TEST_FLAGS=--test-concurrency=2 npm test
 ```
+
+`npm test` is the single source of truth for which files make up the suite:
+CI runs exactly this script, so a green local run and a green CI run cover the
+same set.
+
+**Extra runner flags must go through `GINA_TEST_FLAGS`.** `node --test` stops
+parsing options at the first positional argument, so a flag placed after the
+file list is neither honoured nor rejected — it is silently ignored and the run
+still exits 0. That makes `npm test -- --test-concurrency=2` a no-op that looks
+like it worked. The `test` script interpolates `$GINA_TEST_FLAGS` *before* the
+file list, which is why `npm run test:coverage` is defined as
+`GINA_TEST_FLAGS=--experimental-test-coverage npm test`. Measured over 199
+files: `--test-concurrency=1` before the list takes 47s, after the list 15s,
+and with no flag at all 17s.
 
 Some tests resolve the framework the way a consuming project does — via
 `require('gina')`. For that to resolve from inside the clone, the repository
@@ -221,7 +241,7 @@ Pick the kind (`Added`, `Changed`, `Fixed`, `Removed`, `Security`) and write the
 
 Before opening a PR against `develop`:
 
-- [ ] Tests pass — `node --test test/**/*.test.js framework/v*/test/unit/*.test.js`
+- [ ] Tests pass — `npm test`
 - [ ] New behaviour is covered by a test (or an explanation is provided for why it cannot be)
 - [ ] A `changie new` entry exists for any user-facing change
 - [ ] Commit messages follow the style above

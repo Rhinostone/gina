@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>gina link preset-id e2e harness</title>
+    <!-- Empty data-URI icon: suppress the favicon.ico request for a clean console. -->
+    <link rel="icon" href="data:,">
+
+    <!--
+        RUNTIME harness for #B302 — a `data-gina-link` anchor carrying an author-supplied
+        `id` used to be a DEAD link.
+
+        WHY A FIXTURE AND NOT A UNIT TEST. The whole defect lives in event dispatch: the
+        document-level proxy decides whether to trigger the anchor's custom event, and the
+        per-anchor listener has already called preventDefault by then. Nothing about that
+        is observable without a real click on a real anchor in a real engine — the four
+        existing link unit files are SOURCE PINS (they read the file as text and never
+        execute the plugin), so none of them could have caught this.
+
+        ANCHOR SHAPES MATTER HERE. The direct-click arms carry BARE TEXT on purpose: a
+        text node is not an event target, so `event.target` is the anchor itself, which is
+        the path the fix repairs. An anchor wrapping an element child dispatches through
+        `proxyClick` instead — a separate, always-shape-agnostic path — which is why
+        `#preset-child` is kept as its own arm rather than folded into the others.
+
+        The link plugin has NO framework auto-boot (#B141): core.js defines `gina/link`
+        but only popin / validator / nav get boot shims, so bundle handler code
+        instantiates it — and the FIRST `.on()` call is what fires the deferred init.
+        The inline script below is that bundle-handler equivalent.
+    -->
+    <script src="/js/gina.onload.js"></script>
+    <script src="/js/gina.min.js"></script>
+    <script>
+        // Minimal page: the framework's own `ginaloaded` listener loses the attach race,
+        // so invoke onGinaLoaded manually (the loader's guard makes a duplicate a no-op),
+        // THEN construct the link handler the way a bundle handler would.
+        (function () {
+            var tries = 0;
+            function kick() {
+                try {
+                    if (
+                        window.gina
+                        && window.gina.config
+                        && typeof window.onGinaLoaded === 'function'
+                        && !window.gina.isFrameworkLoaded
+                    ) {
+                        window.onGinaLoaded(window.gina);
+                    }
+                } catch (e) {
+                    if (window.console && console.error) {
+                        console.error('[harness] onGinaLoaded threw', e && e.stack || e);
+                    }
+                }
+                if ((!window.gina || !window.gina.isFrameworkLoaded) && tries++ < 100) {
+                    setTimeout(kick, 50);
+                    return;
+                }
+                activateLink();
+            }
+            function activateLink() {
+                try {
+                    var LinkHandler = window.require('gina/link');
+                    new LinkHandler({}).on('ready', function (e) {
+                        if (e && e.preventDefault) { e.preventDefault(); }
+                    });
+                    window.__linkActivated = true;
+                } catch (err) {
+                    window.__linkActivateError = String(err && err.message || err);
+                }
+            }
+            kick();
+        }());
+    </script>
+    <style>body { margin: 0; padding: 1rem; font-family: system-ui, sans-serif; } a { display: block; margin: .5rem 0; }</style>
+</head>
+<body>
+    <h1>gina link preset-id harness</h1>
+
+    <!-- #B302 target: author-supplied id, BARE TEXT so the anchor is the event target. -->
+    <a id="preset-link" data-gina-link href="/link/sink?arm=preset">preset id</a>
+
+    <!-- Control: no id, so bindLinks generates the `link.click.*` form. Bare text too. -->
+    <a class="auto-link" data-gina-link href="/link/sink?arm=auto">auto id</a>
+
+    <!-- The path that already worked: a child element is the event target, so dispatch
+         goes through proxyClick and never consults the document proxy's gate. -->
+    <a id="preset-child" data-gina-link href="/link/sink?arm=child"><span id="child-span">preset id, child</span></a>
+
+    <!-- Over-match guard: NOT a gina link, but it does carry an id. The proxy must not
+         claim it just because it looks up ids now. -->
+    <a id="plain-anchor" href="/link/sink?arm=plain">plain anchor</a>
+</body>
+</html>

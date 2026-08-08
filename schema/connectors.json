@@ -89,7 +89,7 @@
         },
         "file": {
           "type": "string",
-          "description": "SQLite and DuckDB only. Database file path. Defaults to ~/.gina/{version}/{database}.sqlite (SQLite) or ~/.gina/{version}/{database}.duckdb (DuckDB). Use \":memory:\" for in-memory databases.",
+          "description": "SQLite and DuckDB only. Database file path. Defaults to ~/.gina/{database}.sqlite (SQLite) or ~/.gina/{database}.duckdb (DuckDB). Use \":memory:\" for in-memory databases.",
           "examples": [":memory:", "/data/app.sqlite", "/data/analytics.duckdb"]
         },
         "readOnly": {
