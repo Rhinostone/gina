@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Fixed a refused submit hiding its own error message (#B319): both refused-submit answers — the disabled/gated-trigger reveal and an enabled trigger''s failed validation — render the first invalid field''s message and then focus that field, and that focus re-entered the live-check suppression that hides a message while its field is being edited, leaving the answer readable only by a screen reader the instant it appeared. The framework''s own answer focus is now exempt (one-shot): the message stays visible with the hard `form-item-error` styling, and the first later keystroke re-engages the mid-typing suppression unchanged. Pre-existing in 0.6.4.'
-time: 2026-08-08T03:31:22+01:00
