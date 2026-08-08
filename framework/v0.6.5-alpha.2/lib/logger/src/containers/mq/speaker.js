@@ -130,6 +130,35 @@ function MQSpeaker(opt, loggers, cb) {
         // Only bites when something is actually listening on the MQ port; with
         // nothing there the connection is refused and the handle closes itself.
         client.unref();
+        // #B318 — `unref()` covers the socket HANDLE but NOT the pending
+        // `TCPConnectWrap` REQUEST, and a pending request keeps the event loop
+        // alive on its own. The comment above is correct only for the two states
+        // it names: a completed connect, and a REFUSED one (reachable host, no
+        // listener — the peer sends RST, the handle closes itself). It misses the
+        // third: an UNREACHABLE host (powered off, black-holed, a stale
+        // `host_v4` left behind by a DHCP reassignment) answers nothing at all,
+        // so the connect stays pending for the OS timeout — ~75s on macOS — and
+        // the process cannot exit for that whole window. That is exactly the
+        // hang #B276 set out to remove, surviving in the one state neither the
+        // fix nor its comment considered.
+        //
+        // The deadline below is itself `unref`'d, so it never keeps the loop
+        // alive either: it can only fire while something ELSE is holding the
+        // loop open, which during a stalled dial is precisely the connect
+        // request it exists to cancel. `destroy(err)` emits `error`, so the
+        // outcome flows through the established handler below — same callback
+        // contract, same warn text, no new egress path.
+        var connectDeadline = setTimeout(function () {
+            if (client.connecting) {
+                client.destroy(new Error(
+                    'connect ETIMEDOUT ' + host + ':' + port +
+                    ' - MQ host unreachable; giving up (logging transport only)'
+                ));
+            }
+        }, opt.mqConnectTimeout || 2000);
+        connectDeadline.unref();
+        client.once('connect', function () { clearTimeout(connectDeadline); });
+        client.once('error',   function () { clearTimeout(connectDeadline); });
         client.on('error', (data) => {
             var err = data.toString();
             if (cb) {
