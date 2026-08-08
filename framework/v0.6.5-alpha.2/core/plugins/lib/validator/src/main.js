@@ -756,6 +756,23 @@ function ValidatorPlugin(rules, data, formId, culture) {
 
     }
 
+    /**
+     * #B319 — one-shot exemption raised while the framework moves focus to the
+     * first invalid field to DELIVER a refused submit's answer (the #B246/#B308
+     * display-only reveal, and the `validate.<id>` failure branch). `.focus()`
+     * dispatches `focusin` synchronously, so without this flag that dispatch
+     * re-enters the live-check listener whose `refreshWarning` call sees the
+     * field is by then the active element and hides the very message the answer
+     * just rendered (#B312: the message IS the answer). The focusin arm skips
+     * the downgrade while the flag is up; both focus sites clear it on every
+     * exit, so the user's next interaction — typing, refocusing — re-engages
+     * the deliberate mid-typing suppression untouched.
+     *
+     * @private
+     * @type {boolean}
+     */
+    var isAnswerFocusInProgress = false;
+
     var refreshWarning = function($el) {
         var formId = $el.form.id || $el.form.getAttribute('id');
         var elName = $el.name || $el.form.getAttribute('name');
@@ -5371,7 +5388,13 @@ function ValidatorPlugin(rules, data, formId, culture) {
                         }
                         // other inputs & textareas
                         else if ( /^focusin\./i.test(event.type) ) {
-                            if ( /\-error/.test($el.parentNode.className) ) {
+                            // #B319 — not on the answer focus: when a refused submit
+                            // moves focus to the first invalid field, the message it
+                            // just rendered must survive its own delivery.
+                            if (
+                                /\-error/.test($el.parentNode.className)
+                                && !isAnswerFocusInProgress
+                            ) {
                                 console.debug('#1 you just focusin ....'+$el.id, $el.value, instance.$forms[ $el.form.getAttribute('id') ].isValidating);
                                 refreshWarning($el);
                             }
@@ -8224,25 +8247,33 @@ function ValidatorPlugin(rules, data, formId, culture) {
                     var _a11yErrs = result['fields'] || result['error'];
                     if ( _a11yErrs ) {
                         var $a11yForm = event['target'];
-                        for (var _ai = 0, _aLen = $a11yForm.length; _ai < _aLen; ++_ai) {
-                            var _aField = $a11yForm[_ai];
-                            var _aName  = _aField.getAttribute('name');
-                            if (
-                                _aName
-                                && typeof(_a11yErrs[_aName]) != 'undefined'
-                                && ( typeof(_a11yErrs[_aName].count) != 'function' || _a11yErrs[_aName].count() > 0 )
-                                && _aField.type != 'hidden'
-                                && typeof(_aField.focus) == 'function'
-                            ) {
-                                _aField.focus();
-                                // #A11Y5 (V8) — kept in step with focusFirstInvalidField:
-                                // only stop once focus actually moved, since focus() is a
-                                // no-op on an unfocusable host that still passes the
-                                // typeof-function gate above.
-                                if ( typeof(document) === 'undefined' || !document || document.activeElement === _aField ) {
-                                    break;
+                        // #B319 — same one-shot answer-focus exemption as
+                        // focusFirstInvalidField: this focus delivers the
+                        // answer, it is not the user editing the field.
+                        isAnswerFocusInProgress = true;
+                        try {
+                            for (var _ai = 0, _aLen = $a11yForm.length; _ai < _aLen; ++_ai) {
+                                var _aField = $a11yForm[_ai];
+                                var _aName  = _aField.getAttribute('name');
+                                if (
+                                    _aName
+                                    && typeof(_a11yErrs[_aName]) != 'undefined'
+                                    && ( typeof(_a11yErrs[_aName].count) != 'function' || _a11yErrs[_aName].count() > 0 )
+                                    && _aField.type != 'hidden'
+                                    && typeof(_aField.focus) == 'function'
+                                ) {
+                                    _aField.focus();
+                                    // #A11Y5 (V8) — kept in step with focusFirstInvalidField:
+                                    // only stop once focus actually moved, since focus() is a
+                                    // no-op on an unfocusable host that still passes the
+                                    // typeof-function gate above.
+                                    if ( typeof(document) === 'undefined' || !document || document.activeElement === _aField ) {
+                                        break;
+                                    }
                                 }
                             }
+                        } finally {
+                            isAnswerFocusInProgress = false;
                         }
                     }
                 }
@@ -8841,7 +8872,9 @@ function ValidatorPlugin(rules, data, formId, culture) {
      * than calling here. That is DELIBERATE: the inline shape is locked by source
      * pins in `test/core/validator-aria-invalid.test.js` (`_a11yErrs`, `_aField`),
      * so collapsing the two would break pins unrelated to #B246. Keep the two in
-     * step if the focus rule ever changes.
+     * step if the focus rule ever changes — as #B319 did: both sites raise the
+     * answer-focus exemption around their loop, so delivering the answer cannot
+     * be mistaken for the user editing the field.
      *
      * @param {object} $form - form target (DOMObject), not the instance
      * @param {object} errors - error map keyed by field name
@@ -8857,29 +8890,37 @@ function ValidatorPlugin(rules, data, formId, culture) {
         if ( !$form || !errors ) {
             return false;
         }
-        for (var i = 0, len = $form.length; i < len; ++i) {
-            var $field  = $form[i];
-            var name    = $field.getAttribute('name');
-            if (
-                name
-                && typeof(errors[name]) != 'undefined'
-                && ( typeof(errors[name].count) != 'function' || errors[name].count() > 0 )
-                && $field.type != 'hidden'
-                && typeof($field.focus) == 'function'
-            ) {
-                $field.focus();
-                // #A11Y5 (V8) — `typeof focus == 'function'` is true for EVERY HTMLElement,
-                // a custom element with neither `tabindex` nor `delegatesFocus` included,
-                // whose focus() is a silent no-op (measured). Without confirming the move,
-                // the loop reported success and stopped on a control that never took focus,
-                // so a failed submit announced nothing. Confirming it is also what makes the
-                // "skips unfocusable controls" contract above true rather than aspirational.
-                if ( typeof(document) === 'undefined' || !document || document.activeElement === $field ) {
-                    return true;
+        // #B319 — raise the one-shot answer-focus exemption so the synchronous
+        // `focusin` dispatched by `$field.focus()` below cannot re-enter the
+        // live-check suppression and hide the message this answer just rendered.
+        isAnswerFocusInProgress = true;
+        try {
+            for (var i = 0, len = $form.length; i < len; ++i) {
+                var $field  = $form[i];
+                var name    = $field.getAttribute('name');
+                if (
+                    name
+                    && typeof(errors[name]) != 'undefined'
+                    && ( typeof(errors[name].count) != 'function' || errors[name].count() > 0 )
+                    && $field.type != 'hidden'
+                    && typeof($field.focus) == 'function'
+                ) {
+                    $field.focus();
+                    // #A11Y5 (V8) — `typeof focus == 'function'` is true for EVERY HTMLElement,
+                    // a custom element with neither `tabindex` nor `delegatesFocus` included,
+                    // whose focus() is a silent no-op (measured). Without confirming the move,
+                    // the loop reported success and stopped on a control that never took focus,
+                    // so a failed submit announced nothing. Confirming it is also what makes the
+                    // "skips unfocusable controls" contract above true rather than aspirational.
+                    if ( typeof(document) === 'undefined' || !document || document.activeElement === $field ) {
+                        return true;
+                    }
                 }
             }
+            return false;
+        } finally {
+            isAnswerFocusInProgress = false;
         }
-        return false;
     };
 
     /**
