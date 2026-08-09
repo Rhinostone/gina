@@ -8,6 +8,15 @@
  * DIAL host through lib/net-locality at all four dial sites (command socket,
  * MQ speaker, MQ file container, `gina tail`); the bind side is untouched.
  *
+ * #B320 tightened the two INTRA-HOST transports (MQ speaker + file container,
+ * §02/§03): their listener is co-located by construction, so `host_v4` — which
+ * on a shared or stale `~/.gina` can name ANOTHER machine — is no longer an
+ * input of their dial at all. They resolve through resolveLocalDialHost
+ * (bind side only, env first). The operator-facing clients (§01 command
+ * socket, §04 tail) deliberately keep the #B160 resolution, remote dial
+ * included. Behavioral coverage of the #B320 delivery lives in
+ * test/lib/logger-mq-speaker-local-dial.test.js.
+ *
  * #B161: a `bind_host` persisted via `gina framework:set --bind-host=` was
  * clobbered back to the default by (a) the settings regeneration in
  * framework/init.js::checkIfSettings — bind_host was the only connection key
@@ -149,8 +158,21 @@ describe('02 - the MQ speaker dials through the locality resolver', function () 
         assert.match(speakerSrc, /opt\.bindHost = settings\.bind_host;/);
     });
 
-    it('resolves the dial host from (hostV4, bindHost)', function () {
-        assert.match(speakerSrc, /var host = netLocality\.resolveDialHost\(opt\.hostV4 \|\| '127\.0\.0\.1', opt\.bindHost\);/);
+    it('resolves the dial host from the bind side ONLY (#B320 — host_v4 is not an input)', function () {
+        assert.match(speakerSrc, /var host = netLocality\.resolveLocalDialHost\(_envBindHost \|\| opt\.bindHost\);/);
+    });
+
+    it('the env tier reads GINA_BIND_HOST guarded, with the process.env fallback the early-call window needs', function () {
+        assert.match(speakerSrc,
+            /var _envBindHost = \(typeof getEnvVar === 'function' && getEnvVar\('GINA_BIND_HOST'\)\)\s*\|\| process\.env\.GINA_BIND_HOST \|\| null;/);
+    });
+
+    it('the host_v4-consulting resolver call is gone from the speaker (whole file)', function () {
+        // #B320 inverse pin: the speaker must never route through the
+        // operator-facing resolver again — its remote-unchanged rule is what
+        // shipped log frames to a foreign machine. Whole-source, and the token
+        // is code-unique (comments name the rule, never this call form).
+        assert.equal(speakerSrc.indexOf('netLocality.resolveDialHost('), -1);
     });
 
     it('the raw host_v4 dial assignment is gone', function () {
@@ -172,9 +194,16 @@ describe('03 - the MQ file container dials through the locality resolver', funct
         assert.match(fileSrc, /opt\.bindHost = settings\.bind_host;/);
     });
 
-    it('resolves the dial host with the env fallbacks preserved', function () {
+    it('resolves the dial host from the bind side ONLY, env first (#B320 — host_v4/GINA_HOST_V4 are not inputs)', function () {
         assert.match(fileSrc,
-            /netLocality\.resolveDialHost\(\s*opt\.hostV4 \|\| getEnvVar\('GINA_HOST_V4'\) \|\| '127\.0\.0\.1',\s*opt\.bindHost \|\| getEnvVar\('GINA_BIND_HOST'\)\s*\)/);
+            /netLocality\.resolveLocalDialHost\(\s*\(\(typeof getEnvVar === 'function' && getEnvVar\('GINA_BIND_HOST'\)\) \|\| process\.env\.GINA_BIND_HOST \|\| null\)\s*\|\| opt\.bindHost\s*\)/);
+    });
+
+    it('the host_v4-consulting resolver call is gone from the file container (whole file)', function () {
+        // #B320 inverse pin — same contract as the speaker's: this covers the
+        // `gina#bundle-logging` event path too, whose hostV4 argument flows
+        // into the same dial line.
+        assert.equal(fileSrc.indexOf('netLocality.resolveDialHost('), -1);
     });
 
     it('the raw host_v4 dial assignment is gone', function () {

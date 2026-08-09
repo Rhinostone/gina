@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>gina link same-url attribution e2e harness</title>
+    <!-- Empty data-URI icon: suppress the favicon.ico request for a clean console. -->
+    <link rel="icon" href="data:,">
+
+    <!--
+        RUNTIME harness for #B287 — two `data-gina-link` anchors sharing one url used to
+        attribute the whole request (and the `data-gina-loading` state) to whichever
+        anchor registered FIRST, regardless of which one was clicked.
+
+        THE MECHANISM. `linkRequest(url, options)` re-derived its element from the url
+        (`getLinkByUrl` walks the registrations and returns the first `.url` match), so
+        the clicked registration — already resolved by the dispatch listener — was thrown
+        away and re-guessed. The fix hands the operated registration through to
+        `linkRequest`; the url lookup remains only for the public
+        `gina.link.request(url)` path, which genuinely has nothing but a url.
+
+        WHY A FIXTURE AND NOT A UNIT TEST. The observable is WHICH anchor carries
+        `data-gina-loading` after a real click travels a real dispatch path (direct
+        anchor listener vs `proxyClick` child delegation). The link unit files are source
+        pins; none of them execute a click.
+
+        ANCHOR SHAPES ARE LOAD-BEARING, same as the preset-id harness: bare-text anchors
+        exercise the direct path (`event.target` is the anchor), an anchor wrapping a
+        `<span>` exercises `proxyClick`. Each pair keeps both so the two paths stay
+        distinguishable.
+
+        The link plugin has NO framework auto-boot (#B141/#B286): the inline script below
+        is the bundle-handler equivalent that constructs it.
+    -->
+    <script src="/js/gina.onload.js"></script>
+    <script src="/js/gina.min.js"></script>
+    <script>
+        // Minimal page: the framework's own `ginaloaded` listener loses the attach race,
+        // so invoke onGinaLoaded manually (the loader's guard makes a duplicate a no-op),
+        // THEN construct the link handler the way a bundle handler would.
+        (function () {
+            var tries = 0;
+            function kick() {
+                try {
+                    if (
+                        window.gina
+                        && window.gina.config
+                        && typeof window.onGinaLoaded === 'function'
+                        && !window.gina.isFrameworkLoaded
+                    ) {
+                        window.onGinaLoaded(window.gina);
+                    }
+                } catch (e) {
+                    if (window.console && console.error) {
+                        console.error('[harness] onGinaLoaded threw', e && e.stack || e);
+                    }
+                }
+                if ((!window.gina || !window.gina.isFrameworkLoaded) && tries++ < 100) {
+                    setTimeout(kick, 50);
+                    return;
+                }
+                activateLink();
+            }
+            function activateLink() {
+                try {
+                    var LinkHandler = window.require('gina/link');
+                    new LinkHandler({}).on('ready', function (e) {
+                        if (e && e.preventDefault) { e.preventDefault(); }
+                    });
+                    window.__linkActivated = true;
+                } catch (err) {
+                    window.__linkActivateError = String(err && err.message || err);
+                }
+            }
+            kick();
+        }());
+    </script>
+    <style>body { margin: 0; padding: 1rem; font-family: system-ui, sans-serif; } a { display: block; margin: .5rem 0; }</style>
+</head>
+<body>
+    <h1>gina link same-url harness</h1>
+
+    <!-- Pair A — SHARED url, DIRECT click on the second. Both bare text so the anchor is
+         the event target. Registration order is document order: a1 first. -->
+    <a id="a1" data-gina-link href="/link/sink?arm=sharedA">pair A, first</a>
+    <a id="a2" data-gina-link href="/link/sink?arm=sharedA">pair A, second</a>
+
+    <!-- Pair B — SHARED url, CHILD click on the second (the proxyClick path). b1 is the
+         first registration; the click lands on the span inside b2. -->
+    <a id="b1" data-gina-link href="/link/sink?arm=sharedB">pair B, first</a>
+    <a id="b2" data-gina-link href="/link/sink?arm=sharedB"><span id="b2-span">pair B, second (child)</span></a>
+
+    <!-- Arm C — DISTINCT url, CHILD click. The ledger's unresolved symptom: an earlier
+         smoke reported a nested click on a distinct-url anchor producing no transition
+         at all. This arm settles it empirically either way. -->
+    <a id="c1" data-gina-link href="/link/sink?arm=distinctC"><span id="c1-span">arm C, distinct url (child)</span></a>
+</body>
+</html>

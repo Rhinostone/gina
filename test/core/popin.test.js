@@ -2599,3 +2599,155 @@ describe('33 - #B285: consumePreload reports settling (onSettled contract)', fun
             'no settle callback, identical behavior — this is what keeps the older ≤3-arg harness calls green untouched');
     });
 });
+
+describe('34 - #B315: the popin `success` event actually fires (no free `$forms` in popinLoad)', function () {
+
+    /** Started-flag brace walker (same shape as §32/§33's). popinLoad carries no
+     *  brace inside a string literal — asserted by the balance check itself, which
+     *  throws rather than returning a truncated body. */
+    function extractFn34(src, name) {
+        // Anchored at a line-start declaration on purpose: this file closes its
+        // long functions with an `} // EO function popinBind(e, $popin) {` marker,
+        // so a bare indexOf finds TWO "declarations" and a uniqueness guard that
+        // scans raw source rejects a perfectly unique function.
+        var re = new RegExp('^[ \\t]*function ' + name + '\\(', 'mg');
+        var hits = [], m;
+        while ((m = re.exec(src)) !== null) hits.push(m.index);
+        if (!hits.length) throw new Error('decl not found: ' + name);
+        if (hits.length > 1) throw new Error('decl not unique: ' + name);
+        var i = hits[0];
+        var depth = 0, started = false, j = i;
+        for (; j < src.length; j++) {
+            var c = src[j];
+            if (c === '{') { depth++; started = true; }
+            else if (c === '}') {
+                depth--;
+                if (started && depth === 0) { j++; break; }
+            }
+        }
+        if (!started || depth !== 0) throw new Error('unbalanced braces for: ' + name);
+        return src.slice(i, j);
+    }
+
+    /** Comment-stripped view: these pins are about CODE, and the fix deliberately
+     *  documents the old broken identifier in a comment right above the fixed line.
+     *  Asserting on raw source would match my own explanation and read green for
+     *  the wrong reason (the negative-on-raw-source trap recorded for #B288). */
+    function activeSource(text) {
+        return text.split('\n').filter(function (l) {
+            var t = l.trim();
+            return t.indexOf('//') !== 0 && t.indexOf('*') !== 0 && t.indexOf('/*') !== 0;
+        }).join('\n');
+    }
+
+    it('popinLoad contains NO `$forms` identifier — it is declared only in the sibling popinBind', function () {
+        var body = activeSource(extractFn34(getPopinSrc(), 'popinLoad'));
+        assert.equal(/\$forms/.test(body), false,
+            'popinLoad must not reference `$forms`: the only declaration is `var $forms` inside popinBind, a SIBLING function, so any read here is a free variable that throws ReferenceError into popinLoad\'s own catch');
+    });
+
+    it('`var $forms` is declared exactly once in the module, and it sits inside popinBind', function () {
+        // Position arithmetic rather than a brace walk: popinBind does not balance
+        // under the naive walker (it carries a brace inside a literal), and the walk
+        // is not needed — popinBind's span is delimited by its own `// EO` marker.
+        var src = getPopinSrc();
+        var decls = src.match(/var\s+\$forms\b/g) || [];
+        assert.equal(decls.length, 1, 'exactly one `var $forms` declaration must exist');
+
+        var declAt = src.search(/var\s+\$forms\b/);
+        var bindAt = src.search(/^[ \t]*function popinBind\(/m);
+        var bindEnd = src.indexOf('// EO function popinBind');
+        assert.ok(bindAt > -1 && bindEnd > bindAt, 'popinBind span must be locatable');
+        assert.ok(declAt > bindAt && declAt < bindEnd,
+            'the sole `var $forms` must sit INSIDE popinBind — that is what makes the popinLoad reference a free variable rather than a shadowed local');
+
+        var loadAt = src.search(/^[ \t]*function popinLoad\(/m);
+        assert.ok(loadAt > bindEnd,
+            'popinLoad must start after popinBind ends — sibling functions, so no closure can supply $forms');
+    });
+
+    it('the `success.` trigger dispatches on `$el`, matching its two sibling triggers in the same handler', function () {
+        var body = activeSource(extractFn34(getPopinSrc(), 'popinLoad'));
+        assert.ok(/triggerEvent\(\s*gina\s*,\s*\$el\s*,\s*'success\.'\s*\+\s*id\s*,\s*result\s*\)/.test(body),
+            '`success` must dispatch on $el');
+        // The siblings are the reason $el is the right target, not a guess.
+        assert.ok(/triggerEvent\(\s*gina\s*,\s*\$el\s*,\s*'loaded\.'\s*\+\s*id/.test(body), 'loaded. dispatches on $el');
+        assert.ok(/triggerEvent\(\s*gina\s*,\s*\$el\s*,\s*'error\.'\s*\+\s*id/.test(body), 'error. dispatches on $el');
+    });
+
+    it('DIST FIDELITY: the fix reached the built bundle', function () {
+        var dist = fs.readFileSync(DIST_JS, 'utf8');
+        assert.ok(dist.indexOf("'success.' + id") > -1 || dist.indexOf('"success." + id') > -1,
+            'the success dispatch must be present in the built bundle');
+        assert.equal(/triggerEvent\(gina,\s*\$forms\[0\],\s*'success\./.test(dist), false,
+            'the pre-fix `$forms[0]` dispatch must NOT survive in dist — a stale dist here means the rebuild was skipped');
+    });
+});
+
+describe('35 - #B300: the always-false id-backfill guards stay deleted', function () {
+
+    /** Comment-stripped view (same helper shape as §34's). Load-bearing here, not
+     *  hygiene: each #B300 deletion leaves a comment quoting the removed condition
+     *  VERBATIM so a future reader does not restore it — so a pin asserting on RAW
+     *  source matches my own explanation, can never reach 0, and is a control that
+     *  cannot fail. That exact reading cost two invalid measurement passes when the
+     *  fix was made. */
+    function activeSource35(text) {
+        return text.split('\n').filter(function (l) {
+            var t = l.trim();
+            return t.indexOf('//') !== 0 && t.indexOf('*') !== 0 && t.indexOf('/*') !== 0;
+        }).join('\n');
+    }
+
+    /** Region between a unique start landmark and the first end landmark AFTER it.
+     *  Neither site is a `function name(...)` declaration — both are function
+     *  EXPRESSIONS assigned to a var — so §34's declaration walker does not apply,
+     *  and `var register = function (...)` is not even unique as a raw string: the
+     *  file repeats it in its own `} // EO var register = ...` closing marker. */
+    function region35(src, startRe, endNeedle, label) {
+        var m = src.match(startRe);
+        if (!m) throw new Error('start landmark not found: ' + label);
+        var from = src.indexOf(m[0]);
+        var to = src.indexOf(endNeedle, from + m[0].length);
+        if (to < 0) throw new Error('end landmark not found: ' + label);
+        return activeSource35(src.slice(from, to));
+    }
+
+    it('bindOpen\'s document click proxy does not stamp an id on the clicked element', function () {
+        var region = region35(
+            getPopinSrc(),
+            /evt = 'click';\/\/ click proxy/,
+            'gina.popinIsBinded = false',
+            'document click proxy'
+        );
+
+        // CONTROL first — proves the region is the right one and non-empty. Without
+        // it, a mis-anchored (empty) region would pass both negatives vacuously.
+        assert.ok(/\/\^popin\\\.close\\\.\/\.test\(event\.target\.id\)/.test(region),
+            'control: the click proxy must still test the popin.close. prefix — if this fails the region is mis-anchored and the negatives below prove nothing');
+
+        assert.equal(/typeof\(event\.target\.id\) == 'undefined'/.test(region), false,
+            'the always-false id guard must stay deleted: an element\'s `id` IDL attribute always exists (defaults to ""), so the body never ran');
+        assert.equal(/event\.target\.setAttribute\('id', evt/.test(region), false,
+            'the id-stamping body must stay deleted — and must NOT be "repaired" by correcting the operand: `evt` is the literal "click" here, so a live body would stamp id="click.<n>" onto EVERY id-less element clicked anywhere in the document, matching neither prefix tested below it');
+    });
+
+    it('register()\'s close branch does not rewrite event.target.id', function () {
+        var region = region35(
+            getPopinSrc(),
+            /^[ \t]*var register = function \(type, evt, \$element\) \{/m,
+            '// EO var register',
+            'register() close branch'
+        );
+
+        // CONTROL — the #B299/#B301 fix reads currentTarget; its presence proves the
+        // region actually spans the close branch.
+        assert.ok(/event\.currentTarget\.id/.test(region),
+            'control: the close branch must still read event.currentTarget.id (#B299/#B301) — if this fails the region is mis-anchored');
+
+        assert.equal(/typeof\(event\.target\.id\) == 'undefined'/.test(region), false,
+            'the always-false id guard must stay deleted');
+        assert.equal(/event\.target\.setAttribute\('id', evt/.test(region), false,
+            'the id-rewrite body must stay deleted — and must NOT be "repaired": it would set the clicked node\'s id to `evt + "." + _nextId()`, breaking the invariant the #B299/#B301 note depends on (the $close teardown sweep finds this listener via `gina.events[eId] == eId`, i.e. element id === event name) and leaking the listener');
+    });
+});

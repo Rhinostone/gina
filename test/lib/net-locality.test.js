@@ -167,3 +167,55 @@ describe('03 - resolveDialHost', function () {
         assert.equal(nl.resolveDialHost('127.0.0.1', '127.0.0.1'), '127.0.0.1');
     });
 });
+
+describe('04 - resolveLocalDialHost (#B320 — intra-host transports: MQ speaker + file container)', function () {
+
+    it('exports as a function', function () {
+        assert.equal(typeof nl.resolveLocalDialHost, 'function');
+    });
+
+    it('a concrete, non-wildcard LOCAL bind is dialled as-is', function () {
+        assert.equal(nl.resolveLocalDialHost('192.168.7.20', FAKE), '192.168.7.20');
+        assert.equal(nl.resolveLocalDialHost('127.0.0.1', FAKE), '127.0.0.1');
+        assert.equal(nl.resolveLocalDialHost('localhost', FAKE), 'localhost');
+    });
+
+    it('a wildcard bind dials loopback (a wildcard includes it)', function () {
+        assert.equal(nl.resolveLocalDialHost('0.0.0.0', FAKE), '127.0.0.1');
+        assert.equal(nl.resolveLocalDialHost('::', FAKE), '127.0.0.1');
+    });
+
+    it('an absent or empty bind dials loopback (the default bind)', function () {
+        assert.equal(nl.resolveLocalDialHost(undefined, FAKE), '127.0.0.1');
+        assert.equal(nl.resolveLocalDialHost(null, FAKE), '127.0.0.1');
+        assert.equal(nl.resolveLocalDialHost('', FAKE), '127.0.0.1');
+    });
+
+    it('a FOREIGN bind refuses to leave the host — the shared/stale ~/.gina shape', function () {
+        // The regression this function exists for: per-host state stamped by
+        // ANOTHER machine must produce a loud local refusal, never a silent
+        // cross-host delivery.
+        assert.equal(nl.resolveLocalDialHost('203.0.113.7', FAKE), '127.0.0.1');
+        assert.equal(nl.resolveLocalDialHost('198.51.100.9', FAKE), '127.0.0.1');
+    });
+
+    it('a non-loopback hostname dials loopback (locality of a name is unverifiable)', function () {
+        assert.equal(nl.resolveLocalDialHost('my-host.local', FAKE), '127.0.0.1');
+    });
+
+    it('an IPv4-mapped local bind is recognised, and returned in its original form', function () {
+        assert.equal(nl.resolveLocalDialHost('::ffff:192.168.7.20', FAKE), '::ffff:192.168.7.20');
+    });
+
+    it('enumeration failure stays LOCAL — the deliberate inverse of resolveDialHost fail-safe', function () {
+        // resolveDialHost fails safe by dialling UNCHANGED (remote
+        // administration must keep working). An intra-host transport fails
+        // safe the other way: when locality cannot be established, staying on
+        // loopback is the refusal that cannot mis-deliver.
+        assert.equal(nl.resolveLocalDialHost('192.168.7.20', THROWING), '127.0.0.1');
+    });
+
+    it('smoke against the REAL interfaces: the default bind dials loopback', function () {
+        assert.equal(nl.resolveLocalDialHost(undefined), '127.0.0.1');
+    });
+});
