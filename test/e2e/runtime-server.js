@@ -42,6 +42,8 @@
  *                                         2xx WITHOUT `Vary`, the defect arm)
  *   GET /link-gate                     -> fixtures/link-disabled-gate.html (#B310
  *                                         link disabled-gate harness; same sink)
+ *   GET /link-shared                   -> fixtures/link-same-url.html (#B287
+ *                                         same-url attribution harness; same sink)
  *   GET /frag/<name>.html              -> in-memory AJAX fragments (below)
  *   GET /components                    -> fixtures/web-components.html (client
  *                                         components: SSR hydration + raw-HTML
@@ -468,6 +470,11 @@ const server = http.createServer(function (req, res) {
         if (url === '/link-gate' || url === '/link-gate.html') {
             return send(res, 200, 'text/html; charset=utf-8',
                 fs.readFileSync(path.join(FIXTURES, 'link-disabled-gate.html')));
+        }
+        // #B287 — the same-url attribution harness. Same sink as /link.
+        if (url === '/link-shared' || url === '/link-shared.html') {
+            return send(res, 200, 'text/html; charset=utf-8',
+                fs.readFileSync(path.join(FIXTURES, 'link-same-url.html')));
         }
         // #SPA1 — the nav harness. One shell per URL (full document), or the layoutless
         // region when the request carries the negotiation header.

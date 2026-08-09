@@ -9783,6 +9783,21 @@ define('gina/link', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge',
         var _linkSeq = 0;
 
         /**
+         * #B287 — the registration the user actually operated, handed from the
+         * dispatch listener in `registerLink` to `linkRequest` so that anchors
+         * sharing one url resolve to the anchor that was clicked rather than to
+         * the first registration whose url matches. Both click paths — the
+         * direct anchor listener and `proxyClick`'s child delegation — dispatch
+         * into that same listener, so this single hand-off covers both.
+         * Consumed (and cleared) at `linkRequest` entry, before anything else
+         * runs, so an early exit can never leak it into a later call; the
+         * public `gina.link.request(url)` path never sets it and keeps the
+         * historical first-match lookup.
+         * @type {object|null}
+         */
+        var _operatedLink = null;
+
+        /**
          * Build a fresh transport for a single request.
          *
          * Was inlined in the `init` handler, which created ONE object for the whole
@@ -9947,6 +9962,12 @@ define('gina/link', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge',
          * rather than in the click handlers: `$el` is already the anchor at this point,
          * so no click target ever has to be walked back up to it.
          *
+         * The link object resolves in two steps (#B287): the operated registration
+         * handed off by the dispatch listener wins; only when none was handed off —
+         * the public `gina.link.request(url)` path — does the historical first-match
+         * url lookup run. Before this order existed, two anchors sharing one url
+         * collapsed onto whichever registered first, whichever was clicked.
+         *
          * Side effects: supersedes any request still in flight, arms `data-gina-loading`
          * on the anchor for the duration of this one, and releases it from a `loadend`
          * listener. An indefinite hang is the single outcome that never releases, because
@@ -9964,6 +9985,11 @@ define('gina/link', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge',
          * */
         function linkRequest(url, options) {
 
+            // #B287 — consume the operated registration FIRST so no later step
+            // (nor an early exit) can leak it into a subsequent call.
+            var $operated = _operatedLink;
+            _operatedLink = null;
+
             // One transport per request, and a sequence taken BEFORE the abort so a
             // supersede-abort is stale by construction — its handler sees
             // `seq !== _linkSeq` and drops out, which is what keeps the abort from
@@ -9977,8 +10003,9 @@ define('gina/link', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge',
             var xhr = createXhr();
             _linkXhr = xhr;
 
-            // link object
-            var $link      = getLinkByUrl(url);
+            // link object — #B287: the operated registration wins; the first-match
+            // url lookup remains only for the public `gina.link.request(url)` path.
+            var $link      = $operated || getLinkByUrl(url);
             var id         = $link.id;
 
 
@@ -10195,6 +10222,7 @@ define('gina/link', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge',
                             $localLink.options.withCredentials = false
                         }
 
+                        _operatedLink = $localLink; // #B287 — hand the operated registration to linkRequest
                         linkRequest(localUrl, $localLink.options);
 
                         //delete gina.events[ $localLink.id ];
@@ -10444,7 +10472,12 @@ define('gina/link', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge',
 
                 instance.isReady = true;
                 gina.hasLinkHandler = true;
-                gina.link = merge(gina.link, instance);
+                // #B326 — publish ONCE: `gina.link` IS the first activated
+                // instance (a LIVE object); later constructions have nothing
+                // to publish, and re-merging would freeze accessors/state (#B90).
+                if ( typeof(gina.link) == 'undefined' || !gina.link ) {
+                    gina.link = instance;
+                }
                 // trigger link ready event
                 triggerEvent(gina, instance.target, 'ready.' + instance.id, instance);
             });

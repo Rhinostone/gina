@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Two `data-gina-link` anchors sharing one url no longer collapse onto whichever registered first. The request — and the `data-gina-loading` state, the HTML-callback attribute reads and the per-link XHR events with it — now belongs to the anchor that was actually clicked, on both dispatch paths (a direct click on the anchor, and a click on a nested child element). The public `gina.link.request(url)` call keeps its historical behaviour and resolves the first registration matching the url, since a bare url is all it has.'
+time: 2026-08-09T22:19:20+01:00
