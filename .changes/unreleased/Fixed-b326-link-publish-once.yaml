@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'The link plugin now publishes its handler once — `gina.link` is the first activated instance, and a later construction no longer deep-merges itself into the live published one (the same freeze-prone shape the popin and nav plugins were already cured of). Pages constructing a single handler, which is the overwhelmingly common case, behave identically.'
-time: 2026-08-09T22:19:21+01:00
