@@ -10387,14 +10387,24 @@ define('gina/link', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge',
                 // for proxies, use linkInstance.id as target is always `document`
                 addListener(gina, instance.target, evt, function(event) {
 
-                    // A modified click belongs to the browser. Bail before the id backfill
-                    // below, so deferring leaves no trace on the element either.
+                    // A modified click — cmd/ctrl/shift/alt — belongs to the browser (#B288),
+                    // so it bails first and nothing below can cancel the event or dispatch for
+                    // it. This bail used to carry a second justification, "before the id
+                    // backfill below, so deferring leaves no trace on the element either";
+                    // that backfill was dead code and is gone (#B324), so only the primary
+                    // reason remains.
                     if ( isModifiedClick(event) ) return;
 
-                    if ( typeof(event.target.id) == 'undefined' ) {
-                        event.target.setAttribute('id', evt +'.'+ uuid() );
-                        event.target.id = event.target.getAttribute('id')
-                    }
+                    // #B324: an id-backfill block used to sit here, gated on
+                    // `typeof(event.target.id) == 'undefined'`. An element's `id` IDL attribute
+                    // always exists (defaulting to ''), so the gate was never true and the block
+                    // never ran — the popin plugin carried the identical dead pair, removed as
+                    // #B300. Removed rather than "corrected": `instance.target` is `document`
+                    // (see the note above) and `evt` is the literal 'click', so a live body
+                    // would write `id="click.<uuid>"` onto EVERY id-less element clicked
+                    // anywhere in the page; and since #B302 the dispatch below keys on
+                    // `instance.$links[…]` — registration, not the id's SHAPE — so such an id is
+                    // absent from `$links` and dispatches nothing. Pollution for zero gain.
 
 
 

@@ -173,3 +173,33 @@ describe('03 - link: the deliberate omissions stay omitted', function() {
         assert.equal(code.indexOf('.which'),  -1, 'no e.which guard is needed (middle click fires auxclick)');
     });
 });
+
+
+// ── 04 — #B324: the dead id-backfill stays deleted ───────────────────────────
+// The document proxy used to open with an id-backfill gated on
+// `typeof(event.target.id) == 'undefined'` — never true, since an element's `id` IDL
+// attribute always exists and defaults to ''. Section 02's ordering assertion already
+// tolerates its absence (`backfill === -1 || guard < backfill`), which is what let the
+// block be removed without touching that test; this section asserts the stronger fact
+// that it must not come BACK. The popin plugin carried the identical dead pair, removed
+// as #B300.
+
+describe('04 - link: the #B324 id-backfill stays deleted', function() {
+
+    it('the document proxy does not write a generated id onto the clicked element', function() {
+        // Comment-stripped: the #B324 note quotes the removed condition verbatim so a
+        // future reader does not restore it, and a raw-source assertion would match my
+        // own explanation — a control that can never fail.
+        var block = blockAt(activeSource(LINK_SRC), 'addListener(gina, instance.target, evt, function(event)');
+
+        // CONTROL first — proves the block extracted is the document proxy and is
+        // non-empty. Without it, a mis-anchored region would pass the negatives vacuously.
+        assert.ok(block.indexOf('instance.$links[event.target.id]') > -1,
+            'control: the document proxy must still key its dispatch on instance.$links (#B302) — if this fails the extraction is wrong and the negatives below prove nothing');
+
+        assert.equal(block.indexOf("typeof(event.target.id) == 'undefined'"), -1,
+            'the always-false id gate must stay deleted: an element\'s `id` always exists (defaults to ""), so the body never ran');
+        assert.equal(block.indexOf("setAttribute('id', evt"), -1,
+            'the id-backfill must stay deleted — and must NOT be "repaired" by correcting the operand: instance.target is `document` and evt is the literal "click", so a live body would write id="click.<uuid>" onto EVERY id-less element clicked in the page, and since #B302 the dispatch keys on registration rather than the id SHAPE, so such an id dispatches nothing');
+    });
+});
