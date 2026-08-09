@@ -2599,3 +2599,87 @@ describe('33 - #B285: consumePreload reports settling (onSettled contract)', fun
             'no settle callback, identical behavior — this is what keeps the older ≤3-arg harness calls green untouched');
     });
 });
+
+describe('34 - #B315: the popin `success` event actually fires (no free `$forms` in popinLoad)', function () {
+
+    /** Started-flag brace walker (same shape as §32/§33's). popinLoad carries no
+     *  brace inside a string literal — asserted by the balance check itself, which
+     *  throws rather than returning a truncated body. */
+    function extractFn34(src, name) {
+        // Anchored at a line-start declaration on purpose: this file closes its
+        // long functions with an `} // EO function popinBind(e, $popin) {` marker,
+        // so a bare indexOf finds TWO "declarations" and a uniqueness guard that
+        // scans raw source rejects a perfectly unique function.
+        var re = new RegExp('^[ \\t]*function ' + name + '\\(', 'mg');
+        var hits = [], m;
+        while ((m = re.exec(src)) !== null) hits.push(m.index);
+        if (!hits.length) throw new Error('decl not found: ' + name);
+        if (hits.length > 1) throw new Error('decl not unique: ' + name);
+        var i = hits[0];
+        var depth = 0, started = false, j = i;
+        for (; j < src.length; j++) {
+            var c = src[j];
+            if (c === '{') { depth++; started = true; }
+            else if (c === '}') {
+                depth--;
+                if (started && depth === 0) { j++; break; }
+            }
+        }
+        if (!started || depth !== 0) throw new Error('unbalanced braces for: ' + name);
+        return src.slice(i, j);
+    }
+
+    /** Comment-stripped view: these pins are about CODE, and the fix deliberately
+     *  documents the old broken identifier in a comment right above the fixed line.
+     *  Asserting on raw source would match my own explanation and read green for
+     *  the wrong reason (the negative-on-raw-source trap recorded for #B288). */
+    function activeSource(text) {
+        return text.split('\n').filter(function (l) {
+            var t = l.trim();
+            return t.indexOf('//') !== 0 && t.indexOf('*') !== 0 && t.indexOf('/*') !== 0;
+        }).join('\n');
+    }
+
+    it('popinLoad contains NO `$forms` identifier — it is declared only in the sibling popinBind', function () {
+        var body = activeSource(extractFn34(getPopinSrc(), 'popinLoad'));
+        assert.equal(/\$forms/.test(body), false,
+            'popinLoad must not reference `$forms`: the only declaration is `var $forms` inside popinBind, a SIBLING function, so any read here is a free variable that throws ReferenceError into popinLoad\'s own catch');
+    });
+
+    it('`var $forms` is declared exactly once in the module, and it sits inside popinBind', function () {
+        // Position arithmetic rather than a brace walk: popinBind does not balance
+        // under the naive walker (it carries a brace inside a literal), and the walk
+        // is not needed — popinBind's span is delimited by its own `// EO` marker.
+        var src = getPopinSrc();
+        var decls = src.match(/var\s+\$forms\b/g) || [];
+        assert.equal(decls.length, 1, 'exactly one `var $forms` declaration must exist');
+
+        var declAt = src.search(/var\s+\$forms\b/);
+        var bindAt = src.search(/^[ \t]*function popinBind\(/m);
+        var bindEnd = src.indexOf('// EO function popinBind');
+        assert.ok(bindAt > -1 && bindEnd > bindAt, 'popinBind span must be locatable');
+        assert.ok(declAt > bindAt && declAt < bindEnd,
+            'the sole `var $forms` must sit INSIDE popinBind — that is what makes the popinLoad reference a free variable rather than a shadowed local');
+
+        var loadAt = src.search(/^[ \t]*function popinLoad\(/m);
+        assert.ok(loadAt > bindEnd,
+            'popinLoad must start after popinBind ends — sibling functions, so no closure can supply $forms');
+    });
+
+    it('the `success.` trigger dispatches on `$el`, matching its two sibling triggers in the same handler', function () {
+        var body = activeSource(extractFn34(getPopinSrc(), 'popinLoad'));
+        assert.ok(/triggerEvent\(\s*gina\s*,\s*\$el\s*,\s*'success\.'\s*\+\s*id\s*,\s*result\s*\)/.test(body),
+            '`success` must dispatch on $el');
+        // The siblings are the reason $el is the right target, not a guess.
+        assert.ok(/triggerEvent\(\s*gina\s*,\s*\$el\s*,\s*'loaded\.'\s*\+\s*id/.test(body), 'loaded. dispatches on $el');
+        assert.ok(/triggerEvent\(\s*gina\s*,\s*\$el\s*,\s*'error\.'\s*\+\s*id/.test(body), 'error. dispatches on $el');
+    });
+
+    it('DIST FIDELITY: the fix reached the built bundle', function () {
+        var dist = fs.readFileSync(DIST_JS, 'utf8');
+        assert.ok(dist.indexOf("'success.' + id") > -1 || dist.indexOf('"success." + id') > -1,
+            'the success dispatch must be present in the built bundle');
+        assert.equal(/triggerEvent\(gina,\s*\$forms\[0\],\s*'success\./.test(dist), false,
+            'the pre-fix `$forms[0]` dispatch must NOT survive in dist — a stale dist here means the rebuild was skipped');
+    });
+});

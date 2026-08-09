@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'The popin `success` event now fires. A popin whose JSON response carried neither a redirect nor a reload previously raised `error` with an HTTP 422 status instead — and because the error branch replaces its payload with the parsed response body, that 422 carried the successful response itself, which read as a server-side failure that had never happened. Subscribers to `success` received nothing at all. If you worked around this by listening on `error` and inspecting its payload, move that handler to `success`.'
+time: 2026-08-09T16:14:12+01:00

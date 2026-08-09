@@ -2411,7 +2411,15 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge'
                                     if (GINA_ENV_IS_DEV)
                                             updateToolbar(result);
 
-                                    triggerEvent(gina, $forms[0], 'success.' + id, result);
+                                    // #B315 — this used to dispatch on `$forms[0]`, a free variable:
+                                    // `$forms` is declared only in `popinBind` (a sibling function), so
+                                    // reading it here threw ReferenceError into the catch below, which
+                                    // converted every successful JSON load into `error.<id>` with a 422.
+                                    // `success` therefore never fired. Dispatching on `$el` matches the
+                                    // two sibling triggers in this same handler (`loaded.` and `error.`)
+                                    // — and popinLoad is the CONTENT loader, so a JSON response need not
+                                    // involve a form at all.
+                                    triggerEvent(gina, $el, 'success.' + id, result);
 
                                 }
 
