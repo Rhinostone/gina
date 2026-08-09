@@ -2683,3 +2683,71 @@ describe('34 - #B315: the popin `success` event actually fires (no free `$forms`
             'the pre-fix `$forms[0]` dispatch must NOT survive in dist — a stale dist here means the rebuild was skipped');
     });
 });
+
+describe('35 - #B300: the always-false id-backfill guards stay deleted', function () {
+
+    /** Comment-stripped view (same helper shape as §34's). Load-bearing here, not
+     *  hygiene: each #B300 deletion leaves a comment quoting the removed condition
+     *  VERBATIM so a future reader does not restore it — so a pin asserting on RAW
+     *  source matches my own explanation, can never reach 0, and is a control that
+     *  cannot fail. That exact reading cost two invalid measurement passes when the
+     *  fix was made. */
+    function activeSource35(text) {
+        return text.split('\n').filter(function (l) {
+            var t = l.trim();
+            return t.indexOf('//') !== 0 && t.indexOf('*') !== 0 && t.indexOf('/*') !== 0;
+        }).join('\n');
+    }
+
+    /** Region between a unique start landmark and the first end landmark AFTER it.
+     *  Neither site is a `function name(...)` declaration — both are function
+     *  EXPRESSIONS assigned to a var — so §34's declaration walker does not apply,
+     *  and `var register = function (...)` is not even unique as a raw string: the
+     *  file repeats it in its own `} // EO var register = ...` closing marker. */
+    function region35(src, startRe, endNeedle, label) {
+        var m = src.match(startRe);
+        if (!m) throw new Error('start landmark not found: ' + label);
+        var from = src.indexOf(m[0]);
+        var to = src.indexOf(endNeedle, from + m[0].length);
+        if (to < 0) throw new Error('end landmark not found: ' + label);
+        return activeSource35(src.slice(from, to));
+    }
+
+    it('bindOpen\'s document click proxy does not stamp an id on the clicked element', function () {
+        var region = region35(
+            getPopinSrc(),
+            /evt = 'click';\/\/ click proxy/,
+            'gina.popinIsBinded = false',
+            'document click proxy'
+        );
+
+        // CONTROL first — proves the region is the right one and non-empty. Without
+        // it, a mis-anchored (empty) region would pass both negatives vacuously.
+        assert.ok(/\/\^popin\\\.close\\\.\/\.test\(event\.target\.id\)/.test(region),
+            'control: the click proxy must still test the popin.close. prefix — if this fails the region is mis-anchored and the negatives below prove nothing');
+
+        assert.equal(/typeof\(event\.target\.id\) == 'undefined'/.test(region), false,
+            'the always-false id guard must stay deleted: an element\'s `id` IDL attribute always exists (defaults to ""), so the body never ran');
+        assert.equal(/event\.target\.setAttribute\('id', evt/.test(region), false,
+            'the id-stamping body must stay deleted — and must NOT be "repaired" by correcting the operand: `evt` is the literal "click" here, so a live body would stamp id="click.<n>" onto EVERY id-less element clicked anywhere in the document, matching neither prefix tested below it');
+    });
+
+    it('register()\'s close branch does not rewrite event.target.id', function () {
+        var region = region35(
+            getPopinSrc(),
+            /^[ \t]*var register = function \(type, evt, \$element\) \{/m,
+            '// EO var register',
+            'register() close branch'
+        );
+
+        // CONTROL — the #B299/#B301 fix reads currentTarget; its presence proves the
+        // region actually spans the close branch.
+        assert.ok(/event\.currentTarget\.id/.test(region),
+            'control: the close branch must still read event.currentTarget.id (#B299/#B301) — if this fails the region is mis-anchored');
+
+        assert.equal(/typeof\(event\.target\.id\) == 'undefined'/.test(region), false,
+            'the always-false id guard must stay deleted');
+        assert.equal(/event\.target\.setAttribute\('id', evt/.test(region), false,
+            'the id-rewrite body must stay deleted — and must NOT be "repaired": it would set the clicked node\'s id to `evt + "." + _nextId()`, breaking the invariant the #B299/#B301 note depends on (the $close teardown sweep finds this listener via `gina.events[eId] == eId`, i.e. element id === event name) and leaking the listener');
+    });
+});
