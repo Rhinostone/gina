@@ -99,8 +99,8 @@ bundle_dist_pattern='^framework/v[^/]+/core/asset/plugin/dist/vendor/gina/(js|cs
 # bundle-freshness.yml still rebuilds + diffs the full vendor/gina/ tree
 # (including inspector/) on push, so Inspector drift is caught there.
 #
-# Documentation (*.md) under the bundled-source trees (e.g. popin/doc/*.md) is
-# never an AMD module: build.json's path map references zero .md files and no
+# Documentation (*.md) under the bundled-source trees is never an AMD module:
+# build.json's path map references zero .md files and no
 # .md content reaches dist/vendor/gina/js/gina*. A doc-only edit can therefore
 # never satisfy this gate (there is nothing to rebuild), so exclude *.md to
 # avoid a permanently-unsatisfiable false positive.
