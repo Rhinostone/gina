@@ -44,6 +44,18 @@
  *     #B320 (frames arriving at the local listener) is covered by
  *     logger-mq-speaker-local-dial.test.js.
  *
+ * ⚠️ #B323 changed WHEN the deadline reaches its verdict, and the §01 pins now
+ * guard that shape. The guard used to read `client.connecting` straight from
+ * the TIMERS phase, which precedes POLL — so on a boot that blocked the loop
+ * past the deadline it read `true` on a connection the kernel had already
+ * established, and destroyed a live speaker. The body now re-checks from a
+ * `setImmediate` (CHECK phase, after poll), so a completed connect survives and
+ * a genuinely pending one still dies on schedule. 01.3 keeps its full weight —
+ * `connecting` remains the thing acted on — and 01.6 became end-anchored
+ * because the added nesting outgrew its fixed window. The RECONNECT half of
+ * #B323, and the blocked-boot delivery arm that discriminates the fix, live in
+ * logger-mq-speaker-resilience.test.js.
+ *
  * Two layers, per the convention of the #B276 file next to this one:
  *   (a) source-inspection — the deadline exists in LIVE code (comment lines are
  *       stripped first: the positive-existence-pin trap in architecture/jsdoc.md
@@ -153,8 +165,18 @@ describe('01 - mq speaker: a stalled connect is bounded', function() {
     });
 
     it('01.6 - the timeout is overridable, with a bounded default', function() {
+        // END-ANCHORED slice, not a fixed window. #B323 wrapped the deadline
+        // body in a `setImmediate` (the phase-correct verify), which pushed the
+        // `}, opt.mqConnectTimeout || 2000);` tail past a 400-char window and
+        // failed this pin on correct code — the fixed-window brittleness
+        // architecture/jsdoc.md documents, whose prescribed remedy is exactly
+        // this: anchor on the arm's own closing `connectDeadline.unref();` so
+        // the pin is independent of how large the body grows.
         var idx  = code.indexOf('var connectDeadline = setTimeout(');
-        var body = code.slice(idx, idx + 400);
+        var end  = code.indexOf('connectDeadline.unref();', idx);
+        assert.ok(idx > -1,       'expected the connect deadline');
+        assert.ok(end  > idx,     'expected the deadline arm to be closed by its unref');
+        var body = code.slice(idx, end);
         assert.match(body, /opt\.mqConnectTimeout \|\| \d+/,
             'the window should be tunable for a slow link, with a default');
     });
