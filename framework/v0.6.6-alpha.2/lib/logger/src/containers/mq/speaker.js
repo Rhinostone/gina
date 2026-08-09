@@ -93,18 +93,28 @@ function MQSpeaker(opt, loggers, cb) {
      * from outliving its host.
      *
      * @inner
-     * @param {object} opt - Logger options; `mqPort`/`hostV4`/`bindHost` are read here.
+     * @param {object} opt - Logger options; `mqPort`/`bindHost` are read here
+     *  (`hostV4` is deliberately NOT — see the #B320 note at the dial).
      * @param {function} [cb] - Called `(false, client)` on connect, `(err)` on error.
      * @returns {object} The connected (unref'd) net.Socket.
      *
      * @example
-     * startMQSpeaker({ mqPort: 8125, hostV4: '127.0.0.1' }, function (err, client) { });
+     * startMQSpeaker({ mqPort: 8125, bindHost: '127.0.0.1' }, function (err, client) { });
      */
     function startMQSpeaker(opt, cb) {
         var port = opt.mqPort || 8125;// jshint ignore:line
-        // #B160 — the MQ listener binds `bind_host` (loopback by default):
-        // dial it when host_v4 is one of this machine's own addresses.
-        var host = netLocality.resolveDialHost(opt.hostV4 || '127.0.0.1', opt.bindHost);// jshint ignore:line
+        // #B320 — the speaker's listener is CO-LOCATED BY CONSTRUCTION (started
+        // by this install's `bin/cli`), so `host_v4` is not an input of this
+        // dial at all: it is advertisement state, and on a shared or stale
+        // `~/.gina` it can name ANOTHER machine — #B160's remote-unchanged rule
+        // then shipped every log frame there while the connect read healthy.
+        // Dial what the local daemon binds instead. The env tier mirrors the
+        // GINA_HOMEDIR ladder above (and the bind side's own precedence,
+        // init.js #B161): process.env is load-bearing for the early-call
+        // window in which this container is constructed.
+        var _envBindHost = (typeof getEnvVar === 'function' && getEnvVar('GINA_BIND_HOST'))
+            || process.env.GINA_BIND_HOST || null;
+        var host = netLocality.resolveLocalDialHost(_envBindHost || opt.bindHost);// jshint ignore:line
         var clientOptions = {
             host    : host,
             port    : port,

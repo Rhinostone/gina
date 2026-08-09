@@ -168,7 +168,53 @@ var resolveDialHost = function(hostV4, bindHost, interfaces) {
     return '127.0.0.1';
 };
 
+/**
+ * Resolves the dial target for a client whose server is CO-LOCATED BY
+ * CONSTRUCTION — the MQ speaker and the MQ file container, whose listener is
+ * started by the same install's daemon (`bin/cli`). `host_v4` is deliberately
+ * NOT an input: it is self-describing advertisement state ("the address
+ * EXTERNAL clients use to reach this machine"), never a dial target for an
+ * intra-host transport. #B320 — on a `~/.gina` shared across hosts (or after
+ * a stale address is left behind), `host_v4` can name ANOTHER machine, and
+ * `resolveDialHost`'s remote-unchanged rule then ships every log frame to
+ * that machine while the local connection story reads healthy.
+ *
+ * Rules, in order:
+ *  1. `bindHost` is a concrete, non-wildcard address of THIS machine → dial
+ *     it (required when the daemon binds a specific non-loopback interface,
+ *     where loopback would be refused).
+ *  2. Anything else → `127.0.0.1`. A wildcard bind includes loopback; a
+ *     FOREIGN or unverifiable `bindHost` (shared/stale state again) refuses
+ *     to leave the host — a loud local ECONNREFUSED beats silently
+ *     delivering logs to another machine.
+ *
+ * @param {string} bindHost - The daemon's `bind_host`, when known
+ * @param {object} [interfaces] - `os.networkInterfaces()`-shaped map; used by
+ *  tests for determinism. Defaults to the live `os.networkInterfaces()`.
+ * @returns {string} The host to dial
+ *
+ * @example
+ *  resolveLocalDialHost('0.0.0.0');       // '127.0.0.1' (wildcard bind)
+ *  resolveLocalDialHost(undefined);       // '127.0.0.1' (default bind)
+ *  resolveLocalDialHost('192.168.1.20');  // '192.168.1.20' when local,
+ *                                         // '127.0.0.1' when not
+ */
+var resolveLocalDialHost = function(bindHost, interfaces) {
+    if ( typeof(bindHost) !== 'string' || bindHost === '' ) {
+        return '127.0.0.1';
+    }
+    var b = normalizeHost(bindHost);
+    if ( isWildcard(b) ) {
+        return '127.0.0.1';
+    }
+    if ( !isLocalAddress(b, interfaces) ) {
+        return '127.0.0.1';
+    }
+    return bindHost;
+};
+
 module.exports = {
-    isLocalAddress  : isLocalAddress,
-    resolveDialHost : resolveDialHost
+    isLocalAddress       : isLocalAddress,
+    resolveDialHost      : resolveDialHost,
+    resolveLocalDialHost : resolveLocalDialHost
 };

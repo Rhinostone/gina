@@ -186,11 +186,15 @@ function FileContainer(opt, loggers) {
     function onPayload(opt, isResuming) {
         // console.debug('mqFile options: ', JSON.stringify(opt, null, 2));
         var port = opt.mqPort || getEnvVar('GINA_MQ_PORT') || 8125;// jshint ignore:line
-        // #B160 — the MQ listener binds `bind_host` (loopback by default):
-        // dial it when host_v4 is one of this machine's own addresses.
-        var host = netLocality.resolveDialHost(
-            opt.hostV4 || getEnvVar('GINA_HOST_V4') || '127.0.0.1',
-            opt.bindHost || getEnvVar('GINA_BIND_HOST')
+        // #B320 — like the MQ speaker, this container's listener is co-located
+        // by construction, so `host_v4` (advertisement state — foreign on a
+        // shared or stale `~/.gina`, incl. the value the `gina#bundle-logging`
+        // event carries) is not an input of the dial. Dial what the local
+        // daemon binds; env first, matching the bind side's own precedence
+        // (init.js #B161) and covering the early-call construction window.
+        var host = netLocality.resolveLocalDialHost(
+            ((typeof getEnvVar === 'function' && getEnvVar('GINA_BIND_HOST')) || process.env.GINA_BIND_HOST || null)
+            || opt.bindHost
         );// jshint ignore:line
         var clientOptions = {
             host    : host,

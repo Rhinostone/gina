@@ -28,6 +28,22 @@
  * account: it can only fire while something ELSE is holding the loop open, which
  * during a stalled dial is exactly the connect request it exists to cancel.
  *
+ * ⚠️ #B320 changed what settings can make the speaker dial. host_v4 (and a
+ * foreign bind_host) are no longer inputs of the dial — the speaker resolves
+ * through resolveLocalDialHost, so a settings file naming an unreachable
+ * foreign host now yields an instant LOCAL refusal instead of a pending
+ * connect. Consequences for this file:
+ *   - the §01 pins keep their full weight: the deadline stays in the shipped
+ *     source as defense-in-depth (the pending-connect state would need a
+ *     currently-assigned local address that swallows SYNs — exotic, but the
+ *     guard is already paid for);
+ *   - §02 can no longer steer the shipped speaker into a pending connect via
+ *     settings, so it now locks the #B320 exit guarantee instead: a child
+ *     whose settings name a FOREIGN host in BOTH keys must still exit
+ *     promptly, because the dial never leaves the host. The DELIVERY side of
+ *     #B320 (frames arriving at the local listener) is covered by
+ *     logger-mq-speaker-local-dial.test.js.
+ *
  * Two layers, per the convention of the #B276 file next to this one:
  *   (a) source-inspection — the deadline exists in LIVE code (comment lines are
  *       stripped first: the positive-existence-pin trap in architecture/jsdoc.md
@@ -161,10 +177,12 @@ describe('02 - mq speaker: an unreachable MQ host does not outlive its process',
         home = fs.mkdtempSync(path.join(os.tmpdir(), 'gina-b318-'));
         fs.mkdirSync(path.join(home, shortVersion), { recursive: true });
 
-        // No listener is created on purpose. `host_v4` names an address that
-        // answers nothing — the state #B276's refused-connection reasoning does
-        // not reach. bind_host stays loopback so the #B160 dial-host resolution
-        // does not rewrite our unreachable target to 127.0.0.1.
+        // No listener is created on purpose. BOTH keys name the unreachable
+        // address: post-#B320 the speaker consults only the bind side, and a
+        // foreign bind must be refused locally — so this settings file is the
+        // poisoned shared-home shape, and the child's prompt exit proves the
+        // dial never left the host. (Pre-#B320 this same file steered the
+        // speaker into the pending-connect state the §01 deadline bounds.)
         fs.writeFileSync(
             path.join(home, shortVersion, 'settings.json'),
             JSON.stringify({ mq_port: 8125, host_v4: UNREACHABLE_HOST, bind_host: UNREACHABLE_HOST })
@@ -209,12 +227,12 @@ describe('02 - mq speaker: an unreachable MQ host does not outlive its process',
             + 'this harness cannot detect a hang and 02.2 proves nothing');
     });
 
-    it('02.2 - a child whose speaker dialed an unreachable host exits on its own', function() {
+    it('02.2 - a child whose settings name a FOREIGN host exits on its own (#B320 dials locally)', function() {
         var r = run(scriptPlain);
         assert.equal(r.signal, null,
-            'the pending connect kept the event loop alive (signal=' + r.signal + ') — '
-            + 'unref() covers the socket handle but not the TCPConnectWrap request, '
-            + 'so speaker.js must bound the dial');
+            'the child did not exit on its own (signal=' + r.signal + ') — either the '
+            + '#B320 local dial regressed (a foreign host was dialled and the pending '
+            + 'connect held the loop) or the #B318 deadline no longer bounds a stall');
         assert.equal(r.status, 0, 'expected a clean exit, got status ' + r.status);
     });
 
