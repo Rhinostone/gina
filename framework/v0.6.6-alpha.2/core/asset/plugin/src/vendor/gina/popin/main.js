@@ -1369,10 +1369,12 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge'
                     return false;
                 }
 
-                if ( typeof(event.target.id) == 'undefined' ) {
-                    event.target.setAttribute('id', evt +'.'+ _nextId() );
-                    event.target.id = event.target.getAttribute('id')
-                }
+                // #B300: an id-stamping block used to sit here, gated on
+                // `typeof(event.target.id) == 'undefined'`. An element's `id` IDL attribute
+                // always exists (it defaults to ''), so the gate was never true and the block
+                // never ran. Removed rather than "corrected": making it run would stamp
+                // `click.<n>` — this proxy's own `evt` — onto EVERY id-less element clicked
+                // anywhere in the document, an id matching neither prefix tested below.
 
                 if ( /^popin\.close\./.test(event.target.id) ) {
                     cancelEvent(event);
@@ -1488,10 +1490,14 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge'
                         //console.debug('This is an action ', event.target);
                     }*/ else { // close
 
-                        if ( typeof(event.target.id) == 'undefined' ) {
-                            event.target.setAttribute('id', evt +'.'+ _nextId() );
-                            event.target.id = event.target.getAttribute('id')
-                        }
+                        // #B300: an id-stamping block used to sit here, gated on
+                        // `typeof(event.target.id) == 'undefined'` — never true, since an
+                        // element's `id` IDL attribute always exists (defaulting to ''), so it
+                        // never ran. Removed rather than "corrected": making it run would
+                        // rewrite the clicked node's id to `evt + '.' + _nextId()`, which is
+                        // exactly what the note below forbids — the `$close` teardown sweep
+                        // finds this listener via `gina.events[eId] == eId`, i.e. it depends on
+                        // the element id and the event name being the SAME string.
 
                         // #B299/#B301: reaching this branch ALREADY proves the element is a
                         // `.gina-popin-close` — register('close', …) has a single call site, fed
@@ -1775,13 +1781,15 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge'
                 i = 0; len = $forms.length;
                 for(; i < len; ++i) {
 
-                    if ( !$forms[i]['id'] || typeof($forms[i]) != 'string' ) {
-                        _id = $forms[i].getAttribute('id') || 'form.' + _nextId();
-                        $forms[i].setAttribute('id', _id);// just in case
-                        $forms[i]['id'] = _id
-                    } else {
-                        _id = $forms[i]['id']
-                    }
+                    // #B300: this was gated on
+                    // `!$forms[i]['id'] || typeof($forms[i]) != 'string'`, whose second clause
+                    // tested the form ELEMENT rather than its id — always true for an object —
+                    // so the guard was always true and its `else` (`_id = $forms[i]['id']`)
+                    // unreachable. Behaviour is unchanged by removing it: for a form that
+                    // already carries an id, `getAttribute('id')` returns that same id.
+                    _id = $forms[i].getAttribute('id') || 'form.' + _nextId();
+                    $forms[i].setAttribute('id', _id);// just in case
+                    $forms[i]['id'] = _id
 
                     //console.debug('pushing ', _id, $forms[i]['id'], typeof($forms[i]['id']), $forms[i].getAttribute('id'));
                     if ($popin['$forms'].indexOf(_id) < 0)
