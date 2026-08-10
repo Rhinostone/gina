@@ -98,6 +98,12 @@ function Lib() {
         // like JobStore/SessionStore (no instance/singleton state to protect from
         // eviction). No connector ships an implementation yet — demand-gated.
         AuditStore      : _require('./audit-store'),
+        // #STO1 — connector-backed storage metadata-store factory (lib/storage
+        // `start({stores})`). Stateless dispatcher invoked ONCE at boot from
+        // gna.js; _require like JobStore/AuditStore (no instance/singleton state
+        // to protect from eviction). No connector ships an implementation yet —
+        // demand-gated, the audit-store shipping order.
+        StorageStore    : _require('./storage-store'),
         SwigFilters     : _require('./swig-filters'),
         Cache           : require('./cache'),    // #B32-residual — plain require (leaf class held at gen-0 via server.isaac.js:35; Cache._events is a Collection). See Collection note above.
         RenderCache     : require('./render-cache'), // #B32-residual — plain require (server-only render-cache strategy dispatcher; wraps lib/cache and is held at gen-0 in server.isaac.js + the render delegates). See Cache above.
@@ -304,6 +310,14 @@ function Lib() {
         // accepted session AFTER lib.wsSession.accept (so ws-session stays
         // controller-free). Pure factory (no module-scope state), so _require is safe.
         wsQuery         : _require('./ws-query'),
+        // #STO1 — pluggable object storage (adapter x strategy). PLAIN require,
+        // NOT _require: the module holds the built drivers and their open SQLite
+        // metadata handles at module scope. refreshCore() re-runs Lib() on every
+        // dev-mode HTTP request, and _require would delete + re-require the
+        // module, discarding the drivers and leaking a file handle per request —
+        // the same reason job / State / audit are plain requires. Plain require =
+        // cache hit = the singleton survives.
+        storage         : require('./storage'),
     };
 
     /**

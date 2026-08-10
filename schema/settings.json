@@ -397,6 +397,63 @@
         }
       }
     },
+    "storage": {
+      "type": "object",
+      "description": "Pluggable object storage (#STO1) — an adapter (where bytes live) crossed with a strategy (how keys are laid out), behind one callback-shaped contract. Reached from application code as gina.storage() / gina.storage('<name>'). Keys are OPAQUE: store the key a put() returns, never parse or compose one. Boot config — changes need a bundle restart, and every shape here is linted UNCONDITIONALLY, because unlike a cache a storage layer has no safe degraded mode: a driver that cannot build would leave put() writing nowhere. Slice 0 does not touch the upload path; self.store() keeps its own route.",
+      "additionalProperties": false,
+      "properties": {
+        "default": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Name of the driver returned by a no-argument gina.storage(). Must name an entry in `drivers` — a default pointing at a driver that does not exist refuses the boot rather than failing at the first put(). Omit it and every call must name its driver explicitly."
+        },
+        "drivers": {
+          "type": "object",
+          "description": "Storage drivers, keyed by name. Nested under their own key (rather than sitting directly under `storage`) so a driver may legitimately be called \"default\", and so future block-level options never reserve a driver name — the same shape `upload.groups` uses.",
+          "additionalProperties": false,
+          "patternProperties": {
+            "^[A-Za-z][A-Za-z0-9._-]*$": {
+              "type": "object",
+              "description": "One storage driver. Unknown keys are ignored with a boot warning naming them, because a silently-dropped key reads as configured behaviour that never happens.",
+              "additionalProperties": false,
+              "required": ["adapter", "strategy", "root"],
+              "properties": {
+                "adapter": {
+                  "type": "string",
+                  "enum": [
+                    "local"
+                  ],
+                  "description": "Where the bytes live. `local` = the local filesystem under `root`. An s3 adapter would carry its client as a PROJECT-side dependency, never a framework one — the same policy every database connector follows."
+                },
+                "strategy": {
+                  "type": "string",
+                  "enum": [
+                    "sharded"
+                  ],
+                  "description": "How keys are laid out. `sharded` = YYYY/MM/DD/<ulid><ext>, which keeps directories small enough to list and — because a ULID sorts by creation time — keeps entries within a day ordered. `cas` (content-addressed, with refcounts) and `stream` (large sequential media, resumable) are designed but NOT implemented: configuring one is a clean boot refusal naming it as deferred, never a silent fallback."
+                },
+                "root": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Absolute directory holding this driver's objects. MUST be absolute — a relative root would resolve against the process cwd, which depends on how the bundle was launched. MUST NOT sit inside any bundle's web-served tree (its publicPath, or any content.statics target): objects there would be directly fetchable without passing any authorization, and so would the driver's own metadata database, which lives at <root>/.meta.db. Both conditions refuse the boot."
+                },
+                "maxObjectSize": {
+                  "type": "string",
+                  "description": "Per-object byte ceiling, as a UNIT-SUFFIXED string (\"50MB\", \"512KB\", \"1.5GB\"). A bare number is refused with a boot warning and the default applies — deliberately stricter than settings.upload, where a bare number means megabytes for back-compat. There is no house meaning to inherit: `upload` already reads a bare number as a count (maxFields) in one key and as megabytes (maxFieldsSize) in another, so this key refuses to guess. Defense in depth: no per-file cap exists upstream today, only whole-request caps.",
+                  "default": "100MB"
+                },
+                "store": {
+                  "type": ["string", "null"],
+                  "minLength": 1,
+                  "description": "Connector-backed metadata store: names a connectors.json entry whose .connector supplies core/connectors/<connector>/lib/storage-store.js. Omit it (the default) and metadata goes to an embedded SQLite file at <root>/.meta.db, which is documented SINGLE-PROCESS per root — SQLite locking on a shared network filesystem is a known-broken story, so two bundles or replicas sharing one root need a connector-backed store instead. No connector ships an implementation yet (demand-gated, the audit-store shipping order), so setting this today is a clean boot refusal rather than a silent fallback to the embedded file.",
+                  "default": null
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "response": {
       "type": "object",
       "description": "HTTP response header overrides, typically used for CORS.",

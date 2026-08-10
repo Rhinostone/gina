@@ -1564,6 +1564,105 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
                                     console.warn('[render-cache] config validation skipped: ' + (rcErr.message || rcErr));
                                 }
 
+                                // #STO1 — pluggable object storage. Validate the bundle's
+                                // `storage` block, build any connector-backed metadata
+                                // stores, then install the drivers before the first
+                                // request. FATAL (#B57 shape) on an unbuildable config:
+                                // unlike a cache, a storage layer has no safe degraded
+                                // mode — a driver that cannot build would leave put()
+                                // writing nowhere, and a root inside a web-served tree
+                                // would publish every stored object, and the metadata
+                                // database beside them, to anonymous callers.
+                                //
+                                // NOTE this band runs inside server.on('started'), i.e.
+                                // AFTER listen() — so a refusal here exits on an
+                                // already-bound port, exactly as the #AI6 and #RC4 blocks
+                                // above do. A pre-listen refusal means moving the lint
+                                // into core/server.js init() (where the audit trail does
+                                // it); kept here for slice 0 so the feature touches one
+                                // core file instead of two.
+                                try {
+                                    var _stoAll      = config.getInstance();
+                                    var _stoSettings = null;
+                                    try {
+                                        _stoSettings = _stoAll[gna.core.startingApp][env].content.settings.storage;
+                                    } catch (stoConfErr) { _stoSettings = null; }
+
+                                    if ( _stoSettings ) {
+                                        // Web-served roots, INJECTED into the validator so
+                                        // lib/storage stays free of gina core (its
+                                        // import-boundary test enforces that). BOTH
+                                        // surfaces count: a bundle's publicPath, and any
+                                        // content.statics target — a statics mapping can
+                                        // point anywhere on disk, so checking publicPath
+                                        // alone would leave a hole.
+                                        var _stoServed = [];
+                                        try {
+                                            for (var _stoB in _stoAll) {
+                                                var _stoBc = _stoAll[_stoB] && _stoAll[_stoB][env];
+                                                if ( !_stoBc ) { continue; }
+                                                if ( typeof(_stoBc.publicPath) == 'string' && _stoBc.publicPath && !/\$\{/.test(_stoBc.publicPath) ) {
+                                                    _stoServed.push(_stoBc.publicPath);
+                                                }
+                                                var _stoStatics = _stoBc.content && _stoBc.content.statics;
+                                                for (var _stoU in _stoStatics) {
+                                                    if ( typeof(_stoStatics[_stoU]) == 'string' && _stoStatics[_stoU] && !/\$\{/.test(_stoStatics[_stoU]) ) {
+                                                        _stoServed.push(_stoStatics[_stoU]);
+                                                    }
+                                                }
+                                            }
+                                        } catch (stoServedErr) {
+                                            console.warn('[storage] could not enumerate every web-served root — the served-root check is degraded for this boot: ' + (stoServedErr.message || stoServedErr));
+                                        }
+
+                                        var _stoCheck = lib.storage.validateConfig(_stoSettings, { servedRoots: _stoServed });
+                                        for (var _stoW = 0; _stoW < _stoCheck.warnings.length; _stoW++) {
+                                            console.warn('[storage] ' + _stoCheck.warnings[_stoW]);
+                                        }
+                                        if (_stoCheck.fatal) {
+                                            var _stoFatalMsg = '[storage] invalid storage configuration — aborting boot: ' + _stoCheck.fatal;
+                                            console.emerg(_stoFatalMsg);
+                                            // boot-exit-flush: process.exit() truncates async stdio on a pipe.
+                                            try { fs.writeSync(2, _stoFatalMsg + '\n'); } catch (_e) {}
+                                            process.exit(1);
+                                        }
+
+                                        if (_stoCheck.driverCount > 0) {
+                                            var _stoDrivers = _stoSettings.drivers;
+                                            var _stoStores  = {};
+                                            for (var _stoN in _stoDrivers) {
+                                                if ( typeof(_stoDrivers[_stoN].store) == 'string' && _stoDrivers[_stoN].store.length > 0 ) {
+                                                    try {
+                                                        _stoStores[_stoN] = lib.StorageStore(_stoDrivers[_stoN].store);
+                                                    } catch (stoStoreErr) {
+                                                        var _stoStoreMsg = '[storage] driver `' + _stoN + '` names store `' + _stoDrivers[_stoN].store + '`, which could not be built — aborting boot: ' + (stoStoreErr.message || stoStoreErr);
+                                                        console.emerg(_stoStoreMsg + '\n' + (stoStoreErr.stack || ''));
+                                                        try { fs.writeSync(2, _stoStoreMsg + '\n'); } catch (_e) {}
+                                                        process.exit(1);
+                                                    }
+                                                }
+                                            }
+                                            try {
+                                                if ( lib.storage.start({ drivers: _stoDrivers, default: _stoSettings.default, stores: _stoStores }) ) {
+                                                    // console.info, NOT debug — the shipped
+                                                    // default log level filters debug, and an
+                                                    // operator needs to see which roots went live.
+                                                    console.info('[storage] ' + _stoCheck.driverCount + ' driver(s) ready' + ( _stoSettings.default ? ' (default: ' + _stoSettings.default + ')' : '' ));
+                                                } else {
+                                                    console.warn('[storage] drivers were already installed — this boot wiring was ignored');
+                                                }
+                                            } catch (stoStartErr) {
+                                                var _stoStartMsg = '[storage] drivers could not be built — aborting boot: ' + (stoStartErr.message || stoStartErr);
+                                                console.emerg(_stoStartMsg + '\n' + (stoStartErr.stack || ''));
+                                                try { fs.writeSync(2, _stoStartMsg + '\n'); } catch (_e) {}
+                                                process.exit(1);
+                                            }
+                                        }
+                                    }
+                                } catch (stoErr) {
+                                    console.warn('[storage] config validation skipped: ' + (stoErr.message || stoErr));
+                                }
+
                                 // #CE1 — `server.transientErrors` boot-time shape check
                                 // (warn-only, NEVER fatal: the opt-in governs how a
                                 // transient datastore error RENDERS — a bad value must
@@ -2272,6 +2371,33 @@ gna.getModelEntity = getModelEntity;
  *   });
  */
 gna.registerBusyProbe = lib.releaseWatch.registerBusyProbe;
+
+/**
+ * #STO1 — get a configured object-storage driver.
+ *
+ * The producer surface for server-GENERATED files (rendered PDFs, exports,
+ * archives): anything that is not an inbound upload. The upload path keeps its
+ * own `self.store()` route for now.
+ *
+ * Assigned UNCONDITIONALLY, so a bundle with no `storage` block gets a named
+ * error naming the fix instead of `gna.storage is not a function` — and so the
+ * declaration is a plain function rather than one the caller must narrow.
+ *
+ * @param {string} [name] - Driver name; omitted returns the `storage.default` driver.
+ * @returns {object} The driver (`put` / `get` / `stat` / `release` / `resolve` / `capabilities`).
+ * @throws {Error} When storage is not configured, when no default is declared and `name`
+ *                 was omitted, or when `name` is not a configured driver.
+ * @example
+ *   gna.storage().put(pdfStream, { originalName: 'invoice.pdf' }, function (err, res) {
+ *       if (err) { return next(err); }
+ *       invoice.storageKey = res.key;   // opaque — store it, never parse it
+ *   });
+ * @example
+ *   gina.storage('archives');  // a named driver
+ */
+gna.storage = function(name) {
+    return lib.storage.get(name);
+};
 
 // ── JSON helper (framework/v*/helpers/json/src/main.js) ──────────────────
 
