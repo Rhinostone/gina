@@ -151,6 +151,46 @@
     /** @constant {Object} Keys whose children are recursively flattened into PROPERTIES */
     var VIEW_FLATTEN = { html: 1, properties: 1 };
 
+    /**
+     * @constant {string} Prefix marking framework-internal transport keys.
+     *
+     * `controller.render-json.js` embeds `__ginaQueries` / `__ginaFlow` at the
+     * ROOT of a JSON body so a calling bundle can merge an upstream bundle's
+     * query log and timeline (dev-gated there — no production leak). They are
+     * transport, not application data, and the Query and Flow tabs already
+     * render them first-class, so the Data tab hides them on every surface it
+     * reads the payload from. #B340
+     */
+    var INTERNAL_KEY_PREFIX = '__gina';
+
+    /**
+     * Shallow-copy a data payload without its framework-internal transport keys.
+     *
+     * Root level only: {@link INTERNAL_KEY_PREFIX} keys are produced at the root
+     * of the JSON body, so a NESTED key carrying the prefix is application data
+     * and is deliberately left alone. Arrays and non-objects pass through by
+     * reference — a root payload is a plain object, and copying arrays would
+     * change how the tree renders them.
+     *
+     * @inner
+     * @param   {*} obj - Data payload; only plain objects are filtered
+     * @returns {*} Filtered shallow copy, or `obj` unchanged when not a plain object
+     * @example
+     * stripInternalKeys({ status: 200, __ginaFlow: [] }); // → { status: 200 }
+     * stripInternalKeys({ a: { __ginaX: 1 } });           // → { a: { __ginaX: 1 } } (nested kept)
+     * stripInternalKeys([1, 2]);                          // → [1, 2] (unchanged, same ref)
+     */
+    function stripInternalKeys(obj) {
+        if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj;
+        var out  = {};
+        var keys = Object.keys(obj);
+        for (var i = 0; i < keys.length; i++) {
+            if (keys[i].indexOf(INTERNAL_KEY_PREFIX) === 0) continue;
+            out[keys[i]] = obj[keys[i]];
+        }
+        return out;
+    }
+
     // ── State ──────────────────────────────────────────────────────────────
     /** @type {?Window|string} Data source — `Window` (opener), `'localStorage'`, or `null` */
     var source  = null;
@@ -1960,8 +2000,12 @@
 
         switch (name) {
             case 'data':
-                var dataObj = hasXhr ? u['data-xhr'] : u.data;
-                var ginaObj = hasXhr ? (g['data-xhr'] || g.data) : g.data;
+                // #B340 — strip at the source resolution point so every Data
+                // surface agrees: tree, root scalars, size badge and search all
+                // read from `dataObj`. `ginaObj` is stripped in step so the diff
+                // overlay does not report the hidden keys as removed.
+                var dataObj = stripInternalKeys(hasXhr ? u['data-xhr'] : u.data);
+                var ginaObj = stripInternalKeys(hasXhr ? (g['data-xhr'] || g.data) : g.data);
                 var q = getDataSearchQuery();
                 if (q && dataObj && typeof dataObj === 'object') {
                     // Try exact dot-path resolve first
@@ -2242,7 +2286,7 @@
         if (!ginaData) { treeEl.innerHTML = '<span class="bm-hint">No data to display</span>'; return; }
         var src = (_revealActive && _revealedData) ? _revealedData : ginaData;
         var u = src.user || {};
-        var data = u['data-xhr'] || u.data;
+        var data = stripInternalKeys(u['data-xhr'] || u.data); // #B340
         treeEl.innerHTML = '<pre class="bm-raw-view">' + escHtml(JSON.stringify(data, null, 2)) + '</pre>';
     }
 
@@ -3574,7 +3618,7 @@
         if (!ginaData || !ginaData.user) return;
         var src = (_revealActive && _revealedData) ? _revealedData : ginaData;
         var u = src.user || {};
-        var dataObj = u['data-xhr'] || u.data;
+        var dataObj = stripInternalKeys(u['data-xhr'] || u.data); // #B340
         if (!dataObj || typeof dataObj !== 'object') return;
 
         var keys = Object.keys(dataObj).sort();
@@ -3602,7 +3646,7 @@
         if (!ginaData || !ginaData.user) return;
         var src = (_revealActive && _revealedData) ? _revealedData : ginaData;
         var u = src.user || {};
-        var dataObj = u['data-xhr'] || u.data;
+        var dataObj = stripInternalKeys(u['data-xhr'] || u.data); // #B340
         var checks = qsa('#bm-dl-checks input:checked');
         var result = {};
         for (var i = 0; i < checks.length; i++) {

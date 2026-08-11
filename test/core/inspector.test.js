@@ -10419,3 +10419,122 @@ describe('89 - footer memory gauge: the unfilled track is visible in both themes
     });
 
 });
+
+
+// ── 90 — Data tab hides framework-internal __gina* transport keys (#B340) ────
+
+describe('90 - Data tab hides framework-internal __gina* keys (#B340)', function() {
+
+    var _b340;
+    function getJs() {
+        return _b340 || (_b340 = fs.readFileSync(path.join(BM_DIR, 'inspector.js'), 'utf8'));
+    }
+
+    /**
+     * Extract a function declaration by brace-walking from its opening `{` to
+     * the matching `}`. Deliberately NOT a fixed-width slice: jsdoc.md records
+     * that shape breaking three times when source above the target grows.
+     */
+    function extractFn(src, name) {
+        var start = src.indexOf('function ' + name + '(');
+        assert.ok(start > -1, 'expected `function ' + name + '(` in inspector.js');
+        var depth = 0, end = -1;
+        for (var j = src.indexOf('{', start); j < src.length; j++) {
+            if (src[j] === '{') depth++;
+            else if (src[j] === '}') { depth--; if (depth === 0) { end = j + 1; break; } }
+        }
+        assert.ok(end > -1, 'unbalanced braces while walking ' + name);
+        return src.substring(start, end);
+    }
+
+    /** Rebuild stripInternalKeys in isolation, with its one dependency. */
+    function loadStrip() {
+        var src = getJs();
+        var m = /var INTERNAL_KEY_PREFIX\s*=\s*'([^']+)'/.exec(src);
+        assert.ok(m, 'expected an INTERNAL_KEY_PREFIX declaration');
+        return new Function(
+            'var INTERNAL_KEY_PREFIX = ' + JSON.stringify(m[1]) + ';'
+            + extractFn(src, 'stripInternalKeys')
+            + ' return stripInternalKeys;'
+        )();
+    }
+
+    function payload() {
+        return {
+            operation:     'update',
+            status:        200,
+            __ginaFlow:    [{ label: 'route-match' }],
+            __ginaQueries: [{ statement: 'SELECT 1' }],
+            company:       { id: 7 },
+            session:       { uid: 'abc' }
+        };
+    }
+
+    it('declares the __gina prefix as a named constant', function() {
+        assert.match(getJs(), /var INTERNAL_KEY_PREFIX\s*=\s*'__gina'/);
+    });
+
+    it('strips root-level __ginaFlow and __ginaQueries', function() {
+        var out = loadStrip()(payload());
+        assert.strictEqual(typeof out.__ginaFlow, 'undefined');
+        assert.strictEqual(typeof out.__ginaQueries, 'undefined');
+    });
+
+    it('control: the UNSTRIPPED payload does carry both keys', function() {
+        // Guards against a vacuous pass — if the fixture ever stopped carrying
+        // the keys, the assertions above would succeed while proving nothing.
+        var raw = payload();
+        assert.ok(Array.isArray(raw.__ginaFlow) && Array.isArray(raw.__ginaQueries));
+    });
+
+    it('preserves every application key, by value', function() {
+        var out = loadStrip()(payload());
+        assert.deepStrictEqual(Object.keys(out).sort(), ['company', 'operation', 'session', 'status']);
+        assert.strictEqual(out.status, 200);
+        assert.strictEqual(out.company.id, 7);
+    });
+
+    it('leaves NESTED __gina* keys alone — root-only, by design', function() {
+        var out = loadStrip()({ company: { __ginaX: 1 }, __ginaFlow: [] });
+        assert.strictEqual(typeof out.__ginaFlow, 'undefined', 'root key must go');
+        assert.strictEqual(out.company.__ginaX, 1, 'nested key is application data and must stay');
+    });
+
+    it('passes arrays, null and scalars through by reference', function() {
+        var strip = loadStrip();
+        var arr = [1, 2];
+        assert.strictEqual(strip(arr), arr, 'arrays must not be copied — the tree renders them as arrays');
+        assert.strictEqual(strip(null), null);
+        assert.strictEqual(strip(undefined), undefined);
+        assert.strictEqual(strip(42), 42);
+    });
+
+    it('does not mutate its input', function() {
+        var raw = payload();
+        loadStrip()(raw);
+        assert.ok(Array.isArray(raw.__ginaFlow), 'input must survive untouched');
+    });
+
+    it('wraps every Data-tab source resolution site (5 call sites)', function() {
+        var calls = getJs().match(/stripInternalKeys\(/g) || [];
+        // 1 declaration + 3 @example lines + 5 call sites
+        var declared = (getJs().match(/function stripInternalKeys\(/g) || []).length;
+        assert.strictEqual(declared, 1, 'exactly one declaration expected');
+        assert.ok(calls.length >= 9,
+            'expected the declaration, 3 doc examples and 5 call sites; found ' + calls.length);
+    });
+
+    it('strips on the render path, raw mode, and both download paths', function() {
+        var src = getJs();
+        assert.ok(/var dataObj = stripInternalKeys\(hasXhr/.test(src), 'render path unwrapped');
+        assert.ok(/var data = stripInternalKeys\(u\['data-xhr'\]/.test(src), 'raw mode unwrapped');
+        var dl = src.match(/var dataObj = stripInternalKeys\(u\['data-xhr'\]/g) || [];
+        assert.strictEqual(dl.length, 2, 'both download paths must be wrapped, found ' + dl.length);
+    });
+
+    it('keeps the diff overlay aligned by stripping ginaObj in step', function() {
+        assert.ok(/var ginaObj = stripInternalKeys\(/.test(getJs()),
+            'ginaObj must be stripped too, or the diff reports the hidden keys as removed');
+    });
+
+});
