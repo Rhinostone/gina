@@ -1588,7 +1588,40 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
                                         _stoSettings = _stoAll[gna.core.startingApp][env].content.settings.storage;
                                     } catch (stoConfErr) { _stoSettings = null; }
 
-                                    if ( _stoSettings ) {
+                                    // #STO1 slice 1 — driver-routed upload groups: collect
+                                    // every bundle's `upload.groups.<g>.driver` bindings as
+                                    // NEUTRAL tuples (owner/driver/path) so the storage lint
+                                    // can refuse a dangling reference. The driver set is
+                                    // process-global (built from the starting app's `storage`
+                                    // block), so EVERY bundle's groups validate against that
+                                    // one set. Built BEFORE the `_stoSettings` gate: a
+                                    // binding with NO storage block at all must fatal, not
+                                    // silently no-op.
+                                    var _stoBindings = [];
+                                    try {
+                                        for (var _stoBb in _stoAll) {
+                                            var _stoBup = ( _stoAll[_stoBb] && _stoAll[_stoBb][env]
+                                                && _stoAll[_stoBb][env].content
+                                                && _stoAll[_stoBb][env].content.settings
+                                                && _stoAll[_stoBb][env].content.settings.upload
+                                            ) ? _stoAll[_stoBb][env].content.settings.upload : null;
+                                            if ( !_stoBup || !_stoBup.groups || typeof(_stoBup.groups) != 'object' ) { continue; }
+                                            for (var _stoBg in _stoBup.groups) {
+                                                var _stoBgrp = _stoBup.groups[_stoBg];
+                                                if ( _stoBgrp && typeof(_stoBgrp.driver) == 'string' && _stoBgrp.driver.length > 0 ) {
+                                                    _stoBindings.push({
+                                                        owner  : _stoBb + '/upload.groups/' + _stoBg,
+                                                        driver : _stoBgrp.driver,
+                                                        path   : ( typeof(_stoBgrp.path) == 'string' ) ? _stoBgrp.path : null
+                                                    });
+                                                }
+                                            }
+                                        }
+                                    } catch (stoBindErr) {
+                                        console.warn('[storage] could not enumerate upload-group driver bindings — the binding lint is degraded for this boot: ' + (stoBindErr.message || stoBindErr));
+                                    }
+
+                                    if ( _stoSettings || _stoBindings.length ) {
                                         // Web-served roots, INJECTED into the validator so
                                         // lib/storage stays free of gina core (its
                                         // import-boundary test enforces that). BOTH
@@ -1615,7 +1648,7 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
                                             console.warn('[storage] could not enumerate every web-served root — the served-root check is degraded for this boot: ' + (stoServedErr.message || stoServedErr));
                                         }
 
-                                        var _stoCheck = lib.storage.validateConfig(_stoSettings, { servedRoots: _stoServed });
+                                        var _stoCheck = lib.storage.validateConfig(_stoSettings, { servedRoots: _stoServed, groupBindings: _stoBindings });
                                         for (var _stoW = 0; _stoW < _stoCheck.warnings.length; _stoW++) {
                                             console.warn('[storage] ' + _stoCheck.warnings[_stoW]);
                                         }

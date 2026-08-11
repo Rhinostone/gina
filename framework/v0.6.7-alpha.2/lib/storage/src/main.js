@@ -187,14 +187,21 @@ var _default = null;
  *   - a missing, relative, or `${...}`-unresolved driver `root`;
  *   - a `root` that sits inside a web-served directory (review C6b) — an
  *     object store under the public tree is directly fetchable, and so is the
- *     metadata DB that sits inside it.
+ *     metadata DB that sits inside it;
+ *   - a group binding (#STO1 slice 1) naming a driver that does not exist —
+ *     including ANY binding when no `storage`/`drivers` block is configured:
+ *     a driver-routed upload group is configured behaviour that can otherwise
+ *     never happen.
  *
  * WARN (the driver still builds):
  *   - a `maxObjectSize` that is not a unit-suffixed string — the default cap
  *     applies;
  *   - driver keys the selected strategy does not consume — they are ignored,
  *     and a silently-ignored key reads as configured behaviour that never
- *     happens.
+ *     happens;
+ *   - a binding whose staging `path` sits inside its driver's root — legal to
+ *     combine (`path` is only the parse-time staging dir for a routed group),
+ *     but staging inside the store tree strands files no key references.
  *
  * @memberof module:lib/storage
  * @param {object}   storageBlock          - The `settings.json` `storage` block.
@@ -204,6 +211,13 @@ var _default = null;
  *                                           INJECTED rather than read, per the framework-
  *                                           independence rule. Omitting it disables only the
  *                                           served-root check; every other check is unchanged.
+ * @param {object[]} [context.groupBindings] - Upload-group → driver bindings as NEUTRAL
+ *                                           tuples `{owner, driver, path}` (#STO1 slice 1):
+ *                                           `owner` labels the config site for messages,
+ *                                           `driver` names the required driver, `path` is
+ *                                           the group's staging dir or `null`. The caller
+ *                                           maps its own config shape into these — this
+ *                                           module never reads gina config.
  * @returns {{fatal: ?string, warnings: string[], driverCount: number}} Never throws.
  *
  * @example
@@ -218,7 +232,18 @@ var _default = null;
 function validateConfig(storageBlock, context) {
     var out = { fatal: null, warnings: [], driverCount: 0 };
 
+    // #STO1 slice 1 — upload-group → driver binding tuples, injected by the
+    // caller as NEUTRAL data (owner label / driver name / staging path) so this
+    // module never learns the gina config shape.
+    var bindings = ( context && Array.isArray(context.groupBindings) ) ? context.groupBindings : [];
+
     if ( typeof(storageBlock) == 'undefined' || storageBlock === null ) {
+        if ( bindings.length ) {
+            // a binding without a storage layer is configured behaviour that
+            // can never happen — the same fail-fast class as an unknown adapter
+            out.fatal = '`' + bindings[0].owner + '` names storage driver `' + bindings[0].driver + '`, but there is no `storage` block — a driver-routed upload group cannot work without the storage layer';
+            return out;
+        }
         return out; // not configured — the feature is off, which is not an error
     }
     if ( typeof(storageBlock) != 'object' || Array.isArray(storageBlock) ) {
@@ -228,6 +253,10 @@ function validateConfig(storageBlock, context) {
 
     var drivers = storageBlock.drivers;
     if ( typeof(drivers) == 'undefined' || drivers === null ) {
+        if ( bindings.length ) {
+            out.fatal = '`' + bindings[0].owner + '` names storage driver `' + bindings[0].driver + '`, but `storage` declares no `drivers`';
+            return out;
+        }
         out.warnings.push('`storage` is declared but has no `drivers` — no storage driver will be available');
         return out;
     }
@@ -315,6 +344,29 @@ function validateConfig(storageBlock, context) {
         var extra = Object.keys(d).filter(function (k) { return SHARDED_KEYS.indexOf(k) < 0; });
         if ( extra.length > 0 ) {
             out.warnings.push('driver `' + name + '`: key(s) ' + extra.join(', ') + ' are not used by the `' + d.strategy + '` strategy and are ignored');
+        }
+    }
+
+    // #STO1 slice 1 — validate the injected bindings against the driver map.
+    // A dangling reference is FATAL (a routed group that can never publish).
+    // `path` BESIDE `driver` is legal — for a routed group `path` only sets
+    // the parse-time staging dir — but staging INSIDE the driver's root would
+    // strand files no storage key references, so that earns a warning.
+    for (var b = 0; b < bindings.length; b++) {
+        var binding = bindings[b];
+        if ( !binding || typeof(binding.driver) != 'string' || binding.driver.length === 0 ) { continue; }
+        var bOwner = ( typeof(binding.owner) == 'string' && binding.owner.length ) ? binding.owner : 'an upload group';
+        if ( names.indexOf(binding.driver) < 0 ) {
+            out.fatal = '`' + bOwner + '` names storage driver `' + binding.driver + '`, which is not defined in `storage.drivers` (defined: ' + (names.length ? names.join(', ') : 'none') + ')';
+            return out;
+        }
+        var bRoot = drivers[binding.driver].root;
+        if ( typeof(binding.path) == 'string' && binding.path.length
+            && !/\$\{/.test(binding.path)
+            && typeof(bRoot) == 'string' && bRoot.length
+            && util.confineToBase(binding.path, bRoot) !== null
+        ) {
+            out.warnings.push('`' + bOwner + '`: `path` (' + binding.path + ') sits inside driver `' + binding.driver + '`\'s root — for a driver-routed group `path` is only the parse-time staging dir, and staging inside the store root leaves stray files no storage key references; point it elsewhere');
         }
     }
 

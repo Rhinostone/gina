@@ -3406,12 +3406,24 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
      * Files are published atomically (temp sibling + rename — #B223), so a
      * reader never observes a partially-written file under the final name.
      *
-     * @param {string} target is the upload dir destination
+     * #STO1 (slice 1) — a file whose upload group carries a `driver` key
+     * (`settings.json > upload.groups.<name>.driver`) is published through the
+     * named `settings.storage` driver instead of moving to `target`; its result
+     * entry then carries an OPAQUE `key` (+ `group`, `driver`, and the layer's
+     * on-disk `size`) and NO `filename` — read it back via
+     * `gina.storage(driver)`. Files in groups without a `driver` keep the
+     * historical move path byte-for-byte, and one call may mix both kinds
+     * (result slots stay 1:1 with the input array). `target` may be `null`
+     * ONLY when every file routes to a driver.
+     *
+     * @param {?string} target is the upload dir destination (required when any
+     *   file is NOT driver-routed)
      * @param {array} [files]
      *
      * @callback [cb]
-     *  @param {Error|boolean} error - `false` on success; the real move `Error`
-     *    on failure (`No file to upload` only when there was nothing to store)
+     *  @param {Error|boolean} error - `false` on success; the real move/publish
+     *    `Error` on failure (`No file to upload` only when there was nothing to
+     *    store)
      *  @param {array} files
      *
      * @event
@@ -3427,9 +3439,106 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
      *     }
      *     self.renderJSON({ files: files });
      * });
+     *
+     * @example
+     * // a driver-routed group's entries carry a storage key, not a path
+     * self.store(uploadDir, req.files, function onStored(err, files) {
+     *     if (err) { return self.throwError(500, err); }
+     *     // files[i] = { file, filename, size, type, encoding }        (moved)
+     *     // files[i] = { file, group, driver, key, size, type, encoding } (driver-routed)
+     *     self.renderJSON({ files: files });
+     * });
      * */
     this.store = async function(target, files, cb) {
 
+        // #STO1 — per-group storage-driver routing (slice 1). Group config is
+        // read DIRECTLY off the request's resolved bundle conf (a getConfig()
+        // call would clone the whole settings block per store() call); only the
+        // literal `driver` string is consumed here — every placeholder-bearing
+        // upload key stays boot-side territory.
+        var _uploadGroups = ( local.options
+            && local.options.conf
+            && local.options.conf.content
+            && local.options.conf.content.settings
+            && local.options.conf.content.settings.upload
+            && local.options.conf.content.settings.upload.groups
+        ) ? local.options.conf.content.settings.upload.groups : null;
+
+        /**
+         * Resolve a file record's upload group to its configured storage driver
+         * name, or `null` when the group is not driver-routed.
+         *
+         * A record with no `group` routes as `untagged` — the same default the
+         * multipart gate applies — which also covers caller-synthesized file
+         * lists that never went through the parser.
+         *
+         * @inner
+         * @param {object} fileRecord - A `req.files`-shaped record.
+         * @returns {?string} The driver name, or `null` (historical move path).
+         */
+        var getFileDriverName = function(fileRecord) {
+            var g = ( fileRecord && fileRecord.group ) ? fileRecord.group : 'untagged';
+            if ( _uploadGroups
+                && _uploadGroups[g]
+                && typeof(_uploadGroups[g].driver) == 'string'
+                && _uploadGroups[g].driver.length > 0
+            ) {
+                return _uploadGroups[g].driver;
+            }
+            return null;
+        };
+
+        /**
+         * Publish driver-routed entries through `lib/storage`, sequentially —
+         * mirroring `movefiles`: abort on the FIRST failure, keep
+         * already-published objects, and tolerate a source consumed by the
+         * upload tmp-cleanup timer AFTER a successful publish (ENOENT).
+         *
+         * Each entry's pre-filled result slot receives the layer's opaque `key`
+         * and its on-disk `size` on publish.
+         *
+         * @inner
+         * @param {object[]} entries - `{ record, fileName, driverName, slot }` tuples.
+         * @param {function} done - `done(err)` — `false` once every entry published.
+         * @returns {void}
+         */
+        var putfiles = function(entries, done) {
+            var e = 0;
+            var next = function() {
+                if ( e >= entries.length ) {
+                    return done(false);
+                }
+                var entry  = entries[e];
+                var driver = null;
+                try {
+                    driver = lib.storage.get(entry.driverName);
+                } catch (resolveErr) {
+                    return done(resolveErr);
+                }
+                driver.put(fs.createReadStream(entry.record.path), {
+                    originalName : entry.fileName,
+                    contentType  : entry.record.type
+                }, function (putErr, putRes) {
+                    if (putErr) {
+                        return done(putErr);
+                    }
+                    try {
+                        fs.unlinkSync(entry.record.path);
+                    } catch (unlinkErr) {
+                        // the source vanishing AFTER a successful publish is not
+                        // a failure (e.g. the upload tmp-cleanup timer took it)
+                        if (unlinkErr.code != 'ENOENT') {
+                            return done(unlinkErr);
+                        }
+                    }
+                    entry.slot.key  = putRes.key;
+                    entry.slot.size = putRes.size;
+                    ++e;
+                    next();
+                });
+            };
+            next();
+        };
 
         var start = function(target, files, cb) {
 
@@ -3463,10 +3572,57 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                 }
             } else {
                 // saving files
-                var uploadDir   = new _(target)
+                var uploadDir   = null
                     , list      = []
                     , i         = 0
-                    , folder    = uploadDir.mkdirSync();
+                    , folder    = null;
+
+                // #STO1 — partition FIRST: a driver-routed file never touches
+                // `target`, so the target dir is only required — and only
+                // created — when at least one file stays on the historical
+                // move path.
+                var fileName    = null
+                    , routed    = []
+                    , unrouted  = [];
+                for (var len = files.length; i < len; ++i ){
+
+                    fileName = files[i].filename || files[i].originalFilename
+
+                    var _driverName = getFileDriverName(files[i]);
+                    if ( _driverName ) {
+                        // slot filled now so the result keeps 1:1 index parity
+                        // with `files`; `key`/`size` land on publish
+                        uploadedFiles[i] = {
+                            file        : fileName,
+                            group       : ( files[i].group ) ? files[i].group : 'untagged',
+                            driver      : _driverName,
+                            key         : null,
+                            size        : files[i].size,
+                            type        : files[i].type,
+                            encoding    : files[i].encoding
+                        };
+                        routed.push({ record: files[i], fileName: fileName, driverName: _driverName, slot: uploadedFiles[i] });
+                        continue;
+                    }
+                    unrouted.push({ record: files[i], fileName: fileName, slotIndex: i });
+                }
+
+                if ( unrouted.length && (target == null || target === '') ) {
+                    // #STO1 — an all-routed call may omit the target; a call
+                    // with files on the move path cannot
+                    var _targetErr = new Error('Controller::store — a target directory is required: `'+ unrouted[0].fileName +'` (group `'+ (( unrouted[0].record.group ) ? unrouted[0].record.group : 'untagged') +'`) is not routed to a storage driver');
+                    if (cb) {
+                        cb(_targetErr)
+                    } else {
+                        self.emit('uploaded', _targetErr)
+                    }
+                    return;
+                }
+
+                if ( unrouted.length ) {
+                    uploadDir   = new _(target);
+                    folder      = uploadDir.mkdirSync();
+                }
 
                 if (folder instanceof Error) {
                     if (cb) {
@@ -3476,22 +3632,19 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                     }
                 } else {
                     // files list
-                    var fileName = null;
-                    for (var len = files.length; i < len; ++i ){
+                    for (var u = 0, uLen = unrouted.length; u < uLen; ++u ){
 
-                        fileName = files[i].filename || files[i].originalFilename
-
-                        list[i] = {
-                            source: files[i].path,
-                            target: _(uploadDir.toString() + '/' + fileName)
+                        list[u] = {
+                            source: unrouted[u].record.path,
+                            target: _(uploadDir.toString() + '/' + unrouted[u].fileName)
                         };
 
-                        uploadedFiles[i] = {
-                            file        : fileName,
-                            filename    : list[i].target,
-                            size        : files[i].size,
-                            type        : files[i].type,
-                            encoding    : files[i].encoding
+                        uploadedFiles[unrouted[u].slotIndex] = {
+                            file        : unrouted[u].fileName,
+                            filename    : list[u].target,
+                            size        : unrouted[u].record.size,
+                            type        : unrouted[u].record.type,
+                            encoding    : unrouted[u].record.encoding
                         };
 
                     }
@@ -3509,11 +3662,25 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                                 self.emit('uploaded', _moveErr)
                             }
                         } else {
-                            if (cb) {
-                                cb(false, uploadedFiles)
-                            } else {
-                                self.emit('uploaded', false, uploadedFiles)
-                            }
+                            // #STO1 — then the driver-routed files; abort on the
+                            // first failure, keep already-published objects (the
+                            // mover's partial-success semantics — no rollback)
+                            putfiles(routed, function (putErr) {
+                                if (putErr) {
+                                    var _putErr = ( putErr instanceof Error ) ? putErr : new Error(String(putErr));
+                                    if (cb) {
+                                        cb(_putErr)
+                                    } else {
+                                        self.emit('uploaded', _putErr)
+                                    }
+                                } else {
+                                    if (cb) {
+                                        cb(false, uploadedFiles)
+                                    } else {
+                                        self.emit('uploaded', false, uploadedFiles)
+                                    }
+                                }
+                            })
                         }
                     })
                 }

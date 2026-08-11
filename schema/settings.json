@@ -388,18 +388,75 @@
     },
     "upload": {
       "type": "object",
-      "description": "File upload configuration.",
+      "description": "File upload configuration (multipart/form-data). A file part's Content-Disposition group=\"…\" parameter selects its upload group; a part with no or an empty group resolves to `untagged`, and a group not configured under `groups` is rejected with HTTP 400 before anything touches disk. `additionalProperties` stays true DELIBERATELY: applications may keep their own per-group keys (composed app-side), and this schema documents what the FRAMEWORK reads — a key not listed here has no framework behaviour.",
       "additionalProperties": true,
       "properties": {
-        "maxFieldsSize": {
+        "tmpPath": {
           "type": "string",
-          "description": "Maximum total size of multipart form fields (e.g. \"8MB\", \"50MB\")."
+          "description": "Global parse-time landing directory for uploaded files (supports ${tmpPath}, which resolves to <project>/tmp). Landing-dir fallback chain: uploadDir, then tmpPath, then the OS temp dir."
+        },
+        "uploadDir": {
+          "type": "string",
+          "description": "Alternative global landing directory; wins over tmpPath when both are set."
+        },
+        "maxFieldsSize": {
+          "type": ["string", "number"],
+          "description": "WHOLE-REQUEST size cap, compared against the request Content-Length (HTTP 431 past it). Unit-suffixed string (B/KB/MB/GB); a bare number means MB. 0 or unset disables. Block-level only — a per-group override has no framework behaviour."
+        },
+        "maxFields": {
+          "type": "number",
+          "description": "Per-request FILE-COUNT cap (HTTP 400 past it). 0 or unset disables. Block-level only."
+        },
+        "maxTextFields": {
+          "type": "number",
+          "description": "Maximum multipart TEXT (non-file) fields per request (HTTP 400 past the cap). Default 1000; 0 or below means no limit."
+        },
+        "maxTextFieldSize": {
+          "type": ["string", "number"],
+          "description": "Per text-field size cap (HTTP 400 on a truncated field). Unit-suffixed string; a bare number means MB. Default 1MB; explicit 0 disables."
+        },
+        "autoTmpCleanupTimeout": {
+          "type": ["string", "number", "boolean"],
+          "description": "Arms a per-file deletion timer at parse time for each landed file (e.g. \"30s\", \"10m\", \"1h\", \"500ms\"; a bare number is milliseconds). false, 0 or empty disables it — the shipped default. Block-level only."
+        },
+        "groups": {
+          "type": "object",
+          "description": "Named upload groups — at least one is required to enable uploads. A file is checked against its group's rules at parse time. `untagged` is a NORMAL configured group serving every part that carries no group tag; it obeys its own configuration.",
+          "additionalProperties": {
+            "type": "object",
+            "description": "One upload group. Keys beyond these are ignored by the framework (applications may compose their own app-side).",
+            "additionalProperties": true,
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "Parse-time landing directory for this group's files, overriding the global default (created if missing, crash-guarded). For a driver-routed group this is ONLY the staging dir — the driver owns final placement, and a path inside the driver's root earns a boot warning."
+              },
+              "allowedExtensions": {
+                "type": ["string", "array"],
+                "items": { "type": "string" },
+                "description": "\"*\" accepts every extension; an array (e.g. [\"jpg\",\"png\"]) rejects any other extension with HTTP 400 at parse time."
+              },
+              "isMultipleAllowed": {
+                "type": "boolean",
+                "description": "When explicitly false, a request carrying more than one file for this group is rejected with HTTP 400. OMITTED means multiple files are allowed — the permissive default."
+              },
+              "driver": {
+                "type": "string",
+                "minLength": 1,
+                "description": "#STO1 (slice 1) — route this group's self.store() step through the named settings.storage driver: files publish as opaque storage keys (result entries carry key/group/driver and the layer's on-disk size, no filename) instead of moving to the call's target directory. A driver not defined in storage.drivers refuses the boot. The parse/staging path is unchanged."
+              },
+              "simulateWriteError": {
+                "type": "boolean",
+                "description": "TEST-ONLY fault injector (#B144): every upload tagged with this group fails deterministically with a guarded 500 through the real write-error path, so the crash-guard can be probed on your own upload surface after a pickup. Ignored in production scope; a boot warning names it either way."
+              }
+            }
+          }
         }
       }
     },
     "storage": {
       "type": "object",
-      "description": "Pluggable object storage (#STO1) — an adapter (where bytes live) crossed with a strategy (how keys are laid out), behind one callback-shaped contract. Reached from application code as gina.storage() / gina.storage('<name>'). Keys are OPAQUE: store the key a put() returns, never parse or compose one. Boot config — changes need a bundle restart, and every shape here is linted UNCONDITIONALLY, because unlike a cache a storage layer has no safe degraded mode: a driver that cannot build would leave put() writing nowhere. Slice 0 does not touch the upload path; self.store() keeps its own route.",
+      "description": "Pluggable object storage (#STO1) — an adapter (where bytes live) crossed with a strategy (how keys are laid out), behind one callback-shaped contract. Reached from application code as gina.storage() / gina.storage('<name>'). Keys are OPAQUE: store the key a put() returns, never parse or compose one. Boot config — changes need a bundle restart, and every shape here is linted UNCONDITIONALLY, because unlike a cache a storage layer has no safe degraded mode: a driver that cannot build would leave put() writing nowhere. Since slice 1 an upload group may route its self.store() step through a driver (upload.groups.<name>.driver); the multipart parse/staging path is otherwise untouched.",
       "additionalProperties": false,
       "properties": {
         "default": {
