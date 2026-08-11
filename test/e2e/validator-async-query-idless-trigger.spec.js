@@ -270,6 +270,51 @@ test.describe('#B332/#B333 — id-less trigger + async query rule (live-check of
             'the sibling sync error must be marked too, got: ' + JSON.stringify(errs)).toBe(true);
     });
 
+    test('06 - #B338: a SECOND click on an unchanged value (cached verdict) still delivers the whole verdict', async ({ page }) => {
+        // Click 1 settles over the wire (both errors render — arm 05's scene).
+        // Click 2 hits the engine's same-value CACHE, which used to release
+        // synchronously MID-FIELD-LOOP: the payload composed before `note` was
+        // adjudicated, `note` vanished from the verdict and its rendered error
+        // was CLEARED. The release is a microtask now, so both clicks take the
+        // same post-loop completion shape.
+        const seen  = await installScene(page, '{"isValid":false}', ASYNC_FIRST_RULES);
+        const posts = countPosts(page);
+
+        await gotoFaceAndBoot(page);
+        expect(seen.rulesRewritten, 'rules anchor drifted — scene inconclusive').toBe(true);
+        expect(seen.idStripped, 'button-id anchor drifted — scene inconclusive').toBe(true);
+
+        // capture the verdict keys each dispatch delivers
+        await page.evaluate(() => {
+            window.__verdicts = [];
+            document.getElementById('parent').addEventListener('validate.parent', (e) => {
+                const errs = (e.detail && (e.detail.error || e.detail.fields)) || {};
+                window.__verdicts.push(Object.keys(errs).filter(k => k !== 'count'));
+            }, true);
+        });
+
+        await engageFace(page); // agree valid at fire time -> the wire goes out; note stays empty
+        await page.click('#parent button[type="submit"]');
+        await expect.poll(() => seen.queryAnswered, { timeout: 10000 }).toBeGreaterThan(0);
+        await page.waitForTimeout(1200);
+
+        const wireCallsAfterClick1 = seen.queryCalls;
+        await page.click('#parent button[type="submit"]'); // unchanged value -> cache path
+        await page.waitForTimeout(1200);
+
+        expect(posts.length, 'nothing may send in either click').toBe(0);
+        expect(seen.queryCalls, 'click 2 must answer from the cache — no second wire call').toBe(wireCallsAfterClick1);
+        const state = await page.evaluate(() => ({
+            verdicts: window.__verdicts,
+            noteMsg: (document.getElementById('gina-errormessage-parent-note') || {}).textContent || ''
+        }));
+        const last = state.verdicts[state.verdicts.length - 1] || [];
+        expect(last.indexOf('note') > -1,
+            'the cached-verdict click must still carry the sync-invalid sibling, got: ' + JSON.stringify(state.verdicts)).toBe(true);
+        expect(state.noteMsg.length > 0,
+            'the sibling\'s rendered error must survive the second click').toBe(true);
+    });
+
     test('02 - positive control: a passing query sends EXACTLY once, after the settle', async ({ page }) => {
         const seen  = await installScene(page, '{"isValid":true}');
         const posts = countPosts(page);

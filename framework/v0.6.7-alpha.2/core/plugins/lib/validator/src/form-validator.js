@@ -417,7 +417,22 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
         //  - previous error detected
         if ( !self.isValid() ) {
             console.debug('stopping on errors ...');
-            triggerEvent(gina, this.target, 'asyncCompleted.' + id, self[this['name']]);
+            // #B338 — release ASYNCHRONOUSLY. A synchronous trigger fires the
+            // completion waiter MID-FIELD-LOOP (inside this very field's rule
+            // application), so the pass composed its payload before LATER
+            // fields were adjudicated — a field declared after the query field
+            // vanished from the submit verdict, its rendered error was then
+            // CLEARED by the render pass, and the outcome depended on field
+            // ORDER. A microtask runs once the call stack empties — after the
+            // whole field loop and its terminal block — which is exactly the
+            // shape a real XHR settle already has: one completion timing for
+            // every release path. (`_skipTarget`/`_skipField` are snapshotted:
+            // `this` is not the field object inside the deferred call.)
+            // was: triggerEvent(gina, this.target, 'asyncCompleted.' + id, self[this['name']]);
+            var _skipTarget = this.target, _skipFieldName = this['name'];
+            queueMicrotask(function deferredKnownInvalidRelease() {
+                triggerEvent(gina, _skipTarget, 'asyncCompleted.' + id, self[_skipFieldName]);
+            });
             //return self[this.name];
             return;
         }
@@ -486,7 +501,18 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
             }
             // Do not remove this test
             if ( typeof( gina.events[_evt]) != 'undefined' ) {
-                triggerEvent(gina, this.target, _evt, self[this['name']]);
+                // #B338 — same deferral as the known-invalid release above: a
+                // cached-verdict re-check fires synchronously mid-field-loop,
+                // and the waiter it wakes must not compose the pass verdict
+                // before the remaining fields are adjudicated (measured: the
+                // second click on an unchanged registered value delivered a
+                // payload missing every field declared after the query field,
+                // clearing their rendered errors).
+                // was: triggerEvent(gina, this.target, _evt, self[this['name']]);
+                var _cacheTarget = this.target, _cacheFieldName = this['name'];
+                queueMicrotask(function deferredCachedVerdictRelease() {
+                    triggerEvent(gina, _cacheTarget, _evt, self[_cacheFieldName]);
+                });
             }
 
             return self[this.name];

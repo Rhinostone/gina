@@ -245,6 +245,25 @@ describe('05 - #B337: the completion payload carries the WHOLE pass verdict', fu
     });
 });
 
+describe('06 - #B338: the engine\'s synchronous releases are deferred to a microtask', function () {
+
+    it('06a - the known-invalid skip release is queueMicrotask-deferred', function () {
+        var b = slice(fvSrc, "if ( !self.isValid() ) {", "var testedValue = this.target.dataset", 'skip release block');
+        assert.ok(/queueMicrotask\(function deferredKnownInvalidRelease/.test(b),
+            'the skip release must defer — a sync fire completes the pass mid-field-loop');
+        assert.ok(!/^\s*triggerEvent\(gina, this\.target, 'asyncCompleted\.' \+ id/m.test(b),
+            'an ACTIVE synchronous skip release is back');
+    });
+
+    it('06b - the cached-verdict release is queueMicrotask-deferred', function () {
+        var b = slice(fvSrc, '// Do not remove this test', '//console.debug(\'Did not return !!!\');', 'cache release block');
+        assert.ok(/queueMicrotask\(function deferredCachedVerdictRelease/.test(b),
+            'the cache release must defer — the second-click payload composed mid-loop without it');
+        assert.ok(!/^\s*triggerEvent\(gina, this\.target, _evt/m.test(b),
+            'an ACTIVE synchronous cache release is back');
+    });
+});
+
 describe('04 - dist fidelity (the built bundle carries the fix)', function () {
 
     var distSrc;
