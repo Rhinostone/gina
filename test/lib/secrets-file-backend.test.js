@@ -163,10 +163,11 @@ describe('02 - selectBackend opts out cleanly', function () {
     });
 
     it('reads content.settings, NOT settings', function () {
-        // core/config.js binds `.settings` BEFORE the ${...} substitution pass
-        // and `.content` after it, and substitution returns a new object — so
-        // only the content copy has resolved tokens. Reading the other one
-        // would hand the backend a literal '${homedir}/secrets.env'.
+        // selectBackend reads `content.settings` only, whatever shape it is handed.
+        // It is NOT a claim that `.settings` is unresolved: core/config.js re-points
+        // that alias at the post-substitution copy since #B257, so for a real bundle
+        // config the two are the same object. This arm pins the read TARGET, which
+        // still matters for config-shaped objects assembled by other paths.
         var stale = { settings: { secrets: { file: BASE } }, content: { settings: {} } };
         assert.strictEqual(secrets.selectBackend(stale),
                            secrets.selectBackend({ content: { settings: {} } }),

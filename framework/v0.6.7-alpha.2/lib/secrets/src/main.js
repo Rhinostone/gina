@@ -287,12 +287,19 @@ function getRequiredKeys(config) {
  * backend is returned **unchanged**, so a config that does not opt in behaves
  * exactly as it did before this seam existed.
  *
- * Reads `content.settings` and not `settings`: `core/config.js` binds
- * `conf[bundle][env].settings` *before* the `${…}` substitution pass and
- * `conf[bundle][env].content` *after* it, and the substitution returns a new
- * object rather than mutating in place — so only the `content` copy has its
- * `${homedir}` / `${scope}` tokens resolved. Reading the other one would hand
- * the backend a literal `'${homedir}/secrets.env'` to open.
+ * Reads `content.settings` and not `settings`. For a config built by
+ * `core/config.js::loadBundleConfig` the two are now the same object — since
+ * #B257 the `.settings` alias is re-pointed at the post-substitution copy — so
+ * either would do. `content.settings` stays the canonical read because this
+ * function accepts any config-shaped object, including ones assembled by other
+ * paths, where only `content` is guaranteed to have been through the `${…}`
+ * substitution pass.
+ *
+ * Note the reason is NOT that `.settings` is unsubstituted wholesale (#B273): a
+ * first substitution pass runs earlier still, so `${homedir}` / `${scope}` were
+ * always resolved in both copies. What used to differ was the tokens only the
+ * later pass knows — `${bundlePath}`, `${libPath}`, `${publicPath}`, … — which
+ * is what #B257 closed.
  *
  * @memberof module:lib/secrets
  * @function selectBackend

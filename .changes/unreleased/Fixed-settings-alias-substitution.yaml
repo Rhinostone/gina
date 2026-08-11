@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'getConfig().settings now carries the same substituted values as getConfig().content.settings. A settings value written with a ${bundlePath}, ${libPath}, ${publicPath}, ${handlersPath}, ${mountPath}, ${gina}, ${project}, ${root}, ${source} or ${<name>Port} placeholder used to reach the no-argument getConfig() surface as a literal token, because that alias was bound before the substitution pass and the pass returns a new object rather than rewriting the original one. Placeholders an earlier pass already resolved (${homedir}, ${scope}, ...) and ${secret:...} references were never affected (#B257).'
+time: 2026-08-11T13:54:20+01:00

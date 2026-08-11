@@ -2379,6 +2379,9 @@ function Config(opt, contextResetNeeded) {
             // Expose files['settings'] directly on conf so that getConfig() (no-arg) callers
             // can access it as conf.settings — mirrors how conf.security is set via merge(files, conf)
             // at the top of loadBundleConfig. Previously implicit through an older conf merge path.
+            // NOTE (#B257): this binding is PRE-substitution; it is re-pointed at the resolved
+            // copy after the `whisper()` pass further down — see the re-bind next to
+            // `conf[bundle][env].content = files`.
             conf[bundle][env].settings = files['settings'];
 
             if ( staticsPathObj.existsSync() ) {
@@ -2894,6 +2897,25 @@ function Config(opt, contextResetNeeded) {
         conf[bundle][env].content   = files;
         if ( typeof(conf[bundle][env].content) == 'undefined') {
             conf[bundle][env].content = {}
+        }
+
+        // #B257 — re-point the `.settings` alias at the POST-substitution copy.
+        // `whisper()` above returns a NEW object instead of mutating in place: a plain
+        // object's constructor stringifies to '... [native code] ...', so whisper's
+        // in-place branch is skipped and it falls through to stringify → replace →
+        // JSON.parse. The binding made before that pass therefore keeps the ORIGINAL
+        // object, in which every token this pass is the first to know stays literal —
+        // ${bundlePath}, ${libPath}, ${publicPath}, ${handlersPath}, ${mountPath},
+        // ${gina}, ${project}, ${root}, ${source}, ${<name>Port}, ${templates}/${html}/
+        // ${theme} and the scalar harvest, none of which exist in the earlier pass's
+        // dictionary. (Tokens that pass already resolved — ${homedir}, ${scope}, … —
+        // were fine; ${secret:…} is fine too, since secrets.resolve() walks in place.)
+        // Re-binding here makes getConfig().settings and getConfig().content.settings
+        // the same resolved object.
+        // Guarded: whisper hands back the raw string when its JSON.parse throws, and
+        // overwriting a populated `.settings` with undefined would be a regression.
+        if ( typeof(files['settings']) != 'undefined' ) {
+            conf[bundle][env].settings = files['settings'];
         }
 
 
