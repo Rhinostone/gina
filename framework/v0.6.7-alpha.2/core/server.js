@@ -5553,7 +5553,10 @@ function Server(options) {
                             // drains slower.
                             fileRecord = {
                                 name: fieldname,
-                                group: group,
+                                // #B140 — the RESOLVED group (`untagged` when the part
+                                // carried no group tag), never the raw disposition
+                                // param: this record is what `self.store()` routes on
+                                group: fileGroup,
                                 originalFilename: filename,
                                 encoding: encoding,
                                 type: mimetype,
