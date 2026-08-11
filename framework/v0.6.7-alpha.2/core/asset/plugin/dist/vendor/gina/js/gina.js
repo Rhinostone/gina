@@ -20684,7 +20684,23 @@ function ValidatorPlugin(rules, data, formId, culture) {
                                     removeListener(gina, event.target, _asyncEvt);
 
                                     cb._data = d['toData']();
-                                    cb._errors = d['getErrors'](field);
+                                    // #B337 — the completion payload must carry the WHOLE pass's
+                                    // verdict, not the query field's slice. On a full-form submit
+                                    // pass `d` holds every field, and scoping to `field` starved
+                                    // the `validate.<id>` handler of every OTHER invalid field:
+                                    // their errors were adjudicated (DOM attributes set) but never
+                                    // rendered on the submit path, and the #A11Y1 first-invalid
+                                    // focus loop could only ever land on the query field. It also
+                                    // inverted the query-passes-but-another-field-invalid scene:
+                                    // the scoped set read empty, the early-return branch was
+                                    // skipped, and the validated dispatch went out with NO errors
+                                    // at all. On a single-element live-check pass `d` holds one
+                                    // field, so the no-arg call is byte-equivalent there — the
+                                    // touched-field-only DISPLAY below keeps its `field` argument,
+                                    // which is the live-check contract (§4c). The validated
+                                    // listener's own fallback was already `d.getErrors()` no-arg.
+                                    // was: cb._errors = d['getErrors'](field);
+                                    cb._errors = d['getErrors']();
                                     // console.debug('query callbakc triggered ', cb._errors, '\nisValidating: ', instance.$forms[formId].isValidating);
                                     // update instance form errors
                                     if ( cb._errors && cb._errors.count() > 0) {

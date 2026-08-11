@@ -222,6 +222,29 @@ describe('03 - form-validator.js: the query in-flight gate (#B332)', function ()
     });
 });
 
+describe('05 - #B337: the completion payload carries the WHOLE pass verdict', function () {
+
+    it('05a - cb._errors is the no-arg getErrors() (full field-keyed map)', function () {
+        var b = slice(mainSrc, "cb._data = d['toData']();", "if ( cb._errors && cb._errors.count() > 0)", 'completion payload block');
+        assert.ok(/^\s*cb\._errors = d\['getErrors'\]\(\);/m.test(b),
+            'the completion payload must be the no-arg getErrors() — full-form verdict');
+        assert.ok(!/^\s*cb\._errors = d\['getErrors'\]\(field\);/m.test(b),
+            'the field-scoped payload is back — every other invalid field would vanish from the submit path');
+    });
+
+    it('05b - the touched-field display call KEEPS its field argument (the live-check contract)', function () {
+        var b = slice(mainSrc, "cb._data = d['toData']();", "triggerEvent(gina, $formOrElement, 'validated.' + formId, cb);", 'completion display block');
+        assert.ok(b.indexOf('handleErrorsDisplay($currentForm, cb._errors, cb._data, field)') > -1,
+            'the in-branch render must stay scoped to the touched field — widening it would break §4c');
+    });
+
+    it('05c - engine contract: getErrors() no-arg iterates every field, same shape as the scoped call', function () {
+        var g = slice(fvSrc, "self['getErrors'] = function(fieldName) {", 'return errors\n    }', 'getErrors body');
+        assert.ok(/typeof\(fieldName\) != 'undefined'/.test(g), 'scoped branch present');
+        assert.ok(/for \(var field in self\)/.test(g), 'no-arg branch iterates all fields');
+    });
+});
+
 describe('04 - dist fidelity (the built bundle carries the fix)', function () {
 
     var distSrc;
