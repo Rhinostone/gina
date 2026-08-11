@@ -452,6 +452,20 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
 
             }
         } else if (testedValue === this.value) {
+            // #B332 — while an XHR for this very (field, value) is still IN FLIGHT the
+            // cache below has no verdict yet, and the immediate release at the end of
+            // this branch woke every armed waiter with a verdict-less field object —
+            // the submit pass then completed on its sync-only rules and sent while the
+            // authoritative answer was still on the wire. Do nothing here: the pending
+            // request's settle (processQueryResult / releaseQueryWaiter — both clear
+            // the marker first) triggers `asyncCompleted.<id>` and wakes every waiter
+            // with the real verdict. Marker is set right before xhr.send() below.
+            if (
+                this.target && this.target.dataset
+                && this.target.dataset.ginaFormValidatorQueryPending === this.value
+            ) {
+                return self[this.name];
+            }
             // not resending to backend, but in case of cached errors, re display same error message
             var hasCachedErrors = false;
             if (
@@ -607,6 +621,17 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
 
         var processQueryResult = function(result) {
 
+            // #B332 — this request has settled: release the in-flight marker BEFORE any
+            // processing (a throw below routes to releaseQueryWaiter, which also clears).
+            // Value-guarded so a newer request's marker — a keystroke re-fired the query
+            // while this one was on the wire — is never cleared by a stale settle.
+            if (
+                _this.target && _this.target.dataset
+                && _this.target.dataset.ginaFormValidatorQueryPending === String(_this.value)
+            ) {
+                delete _this.target.dataset.ginaFormValidatorQueryPending;
+            }
+
             // #B87: a boolean checkbox routed through a `query` rule carries a real
             // boolean — `.toLowerCase()` only applies to string values
             _this.value      = local['data'][_this.name] = (_this.value && typeof(_this.value) == 'string') ? _this.value.toLowerCase() : _this.value;
@@ -737,6 +762,17 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
          */
         var releaseQueryWaiter = function(err) {
             console.warn('[ FormValidator ] `query` result handling failed for field `'+ (_this && _this.name) +'`: '+ ( err && err.message || err ));
+            // #B332 — the failed settle still ends this request: clear the in-flight
+            // marker (value-guarded, same as processQueryResult) or the same-value
+            // fast path would treat the field as pending forever.
+            try {
+                if (
+                    _this.target && _this.target.dataset
+                    && _this.target.dataset.ginaFormValidatorQueryPending === String(_this.value)
+                ) {
+                    delete _this.target.dataset.ginaFormValidatorQueryPending;
+                }
+            } catch (ignorePendingClear) {}
             try {
                 var _releaseId = _this.target && (_this.target.id || _this.target.getAttribute('id'));
                 if (_releaseId) {
@@ -876,6 +912,13 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
                 }
             }// xhr.onload = function () {
 
+            // #B332 — mark the (field, value) as in flight BEFORE the wire call: the
+            // same-value fast path above must not immediate-release a verdict-less
+            // field while this request is pending. Cleared at both settle chokepoints
+            // (processQueryResult / releaseQueryWaiter), value-guarded.
+            if ( _this.target && _this.target.dataset ) {
+                _this.target.dataset.ginaFormValidatorQueryPending = _this.value;
+            }
             if (data) {
                 xhr.send( queryData ); // stringyfied
             }  else {

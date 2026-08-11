@@ -152,9 +152,12 @@ describe('#CC2 FACE participation — source pins (four fix sites)', function ()
         assert.ok(acIdx > guardIdx, 'the autocomplete read must sit inside the !isCustomEl guard');
     });
 
-    it('09 - getOwnedElements is UNCHANGED (native single-tag matcher preserved)', function () {
-        // the native collector still matches a single uppercased tag exactly
-        assert.match(mainSrc, /var getOwnedElements = function\(\$form, tag\)[\s\S]{0,400}?\$el\.tagName === tagUpper/,
+    it('09 - getOwnedElements native single-tag matcher preserved', function () {
+        // the native collector still matches a single uppercased tag exactly.
+        // Window widened 400 -> 1200 for the #B333 node-identity dedup comment
+        // block between the function head and the matcher (approved 2026-08-11);
+        // the matcher itself is what this pin asserts, and it is unchanged.
+        assert.match(mainSrc, /var getOwnedElements = function\(\$form, tag\)[\s\S]{0,1200}?\$el\.tagName === tagUpper/,
             'getOwnedElements native matcher was altered');
     });
 

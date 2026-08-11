@@ -42,18 +42,20 @@ before(function () {
 // MUST mirror the inline definition in main.js. The source-inspection block
 // at the end of this file pins the source-side shape so this stays honest.
 function getOwnedElements($form, tag) {
-    var arr = [], seen = {}, tagUpper = tag.toUpperCase();
+    // #B333 realign (approved 2026-08-11): dedup is by NODE IDENTITY now — the
+    // id-keyed `seen` table let an ID-LESS control enter twice (once from
+    // $form.elements, once from the in-tree sweep). Mirrors main.js exactly.
+    var arr = [], tagUpper = tag.toUpperCase();
     for (var i = 0, len = $form.elements.length; i < len; i++) {
         var $el = $form.elements[i];
         if ($el.tagName === tagUpper) {
             arr.push($el);
-            if ($el.id) seen[$el.id] = true;
         }
     }
     var inTree = $form.getElementsByTagName(tag);
     for (var j = 0, jLen = inTree.length; j < jLen; j++) {
         var $el2 = inTree[j];
-        if ($el2.form === $form && (!$el2.id || !seen[$el2.id])) {
+        if ($el2.form === $form && arr.indexOf($el2) === -1) {
             arr.push($el2);
         }
     }

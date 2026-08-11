@@ -6415,21 +6415,28 @@ function ValidatorPlugin(rules, data, formId, culture) {
         // filter also excludes in-tree descendants whose `form="..."` points at a different
         // form (parent-form contamination guard).
         var getOwnedElements = function($form, tag) {
+            // #B333 — dedup by NODE IDENTITY, not by id. The old `seen` table was
+            // id-keyed, so an ID-LESS control already collected from `$form.elements`
+            // was pushed a second time by the in-tree sweep (`!$el.id` passed the old
+            // condition unconditionally). For an id-less `<button type=submit>` —
+            // gina auto-assigns its id only later, in the submit-binding loop — the
+            // double entry meant `bindSubmitEl` ran twice and every click executed
+            // TWO full validate()+send() cycles. `arr.indexOf($el)` is an identity
+            // test, so the same node can never enter twice regardless of id state.
             var arr  = []
-                , seen = {}
                 , tagUpper = tag.toUpperCase()
             ;
             for (let i = 0, len = $form.elements.length; i < len; i++) {
                 let $el = $form.elements[i];
                 if ($el.tagName === tagUpper) {
                     arr.push($el);
-                    if ($el.id) seen[$el.id] = true;
                 }
             }
             var inTree = $form.getElementsByTagName(tag);
             for (let i = 0, len = inTree.length; i < len; i++) {
                 let $el = inTree[i];
-                if ($el.form === $form && (!$el.id || !seen[$el.id])) {
+                // was: if ($el.form === $form && (!$el.id || !seen[$el.id])) {
+                if ($el.form === $form && arr.indexOf($el) === -1) {
                     arr.push($el);
                 }
             }
@@ -8306,6 +8313,21 @@ function ValidatorPlugin(rules, data, formId, culture) {
                 // start validation
                 cancelEvent(event);
 
+                // #B332 belt — one submit cycle at a time per form. `isSubmitting`
+                // latches below (before validate()) and is released on the XHR settle
+                // AND on the rejected-validation branch (#B192), so a truthy read here
+                // means a full cycle is still between click and settle: refuse the
+                // re-entry (a re-click while a query rule's XHR is in flight, or a
+                // residual duplicate listener on an older bundle) instead of racing
+                // two concurrent cycles against the same form state.
+                var _latchFormId = $target.getAttribute('id');
+                if (
+                    typeof(instance.$forms[_latchFormId]) != 'undefined'
+                    && /^true$/i.test(instance.$forms[_latchFormId].isSubmitting)
+                ) {
+                    return;
+                }
+
                 // getting fields & values
                 var $fields         = {}
                     , fields        = { '_length': 0 }
@@ -8472,7 +8494,20 @@ function ValidatorPlugin(rules, data, formId, culture) {
                 evt = $submit['id'];
             }
 
-            if ( typeof(gina.events[evt]) == 'undefined' || gina.events[evt] != $submit.id ) {
+            // #B333 — the guard used to test `gina.events[evt]` where `evt` is the
+            // BUTTON id (`click.<uuid>`), a key nothing ever writes: `bindSubmitEl`
+            // registers under the NAMESPACED name (`submit.<id>`). The test was
+            // therefore always true and every extra pass over the same button (the
+            // id-less double-collection fixed in `getOwnedElements`, a re-bind path)
+            // stacked one more live listener -> one more full validate()+send() cycle
+            // per click. Test the key that actually gets registered, against the id
+            // the registry stores. (A trigger REPLACED in the DOM keeps the registry
+            // key but loses the expando marker — the #B294 click-time gate re-binds
+            // that case; this guard only has to stop same-node re-binds.)
+            // was:
+            // if ( typeof(gina.events[evt]) == 'undefined' || gina.events[evt] != $submit.id ) {
+            var _submitEvt = ( /^submit\./i.test(evt) ) ? evt : 'submit.'+ evt;
+            if ( typeof(gina.events[_submitEvt]) == 'undefined' || gina.events[_submitEvt] != $submit.id ) {
                 bindSubmitEl(evt, $submit);
             }
 
@@ -9391,6 +9426,14 @@ function ValidatorPlugin(rules, data, formId, culture) {
             , $asyncFieldId     = null
             , asyncEvt          = null
             , asyncCount        = 0
+            // #B332 — fields THIS pass armed an `asyncCompleted.<id>` waiter for.
+            // The arm guard used to consult the global `gina.events` registry, which
+            // cannot tell "this pass already armed it" (legitimate skip — a rules
+            // re-application within one pass) from "a CONCURRENT pass armed it"
+            // (must NOT skip: zeroing `asyncCount` there made this pass complete on
+            // a sync-only verdict and send() fired while the query XHR was in
+            // flight). Pass-local by construction, so only the first case matches.
+            , armedAsyncFields  = {}
         ;
 
 
@@ -9541,15 +9584,42 @@ function ValidatorPlugin(rules, data, formId, culture) {
                             asyncEvt        = 'asyncCompleted.'+ $asyncFieldId;
 
                             var triggeredCount = 0, eventTriggered = false;
-                            if ( typeof(gina.events[asyncEvt]) != 'undefined' ) {
-                                console.debug('event `'+ asyncEvt +'` already added');
-                                asyncCount = 0;
-                                return;
+                            // #B332 — the arm guard is PASS-LOCAL now (see `armedAsyncFields`
+                            // at the declaration block). The old registry test saw only that
+                            // SOME pass had armed the field: when that pass was a concurrent
+                            // one (a duplicate submit listener — #B333, a re-click while the
+                            // query XHR was in flight, a live-check cycle beside a submit),
+                            // this pass zeroed ITS OWN pending-async counter and returned —
+                            // so its terminal block completed on the sync-only verdict, the
+                            // `validate.<id>` valid branch ran, and `send()` fired ~200ms
+                            // BEFORE the query answered (the "email already registered" error
+                            // rendered after the POST had already left). A foreign waiter must
+                            // not starve this pass of its own wake-up: waiters stack per pass
+                            // (each self-detaches on first fire below) and the ENGINE dedups
+                            // the wire via `ginaFormValidatorQueryPending` — no duplicate XHR.
+                            // was:
+                            // if ( typeof(gina.events[asyncEvt]) != 'undefined' ) {
+                            //     console.debug('event `'+ asyncEvt +'` already added');
+                            //     asyncCount = 0;
+                            //     return;
+                            // }
+                            if ( typeof(armedAsyncFields[$asyncFieldId]) != 'undefined' ) {
+                                console.debug('event `'+ asyncEvt +'` already armed by this pass');
+                                continue;
                             }
+                            armedAsyncFields[$asyncFieldId] = true;
                             ++asyncCount;
                             //console.debug('Adding listner '+asyncEvt);
                             addListener(gina, $asyncField, asyncEvt, function onasyncCompleted(event) {
                                 event.preventDefault();
+                                // #B332/#B334 — one settle per waiter. Waiters stack per pass
+                                // now, so each must consume exactly one wake-up and leave the
+                                // node: the registry-only `removeListener` in the completion
+                                // block below carries no fn ref (a DOM no-op — it only deletes
+                                // the `gina.events` key), and a stale un-latched waiter used to
+                                // re-enter on every later settle of the same field, replaying a
+                                // finished pass's completion against a live one.
+                                event.currentTarget.removeEventListener(event.type, onasyncCompleted, false);
 
                                 triggeredCount++;
                                 --asyncCount;
@@ -9624,7 +9694,15 @@ function ValidatorPlugin(rules, data, formId, culture) {
                                         }
 
 
-                                        triggerEvent(gina, $currentForm, 'validated.' + formId, cb);
+                                        // #B334 — dispatch where THIS pass's listener actually
+                                        // sits: $formOrElement (the form on a full-form pass —
+                                        // identical to $currentForm there — but the ELEMENT on
+                                        // a single-element pass, whose listener could never
+                                        // hear a form-dispatched event: bubbling goes up, not
+                                        // down; it still bubbles up THROUGH the form so
+                                        // consumer `on('validated')` bindings keep hearing it).
+                                        // was: triggerEvent(gina, $currentForm, 'validated.' + formId, cb);
+                                        triggerEvent(gina, $formOrElement, 'validated.' + formId, cb);
                                         return;
                                     }
                                 }
@@ -9663,7 +9741,9 @@ function ValidatorPlugin(rules, data, formId, culture) {
                                         handleErrorsDisplay($currentForm, cb._errors, cb._data, field);
                                         updateSubmitTriggerState( $currentForm, isFormValid);
                                     }
-                                    triggerEvent(gina, $currentForm, 'validated.' + formId, cb);
+                                    // #B334 — same retarget as the completion branch above.
+                                    // was: triggerEvent(gina, $currentForm, 'validated.' + formId, cb);
+                                    triggerEvent(gina, $formOrElement, 'validated.' + formId, cb);
                                 }
                                 // just update warning state
                                 else if (/^true$/i.test(instance.$forms[formId].isValidating) && listedFields.length > 1 && listedFields[listedFields.length-1] != field ) {
@@ -10437,9 +10517,32 @@ function ValidatorPlugin(rules, data, formId, culture) {
         }
 
 
-        if (isGFFCtx) {
-            addListener(gina, $formOrElement, evt, function(event) {
+        // #B334 — three defects lived in this one registration:
+        //   (a) it registered for EVERY pass, but a cb-less pass never dispatches
+        //       `validated.<id>` (the terminal block returns the result object
+        //       instead) — its listener was pure accumulation;
+        //   (b) `event.detail` IS the DISPATCHING pass's callback, and the body ran
+        //       it unconditionally — so every stale listener replayed the dispatcher's
+        //       callback once (measured: two listeners -> one dispatch -> two
+        //       `validate.<id>` dispatches -> two send() calls for one click);
+        //   (c) the `removeListener` call in the body carries no fn ref, and
+        //       events.js then only deletes the registry key —
+        //       `removeEventListener(name, undefined)` detaches nothing, so every
+        //       pass's listener stayed on the node for the page's lifetime.
+        // The listener now registers only when a callback exists, consumes ONLY its
+        // own pass's dispatch (detail identity), and detaches itself on consumption
+        // (a mid-dispatch removal also stops a not-yet-run duplicate per DOM spec).
+        // was: if (isGFFCtx) {
+        //          addListener(gina, $formOrElement, evt, function(event) {
+        if ( isGFFCtx && typeof(cb) === 'function' ) {
+            addListener(gina, $formOrElement, evt, function onValidatedOwnPass(event) {
                 event.preventDefault();
+
+                if ( event.detail !== cb ) {
+                    // another pass's completion — not ours to consume
+                    return;
+                }
+                event.currentTarget.removeEventListener(event.type, onValidatedOwnPass, false);
 
                 if (!hasBeenValidated) {
                     hasBeenValidated    = true;
