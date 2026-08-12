@@ -8058,7 +8058,18 @@ function ValidatorPlugin(rules, data, formId, culture) {
                     // (which is what the operable-trigger design was bought for).
                     // Checked on the CLICKED element, not `$formInstance.submitTrigger`:
                     // a form may carry several submit buttons and only one registers.
-                    if ( /^submit\./i.test(_evt) && isTriggerDisabled($el) ) {
+                    //
+                    // #B346 carve-out — when the gate's ONLY reason is a `query` verdict
+                    // still on the wire (framework gated mark alone, no committed errors,
+                    // in-flight marker present), the reveal has NOTHING to reveal and the
+                    // refusal ate the click silently. Let that one state through: the
+                    // normal submit cycle latches, arms its waiter, and the pending
+                    // settle completes it (#B342) — valid ⇒ send, invalid ⇒ render +
+                    // release. Every other refusal shape is unchanged.
+                    if (
+                        /^submit\./i.test(_evt) && isTriggerDisabled($el)
+                        && !isAwaitingQueryVerdictOnly($el, $target, instance.$forms[$form.id] || $form)
+                    ) {
                         cancelEvent(event);
                         revealValidationState( instance.$forms[$form.id] || $form );
                         return false;
@@ -8894,6 +8905,122 @@ function ValidatorPlugin(rules, data, formId, culture) {
             ||
             $el.getAttribute('data-gina-form-submit-gated') == 'true'
         );
+    };
+
+    /**
+     * isAwaitingQueryVerdictOnly
+     *
+     * Tells whether a refused submit trigger is refused ONLY because a `query`
+     * verdict is still pending — the one state the #B246 gate misclassifies.
+     *
+     * #B346 — `updateSubmitTriggerState()` gates on a boolean (`isFormValid`)
+     * over a state that is really tri-valued: valid, invalid with COMMITTED
+     * errors, and VERDICT-PENDING (an async `query` XHR on the wire, so the
+     * form has no verdict yet). The #B246 refuse-and-reveal answer is only
+     * coherent for the middle state — with nothing committed there is nothing
+     * to reveal, and the click died silently (measured: wake path fully
+     * healthy, `isSubmitting` never latched, zero sends inside the round-trip
+     * window; the window scales with query LATENCY, not typing speed). When
+     * this returns true the proxy lets the click run the normal submit cycle:
+     * the pass latches and arms its waiter, the engine's in-flight branch
+     * declines to duplicate the XHR, the pending settle wakes the waiter, and
+     * the latched completion dispatches (#B342) — the exact flow live-check-off
+     * forms already run.
+     *
+     * Deliberately NARROW — every arm fails toward the shipped refusal:
+     * - the framework's own gated mark must be the ONLY refusal reason; an
+     *   AUTHORED `aria-disabled="true"` or a (non-IDL) native `disabled`
+     *   keeps refusing (#B312 — an author's claim is enforced, not
+     *   second-guessed);
+     * - any COMMITTED error keeps refusing — refuse-and-reveal stays coherent
+     *   when there is something to reveal. Committed means a SETTLED field's:
+     *   the pending field itself may carry a provisional `query` entry staged
+     *   by the same-value fast path while its verdict is on the wire, and a
+     *   provisional entry is not a verdict (measured — counting it refused
+     *   every window this helper exists to recognize);
+     * - an owned field must actually carry the in-flight query marker
+     *   (`data-gina-form-validator-query-pending`, set by the engine right
+     *   before `xhr.send()` and cleared at both settle chokepoints), looked up
+     *   inside the form AND among form-reassociated controls (`form="<id>"`).
+     *
+     * @param {object} $el - the clicked submit trigger (DOMObject)
+     * @param {object} $formDom - the owning form element (DOMObject)
+     * @param {object} [$formRecord] - the validator record (`instance.$forms[id]`)
+     *
+     * @returns {boolean} true when the only thing standing between the click
+     *  and a verdict is a query still on the wire
+     *
+     * @example
+     * // gated trigger, clean form, uniqueness query in flight -> the click waits for the verdict
+     * isAwaitingQueryVerdictOnly($button, $form, instance.$forms[$form.id]); // true
+     *
+     * @example
+     * // same window but a sibling field has a committed error -> shipped refuse-and-reveal stands
+     * isAwaitingQueryVerdictOnly($button, $form, instance.$forms[$form.id]); // false
+     *
+     * @inner
+     */
+    var isAwaitingQueryVerdictOnly = function($el, $formDom, $formRecord) {
+        if ( !$el || typeof($el.getAttribute) != 'function' || !$formDom || typeof($formDom.querySelector) != 'function' ) {
+            return false;
+        }
+        // the gated mark must be present, and be the ONLY firing arm
+        if ( $el.getAttribute('data-gina-form-submit-gated') != 'true' ) {
+            return false;
+        }
+        var nativeCounts = !('disabled' in $el);
+        if (
+            nativeCounts
+            && $el.getAttribute('disabled') != null && $el.getAttribute('disabled') != 'false'
+            ||
+            $el.getAttribute('aria-disabled') == 'true'
+        ) {
+            return false;
+        }
+        // a query verdict must actually be pending for an owned field — inside
+        // the form, or a form-reassociated control (`form="<id>"`)
+        var pendingSel = '[data-gina-form-validator-query-pending]';
+        var _id = $formDom.id || ( typeof($formDom.getAttribute) == 'function' ? $formDom.getAttribute('id') : null );
+        var _safeId = ( _id && typeof(CSS) != 'undefined' && typeof(CSS.escape) == 'function' ) ? CSS.escape(_id) : _id;
+        var hasPending = (
+            $formDom.querySelector(pendingSel)
+            || _safeId && document.querySelector('[form="'+ _safeId +'"]'+ pendingSel)
+        ) ? true : false;
+        if (!hasPending) {
+            return false;
+        }
+        // COMMITTED errors keep the shipped refuse-and-reveal — but committed
+        // means a SETTLED field's verdict. Measured (#B346): while a query is
+        // on the wire, the same-value fast path stages a provisional `query`
+        // entry under the PENDING field's own key in `$formRecord.errors`, so
+        // a bare `errors.count() > 0` reads the very state this helper exists
+        // to recognize as "no verdict yet" and refuses every window. Count an
+        // erroring field only when it is NOT itself awaiting the verdict.
+        if ( $formRecord && typeof($formRecord.errors) != 'undefined' && $formRecord.errors ) {
+            for (var _fieldName in $formRecord.errors) {
+                if ( !$formRecord.errors.hasOwnProperty(_fieldName) ) {
+                    continue;
+                }
+                var _fieldErrors = $formRecord.errors[_fieldName];
+                var _isErroring = ( _fieldErrors && typeof(_fieldErrors.count) == 'function' )
+                    ? _fieldErrors.count() > 0
+                    : !!_fieldErrors;
+                if (!_isErroring) {
+                    continue;
+                }
+                var _safeName = ( typeof(CSS) != 'undefined' && typeof(CSS.escape) == 'function' ) ? CSS.escape(_fieldName) : _fieldName;
+                var _erroringIsPending = (
+                    $formDom.querySelector('[name="'+ _safeName +'"]'+ pendingSel)
+                    || _safeId && document.querySelector('[form="'+ _safeId +'"][name="'+ _safeName +'"]'+ pendingSel)
+                ) ? true : false;
+                if (!_erroringIsPending) {
+                    // a settled field carries a real verdict — there IS
+                    // something to reveal, the shipped refusal stands
+                    return false;
+                }
+            }
+        }
+        return true;
     };
 
     /**

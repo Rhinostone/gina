@@ -353,3 +353,47 @@ describe('07 - #B342: a submit pass\'s async completion always dispatches (the s
             'the latch-gate regex literal must survive minification');
     });
 });
+
+describe('08 - #B346: the click gate lets a pending-verdict-only refusal through', function () {
+    var fs = require('fs');
+    var path = require('path');
+    var assert = require('assert');
+
+    var mainSrc = null, distSrc = null;
+    before(function () {
+        var pkg = require(path.join(__dirname, '..', '..', 'package.json'));
+        var fw  = path.join(__dirname, '..', '..', 'framework', 'v' + pkg.version);
+        mainSrc = fs.readFileSync(path.join(fw, 'core', 'plugins', 'lib', 'validator', 'src', 'main.js'), 'utf8');
+        distSrc = fs.readFileSync(path.join(fw, 'core', 'asset', 'plugin', 'dist', 'vendor', 'gina', 'js', 'gina.min.js'), 'utf8');
+    });
+
+    it('08a - the #B246 refusal is narrowed by the pending-verdict helper, negated at the gate', function () {
+        var i = mainSrc.indexOf("isTriggerDisabled($el)\n                        && !isAwaitingQueryVerdictOnly($el, $target, instance.$forms[$form.id] || $form)");
+        assert.ok(i > -1,
+            'the click gate must consult !isAwaitingQueryVerdictOnly(...) alongside isTriggerDisabled');
+    });
+
+    it('08b - the helper narrows on SETTLED-field errors: a pending field\'s provisional entry must not refuse', function () {
+        var i = mainSrc.indexOf('var isAwaitingQueryVerdictOnly = function($el, $formDom, $formRecord)');
+        assert.ok(i > -1, 'helper definition missing');
+        var body = mainSrc.slice(i, mainSrc.indexOf('};', i));
+        // the gated mark must be required, the authored arms must keep refusing,
+        // and the errors walk must cross-check each erroring field against the
+        // pending marker rather than counting the map bare
+        assert.ok(body.indexOf("getAttribute('data-gina-form-submit-gated') != 'true'") > -1,
+            'gated mark must be a precondition');
+        assert.ok(body.indexOf("getAttribute('aria-disabled') == 'true'") > -1,
+            'an authored aria-disabled must keep refusing');
+        assert.ok(body.indexOf('data-gina-form-validator-query-pending') > -1,
+            'the in-flight marker must be consulted');
+        assert.ok(body.indexOf('_erroringIsPending') > -1 && body.indexOf('hasOwnProperty') > -1,
+            'errors must be walked per-field and cross-checked against the pending marker (a bare count() refuses every window — measured)');
+    });
+
+    it('08c - dist fidelity: the pending-marker attribute selector shipped in the built bundle', function () {
+        // Closure SIMPLE preserves string literals; the kebab-case selector is
+        // NEW with #B346 (the engine writes the marker via dataset camelCase)
+        var n = distSrc.split('data-gina-form-validator-query-pending').length - 1;
+        assert.ok(n >= 1, 'the #B346 selector literal must survive minification, got ' + n + ' occurrences');
+    });
+});
