@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'The dev Inspector''s Forms tab rendered the bundle''s whole forms catalog (the walked forms/ directory groups — rules, mocks, validators) as pseudo-form sections above the page''s real forms (#B343). Catalog groups are now demoted into a single collapsed "Bundle catalog" card at the bottom of the tab: page forms keep the prime space, each group stays inspectable inside the card with its fold state preserved, and runtime form state that outlived its DOM form (a closed popin''s form) keeps its own card. When the payload carries no pristine catalog snapshot the tab falls back to the previous per-key rendering, so nothing is ever hidden.'
+time: 2026-08-12T17:50:48+01:00

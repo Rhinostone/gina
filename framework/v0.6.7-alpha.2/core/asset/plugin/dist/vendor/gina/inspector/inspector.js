@@ -1361,11 +1361,17 @@
      * and sent data sub-sections.
      *
      * Forms from the data payload that do not match any DOM form are rendered
-     * separately at the bottom.
+     * separately at the bottom — split in two (#B343): keys also present in
+     * the pristine gina half (`__ginaData.gina.forms` — the server-emitted
+     * bundle catalog built from the bundle's `forms/` directory groups such
+     * as `rules`, `mocks`, `validators`, which the statusbar merge never
+     * writes to) are demoted into one collapsed "Bundle catalog" card; keys
+     * only present in the user half are runtime form state (e.g. a departed
+     * popin form) and keep their own card.
      *
      * @inner
      * @param {Object} formsData - Forms data from `__ginaData.user.forms`
-     * @param {Object} [ginaFormsData] - Gina forms data (for diff overlay)
+     * @param {Object} [ginaFormsData] - Gina forms data (pristine server half; also the diff overlay source)
      * @returns {string} HTML string
      */
     function renderFormsContent(formsData, ginaFormsData) {
@@ -1500,16 +1506,51 @@
             h += '</div></details>';
         }
 
-        // Render forms from data that were NOT matched to a DOM form
+        // Render forms from data that were NOT matched to a DOM form.
+        // Keys also present in the pristine gina half are the server-emitted
+        // bundle catalog (the walked `<bundle>/forms/` groups), not page
+        // forms — collect them for the demoted catalog card below (#B343).
+        // The statusbar merge only ever writes `u.forms[<id>]`, so `g.forms`
+        // stays the untouched server snapshot: presence there is the
+        // discriminator. When `g.forms` is absent every key falls through to
+        // the legacy per-key card, so nothing is ever hidden.
+        var catalogKeys = [];
         for (var dk = 0; dk < formKeys.length; dk++) {
             var dkName = formKeys[dk];
             if (rendered[dkName]) continue;
+            if (Object.prototype.hasOwnProperty.call(ginaFormsData, dkName)) {
+                catalogKeys.push(dkName);
+                continue;
+            }
             h += '<details class="bm-form-card" data-path="form.' + escHtml(dkName) + '">';
             h += '<summary class="bm-form-header">'
                 + escHtml(dkName.toUpperCase())
                 + chevronSvg + '</summary>';
             h += '<div class="bm-form-body">';
             h += renderFormDataSections(formsData[dkName], ginaFormsData[dkName]);
+            h += '</div></details>';
+        }
+
+        // Bundle catalog — whole-bundle definitions, one group per
+        // `<bundle>/forms/` subdirectory, demoted to a single collapsed and
+        // visually muted card at the bottom so page forms keep the prime
+        // space (#B343).
+        if (catalogKeys.length > 0) {
+            h += '<details class="bm-form-card bm-catalog-card" data-path="form.__catalog">';
+            h += '<summary class="bm-form-header bm-catalog-header">BUNDLE CATALOG'
+                + '<span class="bm-catalog-hint">' + escHtml(catalogKeys.join(' · ')) + '</span>'
+                + chevronSvg + '</summary>';
+            h += '<div class="bm-form-body">';
+            for (var ck = 0; ck < catalogKeys.length; ck++) {
+                var ckName = catalogKeys[ck];
+                h += '<details class="bm-form-card bm-catalog-sub" data-path="form.' + escHtml(ckName) + '">';
+                h += '<summary class="bm-form-header">'
+                    + escHtml(ckName.toUpperCase())
+                    + chevronSvg + '</summary>';
+                h += '<div class="bm-form-body">';
+                h += renderFormDataSections(formsData[ckName], ginaFormsData[ckName]);
+                h += '</div></details>';
+            }
             h += '</div></details>';
         }
 

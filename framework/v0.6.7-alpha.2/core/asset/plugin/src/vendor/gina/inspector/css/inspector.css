@@ -1362,6 +1362,33 @@ body {
   color: var(--accent);
 }
 
+/* Forms tab — demoted bundle catalog card (#B343): whole-bundle `forms/`
+   groups (rules, mocks, validators, …), collapsed + muted so page forms keep
+   the prime space. Placed after the base .bm-form-card rules on purpose —
+   the [open] overrides tie on specificity and must win by source order. */
+.bm-catalog-card {
+  margin-top: 14px;
+  background: transparent;
+  border-style: dashed;
+}
+.bm-catalog-card > .bm-form-header {
+  color: var(--text-dim);
+  font-size: 10px;
+}
+.bm-catalog-card[open] {
+  border-color: var(--border);
+}
+.bm-catalog-card[open] > .bm-form-header .bm-form-chevron {
+  fill: var(--text-dim);
+}
+.bm-catalog-card .bm-catalog-hint {
+  font: normal 9px/1.6 var(--sans);
+  text-transform: none;
+  letter-spacing: 0.4px;
+  color: var(--text-dim);
+  opacity: 0.7;
+}
+
 /* ── JSON tree ────────────────────────────────────────────────────────────── */
 .bm-tree-root {
   font: 12px/1.7 var(--font);

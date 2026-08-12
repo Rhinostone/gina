@@ -10538,3 +10538,147 @@ describe('90 - Data tab hides framework-internal __gina* keys (#B340)', function
     });
 
 });
+
+
+// ── 91 — Forms tab: bundle-catalog demotion (#B343) ──────────────────────────
+//
+// The server seeds `__ginaData.user.forms` with the WHOLE bundle forms catalog
+// (controller.js sets `page.forms = conf.content.forms` — the walked
+// `<bundle>/forms/` directory: `rules`, `mocks`, `validators`, open-ended per
+// config.js loadForms()). The Forms tab used to render each catalog group as a
+// pseudo-form card ABOVE the page's real forms. #B343 demotes them into one
+// collapsed, muted "Bundle catalog" card at the bottom.
+//
+// Discriminator under test: a top-level key is catalog iff it is ALSO present
+// in the pristine gina half (`__ginaData.gina.forms`) — the statusbar merge
+// only ever writes `u.forms[<id>]` (statusbar.html), so `g.forms` stays the
+// untouched server snapshot. Keys only in the user half are runtime form state
+// (e.g. a departed popin form) and keep the legacy per-key card. With no gina
+// half at all, EVERY key falls through to the legacy card — nothing is hidden.
+
+describe('91 - Forms tab bundle-catalog demotion (#B343)', function() {
+
+    var SRC_JS   = path.join(FW, 'core/asset/plugin/src/vendor/gina/inspector/js/inspector.js');
+    var SRC_SCSS = path.join(FW, 'core/asset/plugin/src/vendor/gina/inspector/sass/inspector.scss');
+    var SRC_CSS  = path.join(FW, 'core/asset/plugin/src/vendor/gina/inspector/css/inspector.css');
+    var DIST_CSS = path.join(BM_DIR, 'inspector.css');
+
+    var _js91;
+    function getJs91() { return _js91 || (_js91 = fs.readFileSync(path.join(BM_DIR, 'inspector.js'), 'utf8')); }
+
+    // ── source pins (dist copy — Phase 3 writes it verbatim from src) ──────
+    it('classifies unmatched keys via hasOwnProperty against the gina half', function() {
+        assert.ok(getJs91().indexOf('Object.prototype.hasOwnProperty.call(ginaFormsData, dkName)') > -1,
+            'expected the gina-half presence discriminator in renderFormsContent');
+    });
+
+    it('emits the catalog card with its own data-path, title and hint', function() {
+        var src = getJs91();
+        assert.ok(src.indexOf('bm-catalog-card') > -1, 'expected the bm-catalog-card class');
+        assert.ok(src.indexOf('form.__catalog') > -1, 'expected the form.__catalog data-path');
+        assert.ok(src.indexOf('bm-catalog-hint') > -1, 'expected the bm-catalog-hint group listing');
+        assert.ok(src.indexOf('BUNDLE CATALOG') > -1, 'expected the card title literal');
+    });
+
+    // ── behavioral — extract-and-execute the REAL renderer bytes ───────────
+    function extractFn(src, name) {
+        var start = src.indexOf('function ' + name + '(');
+        assert.ok(start > -1, name + ' must exist');
+        var i = src.indexOf('{', start), depth = 0;
+        for (var p = i; p < src.length; p++) {
+            if (src[p] === '{') depth++;
+            else if (src[p] === '}') { depth--; if (depth === 0) return src.slice(start, p + 1); }
+        }
+        assert.fail('unbalanced braces extracting ' + name);
+    }
+
+    function buildRenderer() {
+        var src = getJs91();
+        var body = extractFn(src, 'renderFormsContent') + '\n'
+                 + extractFn(src, 'renderFormDataSections') + '\n'
+                 + 'return renderFormsContent;';
+        // escHtml / renderTree stubs; `source`/`ginaData` stay undefined so
+        // the opener-DOM read is inert (pageForms = []).
+        return new Function('escHtml', 'renderTree', 'source', 'ginaData', body)(
+            function (s) { return String(s); },
+            function (o) { return '<tree>' + JSON.stringify(o) + '</tree>'; }
+        );
+    }
+
+    it('extraction control: the extractor CAN fail (unknown function name)', function() {
+        assert.throws(function () { extractFn(getJs91(), 'noSuchFunction91'); });
+    });
+
+    it('demotes gina-half keys into ONE collapsed catalog card AFTER runtime form cards', function() {
+        var render  = buildRenderer();
+        var catalog = { rules: { login: { isRequired: true } }, mocks: { m: 1 }, validators: { v: 1 } };
+        var user    = {
+            rules: catalog.rules, mocks: catalog.mocks, validators: catalog.validators,
+            'departed-form': { errors: { email: 'is required' } }
+        };
+        var html = render(user, catalog);
+
+        assert.strictEqual((html.match(/bm-catalog-card/g) || []).length, 1,
+            'exactly one catalog card expected');
+        assert.ok(html.indexOf('form.__catalog') > -1, 'catalog card carries its data-path');
+        assert.ok(html.indexOf('rules · mocks · validators') > -1,
+            'hint lists the groups in payload order');
+
+        // the departed runtime form keeps a legacy card OUTSIDE the catalog
+        var departedIdx = html.indexOf('DEPARTED-FORM');
+        var catalogIdx  = html.indexOf('bm-catalog-card');
+        assert.ok(departedIdx > -1, 'departed runtime form must still render');
+        assert.ok(departedIdx < catalogIdx, 'catalog card must come AFTER runtime form cards');
+
+        // groups render inside as sub-cards and KEEP their fold data-paths
+        assert.strictEqual((html.match(/bm-catalog-sub/g) || []).length, 3,
+            'three catalog sub-cards expected');
+        assert.ok(html.indexOf('data-path="form.rules"') > -1, 'rules keeps its fold path');
+        assert.ok(html.indexOf('RULES') > -1 && html.indexOf('MOCKS') > -1
+            && html.indexOf('VALIDATORS') > -1, 'group titles render');
+    });
+
+    it('falls back to legacy per-key cards when the gina half is absent (nothing hidden)', function() {
+        var render = buildRenderer();
+        var html = render({ rules: { r: 1 }, mocks: { m: 1 }, 'departed-form': { errors: {} } }, undefined);
+        assert.strictEqual((html.match(/bm-catalog-card/g) || []).length, 0,
+            'no catalog card without a gina half');
+        assert.strictEqual((html.match(/bm-form-card/g) || []).length, 3,
+            'all three keys keep legacy cards');
+    });
+
+    it('renders the empty state when there is nothing at all', function() {
+        var render = buildRenderer();
+        assert.ok(/No forms/.test(render({}, {})), 'expected an empty-state message');
+    });
+
+    // ── CSS pins — muted catalog styling in scss, src intermediate AND dist ─
+    it('inspector.scss styles the catalog card (dashed + dim header + hint)', function() {
+        var scss = fs.readFileSync(SRC_SCSS, 'utf8');
+        assert.ok(scss.indexOf('.bm-catalog-card') > -1, 'scss must carry .bm-catalog-card');
+        assert.ok(scss.indexOf('border-style: dashed') > -1, 'muted card is dashed');
+        assert.ok(scss.indexOf('.bm-catalog-hint') > -1, 'hint class must be styled');
+    });
+
+    it('compiled CSS carries the catalog selectors in src intermediate and dist', function() {
+        var pair = [fs.readFileSync(SRC_CSS, 'utf8'), fs.readFileSync(DIST_CSS, 'utf8')];
+        pair.forEach(function (c, n) {
+            var label = n === 0 ? 'src css' : 'dist css';
+            assert.ok(c.indexOf('.bm-catalog-card') > -1, label + ' must carry .bm-catalog-card');
+            assert.ok(c.indexOf('.bm-catalog-card[open]') > -1, label + ' must carry the [open] override');
+            assert.ok(c.indexOf('.bm-catalog-hint') > -1, label + ' must carry .bm-catalog-hint');
+        });
+    });
+
+    // ── src ↔ dist identity (Phase 3 copies verbatim) ───────────────────────
+    it('dist inspector.js is byte-identical to src (Phase 3 verbatim copy)', function() {
+        assert.strictEqual(getJs91(), fs.readFileSync(SRC_JS, 'utf8'),
+            'dist inspector.js must equal src — run the plugin build');
+    });
+
+    it('dist inspector.css is byte-identical to the src intermediate', function() {
+        assert.strictEqual(fs.readFileSync(DIST_CSS, 'utf8'), fs.readFileSync(SRC_CSS, 'utf8'),
+            'dist inspector.css must equal src css — run the plugin build');
+    });
+
+});
