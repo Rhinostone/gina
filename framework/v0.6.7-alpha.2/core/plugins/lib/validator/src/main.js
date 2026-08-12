@@ -9723,6 +9723,31 @@ function ValidatorPlugin(rules, data, formId, culture) {
                                     }
                                 }
 
+                                // #B342 — a SUBMIT pass has exactly ONE legitimate completer: this
+                                // waiter (post-#B338 the terminal block runs while asyncCount is
+                                // still > 0, so it can never dispatch for an async pass). On a
+                                // CLEAN pass the errors>0 branch above is skipped, and both
+                                // branches below are conditional — last-field matches only when
+                                // the query field happens to be declared last in the rule set
+                                // (minus `exclude:true` splices), and the live-check branch needs
+                                // `isValidating`, which a submit pass does not set. A clean submit
+                                // whose query field was NOT last exited this block having
+                                // dispatched NOTHING: `cb` starved, `validate.<id>` never fired,
+                                // no send ever left, and the #B332 `isSubmitting` latch stranded —
+                                // gating every later click until reload (measured live on a
+                                // consumer login form: value present, every field clean, click
+                                // swallowed). Pre-arc this hole was MASKED by the very bugs
+                                // #B332/#B333 removed: the duplicate pass's premature sync-only
+                                // completion was the accidental completer. A latched form means
+                                // this completion belongs to the submit cycle (live-check passes
+                                // hard-return while the latch is held), so dispatch it — display
+                                // work belongs to the `validate.<id>` handler's send/reject
+                                // branches, same as the errors>0 dispatch above.
+                                if ( /^true$/i.test(instance.$forms[formId].isSubmitting) ) {
+                                    triggerEvent(gina, $formOrElement, 'validated.' + formId, cb);
+                                    return;
+                                }
+
                                 // is this the last or the only field to be validated ?
                                 var needsGlobalReValidation = false;
                                 if ( listedFields.length == 1 || listedFields[listedFields.length-1] == field) {

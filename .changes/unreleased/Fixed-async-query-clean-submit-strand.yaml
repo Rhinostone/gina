@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'A clean form whose async `query` rule sat on a field declared before the last one could never complete its submit: the async completion dispatched only when the query field was last in the rule set or when live-check was mid-validation, so the submit callback starved, no request ever left, and the form''s re-entry latch stranded — silently swallowing every later click until the page was reloaded. A latched form''s completion now dispatches unconditionally. This hole predates the recent submit-vs-query collision fixes and was masked by them: the duplicate validation pass they removed used to complete such submits prematurely, before the query verdict had arrived.'
+time: 2026-08-12T11:17:50+01:00

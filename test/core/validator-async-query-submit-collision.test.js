@@ -96,10 +96,13 @@ describe('01 - main.js source pins (#B332/#B333/#B334)', function () {
             'the listener must detach itself on consumption');
     });
 
-    it('01e - both async completion dispatches target $formOrElement (the node the listener sits on)', function () {
+    it('01e - all three async completion dispatches target $formOrElement (the node the listener sits on)', function () {
+        // 2 -> 3 on 2026-08-12 (#B342, operator-approved): the submit-latch-gated
+        // clean-path dispatch is the third site, same target/shape as the pair
+        // this pin was written for.
         var active = mainSrc.match(/^\s*triggerEvent\(gina, \$formOrElement, 'validated\.' \+ formId, cb\);/mg) || [];
-        assert.strictEqual(active.length, 2,
-            'expected exactly 2 active $formOrElement-targeted validated dispatches, got ' + active.length);
+        assert.strictEqual(active.length, 3,
+            'expected exactly 3 active $formOrElement-targeted validated dispatches, got ' + active.length);
         var stale = mainSrc.match(/^\s*triggerEvent\(gina, \$currentForm, 'validated\.'/mg) || [];
         assert.strictEqual(stale.length, 0,
             'a form-targeted async validated dispatch is back — a single-element pass\'s listener cannot hear it');
@@ -282,5 +285,71 @@ describe('04 - dist fidelity (the built bundle carries the fix)', function () {
     it('04c - the pass-local arm debug literal shipped', function () {
         assert.ok(distSrc.indexOf('already armed by this pass') > -1,
             'gina.min.js must carry the pass-local arm path');
+    });
+});
+
+
+describe('07 - #B342: a submit pass\'s async completion always dispatches (the strand fix)', function () {
+
+    var mainSrc;
+    before(function () { mainSrc = fs.readFileSync(MAIN, 'utf8'); });
+
+    // The strand: on a CLEAN pass whose query field is not last in the rule
+    // set, the completion block skipped the errors>0 dispatch, failed the
+    // last-field branch, failed the live-check branch (a submit pass is not
+    // validating) and exited having dispatched NOTHING — the submit callback
+    // starved, validate.<id> never fired, and the isSubmitting latch stranded
+    // the form until reload. The fix: a latched form's completion dispatches
+    // unconditionally (only the submit pass can be alive while the latch is
+    // held — live-check listeners hard-return on it).
+
+    it('07a - the isSubmitting-gated dispatch exists in the async completion', function () {
+        assert.ok(
+            mainSrc.indexOf("/^true$/i.test(instance.$forms[formId].isSubmitting)") > -1,
+            'expected the #B342 submit-latch gate in the async completion block'
+        );
+    });
+
+    it('07b - it dispatches on $formOrElement (the #B334 retarget) with the pass callback', function () {
+        var gate = mainSrc.indexOf("/^true$/i.test(instance.$forms[formId].isSubmitting)");
+        var windowSrc = mainSrc.substring(gate, gate + 400);
+        assert.ok(
+            windowSrc.indexOf("triggerEvent(gina, $formOrElement, 'validated.' + formId, cb)") > -1,
+            'the gated branch must dispatch validated.<formId> on $formOrElement with cb'
+        );
+        assert.ok(
+            /return/.test(windowSrc.substring(windowSrc.indexOf('triggerEvent'))),
+            'the gated dispatch must return — the live-check branches below are not for submit passes'
+        );
+    });
+
+    it('07c - placement: after the whole-verdict payload, before the last-field dance', function () {
+        var payload = mainSrc.indexOf("cb._errors = d['getErrors']();");
+        var gate    = mainSrc.indexOf("/^true$/i.test(instance.$forms[formId].isSubmitting)", payload);
+        var dance   = mainSrc.indexOf('var needsGlobalReValidation = false;', payload);
+        assert.ok(payload > -1 && gate > -1 && dance > -1, '[instrument] an anchor vanished — re-derive');
+        assert.ok(payload < gate && gate < dance,
+            'the gate must sit between the payload composition and the last-field branch, got offsets: '
+            + payload + ' / ' + gate + ' / ' + dance);
+    });
+
+    it('07d - the errors>0 branch above keeps its own dispatch (the error case never depended on the gate)', function () {
+        var errBranch = mainSrc.indexOf('if ( cb._errors && cb._errors.count() > 0) {');
+        var gate      = mainSrc.indexOf("/^true$/i.test(instance.$forms[formId].isSubmitting)", errBranch);
+        assert.ok(errBranch > -1 && gate > errBranch,
+            'the errors>0 completion must precede the clean-path gate');
+        var errWindow = mainSrc.substring(errBranch, gate);
+        assert.ok(errWindow.indexOf("triggerEvent(gina, $formOrElement, 'validated.' + formId, cb)") > -1,
+            'the errors>0 branch must still carry its own dispatch');
+    });
+
+    it('07e - dist fidelity: the built bundle carries the gated dispatch', function () {
+        var distSrc = fs.readFileSync(DIST, 'utf8');
+        assert.ok(distSrc.indexOf('isSubmitting') > -1,
+            '[instrument] bundle lacks even the latch literal — wrong artifact?');
+        // Closure renames locals but keeps property names and string literals:
+        // the gate reads a PROPERTY (.isSubmitting) inside a regex test.
+        assert.ok(/\^true\$/.test(distSrc) || distSrc.indexOf('^true$') > -1,
+            'the latch-gate regex literal must survive minification');
     });
 });

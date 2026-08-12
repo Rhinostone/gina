@@ -337,4 +337,58 @@ test.describe('#B332/#B333 — id-less trigger + async query rule (live-check of
         expect(posts[0] - clickedAt,
             'the POST must not leave before the delayed query settles').toBeGreaterThanOrEqual(QUERY_DELAY_MS - 50);
     });
+
+    test('07 - #B342: a CLEAN form whose query field is NOT last still completes the submit (strand scene)', async ({ page }) => {
+        // Arm 02's twin with the query field FIRST — the one field-order arm 02
+        // structurally cannot reach (its query field is last, so the completion
+        // dispatches through the last-field branch). Here the pass is CLEAN and
+        // the query field is not last in the rule set: the async completion's
+        // errors>0 branch is skipped, the last-field branch does not match, and
+        // the live-check branch does not match either (a submit pass is not
+        // validating). Pre-fix that block exited having dispatched NOTHING —
+        // the submit callback starved, `validate.<id>` never fired, no POST
+        // ever left, and the `isSubmitting` latch stranded the form until
+        // reload (measured live on a consumer login form: value present, every
+        // field clean, click swallowed). The submit pass's completion must
+        // dispatch unconditionally.
+        const seen  = await installScene(page, '{"isValid":true}', ASYNC_FIRST_RULES);
+        const posts = countPosts(page);
+
+        await gotoFaceAndBoot(page);
+        expect(seen.rulesRewritten, 'rules anchor drifted — scene inconclusive').toBe(true);
+        expect(seen.idStripped, 'button-id anchor drifted — scene inconclusive').toBe(true);
+        expect(seen.liveCheckOff, 'live-check anchor drifted — scene inconclusive').toBe(true);
+
+        await engageFace(page); // agree valid -> its query fires on submit
+        await page.click('#note');
+        await page.keyboard.type('someone@example.com', { delay: 15 }); // note valid too — whole form CLEAN
+        const clickedAt = Date.now();
+        await page.click('#parent button[type="submit"]');
+
+        // the query must actually reach the wire (agree is valid at fire time)
+        await expect.poll(() => seen.queryAnswered, {
+            message: 'the async query must fire and settle, or the scene proves nothing',
+            timeout: 10000
+        }).toBeGreaterThan(0);
+
+        // THE arm: the send must happen — pre-fix the completion fell through
+        // every dispatch branch and the POST never left
+        await expect.poll(() => posts.length, {
+            message: 'a clean form must SEND after its query settles — no POST means the async completion starved the submit callback (#B342 strand)',
+            timeout: 10000
+        }).toBeGreaterThan(0);
+        await page.waitForTimeout(1200); // room for a duplicate to surface
+
+        expect(posts.length, 'exactly ONE POST — a duplicate means two completion dispatches').toBe(1);
+        expect(posts[0] - clickedAt,
+            'the POST must not leave before the delayed query settles (#B332 would be back)').toBeGreaterThanOrEqual(QUERY_DELAY_MS - 50);
+
+        // and the latch must be RELEASED after the cycle settles — a stranded
+        // latch gates every later click until reload (the lockout the user hit)
+        const latch = await page.evaluate(() => ({
+            isSubmitting: window.gina.validator.$forms['parent'].isSubmitting,
+            isValidating: window.gina.validator.$forms['parent'].isValidating
+        }));
+        expect(String(latch.isSubmitting), 'isSubmitting must not strand after the send settles, got: ' + JSON.stringify(latch)).not.toBe('true');
+    });
 });
