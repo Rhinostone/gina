@@ -1281,15 +1281,14 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
                         }
 
                         try {
-                            // security checks
-                            compiledCondition = compiledCondition.replace(/(\(|\)|return)/g, '');
                             // #SCS1e (2026-04-24) — replaced the two `eval(...)` calls below with
-                            // auditable equivalents. After `$var` substitution (lines 910-920) and
-                            // paren/return strip above, `compiledCondition` is either:
+                            // auditable equivalents. After `$var` substitution (lines 910-920),
+                            // `compiledCondition` is either:
                             //   (a) a regex literal `/<body>/<flags>` (when `/^\//` matches), or
                             //   (b) a binary comparison `<operand><op><operand>` where operand ∈
                             //       {number, "string", true, false, null, undefined} and op ∈
-                            //       {===, !==, ==, !=, <, >, <=, >=}.
+                            //       {===, !==, ==, !=, <, >, <=, >=} — paren/`return`-stripped
+                            //       inside its branch, before the grammar match.
                             // Old eval executed arbitrary JS; any value reaching `$var` substitution
                             // that contained a quote (e.g. user input `bar"; process.exit();//`)
                             // could escape the `"..."` wrapper at line 916 and reach eval as
@@ -1300,6 +1299,18 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
                             // } else {
                             //     isValid = eval(compiledCondition)
                             // }
+                            // #B345 — the paren/`return` strip used to run HERE, before the branch
+                            // decision, so it also mangled every parenthesized regex literal:
+                            // groups were destroyed (`^(a|b)$` compiled as `^a|b$`, rebinding the
+                            // anchors and turning middle alternatives substring-permissive),
+                            // quantified groups were requantified (`(#TAG)?` became `#TA` plus an
+                            // optional `G`), and a literal `return` inside a pattern was deleted —
+                            // all silently, because the stripped text still compiled as a valid
+                            // regex. The strip protects the BINARY-COMPARISON shape only, so it
+                            // now lives inside that branch; the regex branch never evaluates the
+                            // condition as JS (`new RegExp(body, flags).test(value)` — no eval),
+                            // so parentheses there are legitimate syntax and a regex literal is
+                            // compiled exactly as authored.
                             if ( /^\//.test(compiledCondition) ) {
                                 var _scsRegexMatch = compiledCondition.match(/^\/(.+)\/([a-z]*)$/);
                                 if (!_scsRegexMatch) {
@@ -1307,6 +1318,10 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
                                 }
                                 isValid = new RegExp(_scsRegexMatch[1], _scsRegexMatch[2]).test(this.value);
                             } else {
+                                // security checks (#SCS1e) — strip parens/`return` before the
+                                // grammar-locked match; authored parens in a comparison stay
+                                // tolerated (`("a") === ("a")` strips to `"a" === "a"`).
+                                compiledCondition = compiledCondition.replace(/(\(|\)|return)/g, '');
                                 var _SCS_BINARY_RE = /^\s*(null|undefined|true|false|"[^"]*"|-?\d+(?:\.\d+)?)\s*(===|!==|<=|>=|==|!=|<|>)\s*(null|undefined|true|false|"[^"]*"|-?\d+(?:\.\d+)?)\s*$/;
                                 var _scsBinMatch = (typeof(compiledCondition) == 'string') ? compiledCondition.match(_SCS_BINARY_RE) : null;
                                 if (!_scsBinMatch) {
