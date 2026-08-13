@@ -1,0 +1,7 @@
+{
+    "name": "storage",
+    "description": "Pluggable object storage (#STO1): adapter × strategy over an opaque key, with a per-object metadata row written through a connector-backed seam. Ships the `local` adapter and the `sharded` strategy",
+    "version": "0.0.1",
+    "private": true,
+    "main": "src/main"
+}

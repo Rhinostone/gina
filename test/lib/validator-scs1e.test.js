@@ -414,9 +414,12 @@ describe('07 — binary-compare rejects injection (form-validator.js:895)', func
 // --- 08 — Regex-test helper rejects injection ---
 describe('08 — regex-test rejects injection (form-validator.js:893)', function () {
 
-    // Note: at :893 `compiledCondition` has already been paren-stripped at :891,
-    // so `);alert()//` etc. are filtered before reaching the regex parser. The
-    // grammar still locks what shapes the parser accepts.
+    // Note: since #B345 the paren/`return` strip runs only in the binary-
+    // comparison branch, so parentheses DO reach the regex parser as authored.
+    // What constrains this branch is the grammar lock (`/^\/(.+)\/([a-z]*)$/`)
+    // plus `new RegExp(body, flags).test(value)` — never eval — so `);alert()//`
+    // and friends are inert pattern text. The shapes below stay rejected by the
+    // grammar itself.
 
     it('rejects empty body — `//`', function () {
         assert.throws(function () { testRegexLiteral('//', 'x'); }, /Invalid regex literal/);

@@ -392,8 +392,9 @@ describe('06 - validator arm/disarm call sites (source pins)', function () {
     it('arms on the native submit proxy for Enter-key / programmatic / wrapped-label submits', function () {
         assert.ok(/armSubmitLoading\(\s*\$formInstance,\s*\$loadingTrigger\s*\)/.test(validatorSrc),
             'native-submit-proxy arm not found');
-        assert.ok(/if\s*\(\s*!isTriggerDisabled\(\$loadingTrigger\)\s*\)/.test(validatorSrc),
-            'the live-node disabled re-check is missing — an aria-disabled trigger would flash armed');
+        assert.ok(/if\s*\(\s*!isTriggerDisabled\(\$loadingTrigger\)\s*\|\|\s*isAwaitingQueryVerdictOnly\(\$loadingTrigger,\s*\$target,\s*\$formInstance\)\s*\)/.test(validatorSrc),
+            'the live-node disabled re-check is missing — an aria-disabled trigger would flash armed '
+            + '(the #B346 pending carve-out is the only sanctioned widening, and its own arms refuse authored marks)');
     });
 
     it('disarms on exactly the three terminal paths — and NOWHERE else', function () {

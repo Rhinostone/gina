@@ -787,6 +787,8 @@ declare namespace gina {
         SessionStore: any;
         Shell: any;
         State: any;
+        /** Connector-backed storage metadata-store dispatcher (`settings.json > storage.drivers.<name>.store`). */
+        StorageStore: any;
         SwigFilters: any;
         Watcher: any;
         /** Admin-endpoint IP allowlist helpers (`app.json > admin.allowFrom`). */
@@ -850,6 +852,8 @@ declare namespace gina {
         routingIntrospect: any;
         /** `${secret:KEY}` config placeholder resolver. */
         secrets: any;
+        /** Pluggable object storage — adapter x strategy behind an opaque key (`settings.json > storage`). */
+        storage: any;
         swigResolver: any;
         /** Async template loaders (`settings.template.<engine>.loader`). */
         templateLoaders: any;
@@ -981,6 +985,9 @@ declare namespace gina {
 
     /** Register an application busy probe for the release-watch idle gate — returns `{busy, detail}` | boolean (or a Promise of either), or callback-shaped `(cb)` (#RWATCH). */
     function registerBusyProbe(name: string, fn: (...args: any[]) => any): void;
+
+    /** Get a configured object-storage driver; omit `name` for `storage.default`. Throws when storage is unconfigured or the name is unknown (#STO1). */
+    function storage(name?: string): any;
 
     // -- global-helper re-exports (same functions the framework injects on
     //    the global scope; see types/globals.d.ts) --

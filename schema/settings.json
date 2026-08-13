@@ -388,12 +388,152 @@
     },
     "upload": {
       "type": "object",
-      "description": "File upload configuration.",
+      "description": "File upload configuration (multipart/form-data). A file part's Content-Disposition group=\"…\" parameter selects its upload group; a part with no or an empty group resolves to `untagged`, and a group not configured under `groups` is rejected with HTTP 400 before anything touches disk. `additionalProperties` stays true DELIBERATELY: applications may keep their own per-group keys (composed app-side), and this schema documents what the FRAMEWORK reads — a key not listed here has no framework behaviour.",
       "additionalProperties": true,
       "properties": {
-        "maxFieldsSize": {
+        "tmpPath": {
           "type": "string",
-          "description": "Maximum total size of multipart form fields (e.g. \"8MB\", \"50MB\")."
+          "description": "Global parse-time landing directory for uploaded files (supports ${tmpPath}, which resolves to <project>/tmp). Landing-dir fallback chain: uploadDir, then tmpPath, then the OS temp dir."
+        },
+        "uploadDir": {
+          "type": "string",
+          "description": "Alternative global landing directory; wins over tmpPath when both are set."
+        },
+        "maxFieldsSize": {
+          "type": ["string", "number"],
+          "description": "WHOLE-REQUEST size cap, compared against the request Content-Length (HTTP 431 past it). Unit-suffixed string (B/KB/MB/GB); a bare number means MB. 0 or unset disables. Block-level only — a per-group override has no framework behaviour."
+        },
+        "maxFields": {
+          "type": "number",
+          "description": "Per-request FILE-COUNT cap (HTTP 400 past it). 0 or unset disables. Block-level only."
+        },
+        "maxTextFields": {
+          "type": "number",
+          "description": "Maximum multipart TEXT (non-file) fields per request (HTTP 400 past the cap). Default 1000; 0 or below means no limit."
+        },
+        "maxTextFieldSize": {
+          "type": ["string", "number"],
+          "description": "Per text-field size cap (HTTP 400 on a truncated field). Unit-suffixed string; a bare number means MB. Default 1MB; explicit 0 disables."
+        },
+        "autoTmpCleanupTimeout": {
+          "type": ["string", "number", "boolean"],
+          "description": "Arms a per-file deletion timer at parse time for each landed file (e.g. \"30s\", \"10m\", \"1h\", \"500ms\"; a bare number is milliseconds). false, 0 or empty disables it — the shipped default. Block-level only."
+        },
+        "groups": {
+          "type": "object",
+          "description": "Named upload groups — at least one is required to enable uploads. A file is checked against its group's rules at parse time. `untagged` is a NORMAL configured group serving every part that carries no group tag; it obeys its own configuration.",
+          "additionalProperties": {
+            "type": "object",
+            "description": "One upload group. Keys beyond these are ignored by the framework (applications may compose their own app-side).",
+            "additionalProperties": true,
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "Parse-time landing directory for this group's files, overriding the global default (created if missing, crash-guarded). For a driver-routed group this is ONLY the staging dir — the driver owns final placement, and a path inside the driver's root earns a boot warning."
+              },
+              "allowedExtensions": {
+                "type": ["string", "array"],
+                "items": { "type": "string" },
+                "description": "\"*\" accepts every extension; an array (e.g. [\"jpg\",\"png\"]) rejects any other extension with HTTP 400 at parse time."
+              },
+              "isMultipleAllowed": {
+                "type": "boolean",
+                "description": "When explicitly false, a request carrying more than one file for this group is rejected with HTTP 400. OMITTED means multiple files are allowed — the permissive default."
+              },
+              "driver": {
+                "type": "string",
+                "minLength": 1,
+                "description": "#STO1 (slice 1) — route this group's self.store() step through the named settings.storage driver: files publish as opaque storage keys (result entries carry key/group/driver and the layer's on-disk size, no filename) instead of moving to the call's target directory. A driver not defined in storage.drivers refuses the boot. The parse/staging path is unchanged."
+              },
+              "simulateWriteError": {
+                "type": "boolean",
+                "description": "TEST-ONLY fault injector (#B144): every upload tagged with this group fails deterministically with a guarded 500 through the real write-error path, so the crash-guard can be probed on your own upload surface after a pickup. Ignored in production scope; a boot warning names it either way."
+              }
+            }
+          }
+        }
+      }
+    },
+    "storage": {
+      "type": "object",
+      "description": "Pluggable object storage (#STO1) — an adapter (where bytes live) crossed with a strategy (how keys are laid out), behind one callback-shaped contract. Reached from application code as gina.storage() / gina.storage('<name>'). Keys are OPAQUE: store the key a put() returns, never parse or compose one. Boot config — changes need a bundle restart, and every shape here is linted UNCONDITIONALLY, because unlike a cache a storage layer has no safe degraded mode: a driver that cannot build would leave put() writing nowhere. Since slice 1 an upload group may route its self.store() step through a driver (upload.groups.<name>.driver); the multipart parse/staging path is otherwise untouched.",
+      "additionalProperties": false,
+      "properties": {
+        "default": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Name of the driver returned by a no-argument gina.storage(). Must name an entry in `drivers` — a default pointing at a driver that does not exist refuses the boot rather than failing at the first put(). Omit it and every call must name its driver explicitly."
+        },
+        "drivers": {
+          "type": "object",
+          "description": "Storage drivers, keyed by name. Nested under their own key (rather than sitting directly under `storage`) so a driver may legitimately be called \"default\", and so future block-level options never reserve a driver name — the same shape `upload.groups` uses.",
+          "additionalProperties": false,
+          "patternProperties": {
+            "^[A-Za-z][A-Za-z0-9._-]*$": {
+              "type": "object",
+              "description": "One storage driver. Unknown keys are ignored with a boot warning naming them, because a silently-dropped key reads as configured behaviour that never happens.",
+              "additionalProperties": false,
+              "required": ["adapter", "strategy", "root"],
+              "properties": {
+                "adapter": {
+                  "type": "string",
+                  "enum": [
+                    "local"
+                  ],
+                  "description": "Where the bytes live. `local` = the local filesystem under `root`. An s3 adapter would carry its client as a PROJECT-side dependency, never a framework one — the same policy every database connector follows."
+                },
+                "strategy": {
+                  "type": "string",
+                  "enum": [
+                    "sharded",
+                    "cas"
+                  ],
+                  "description": "How keys are laid out. `sharded` = YYYY/MM/DD/<ulid><ext>, which keeps directories small enough to list and — because a ULID sorts by creation time — keeps entries within a day ordered. `cas` = content-addressed (blobs/<algo>/<aa>/<bb>/<hex>, extension-less): identical bytes stored twice yield the SAME key with a reference count of 2, release() drops a reference, and a periodic sweep collects blobs that have sat at zero past a grace window — built for immutable content (in-place mutation is impossible by construction; editing mints a new blob and key). Keys are OPAQUE under every strategy — changing a driver's strategy on populated storage is a re-key migration, not a config edit, and the boot warns when the configured strategy stops matching the one stamped on the root. `stream` (large sequential media, resumable) is designed but NOT implemented: configuring it is a clean boot refusal naming it as deferred, never a silent fallback."
+                },
+                "root": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Absolute directory holding this driver's objects. MUST be absolute — a relative root would resolve against the process cwd, which depends on how the bundle was launched. MUST NOT sit inside any bundle's web-served tree (its publicPath, or any content.statics target): objects there would be directly fetchable without passing any authorization, and so would the driver's own metadata database, which lives at <root>/.meta.db. Both conditions refuse the boot."
+                },
+                "maxObjectSize": {
+                  "type": "string",
+                  "description": "Per-object byte ceiling, as a UNIT-SUFFIXED string (\"50MB\", \"512KB\", \"1.5GB\"). A bare number is refused with a boot warning and the default applies — deliberately stricter than settings.upload, where a bare number means megabytes for back-compat. There is no house meaning to inherit: `upload` already reads a bare number as a count (maxFields) in one key and as megabytes (maxFieldsSize) in another, so this key refuses to guess. Defense in depth: no per-file cap exists upstream today, only whole-request caps.",
+                  "default": "100MB"
+                },
+                "store": {
+                  "type": ["string", "null"],
+                  "minLength": 1,
+                  "description": "Connector-backed metadata store: names a connectors.json entry whose .connector supplies core/connectors/<connector>/lib/storage-store.js. Omit it (the default) and metadata goes to an embedded SQLite file at <root>/.meta.db, which is documented SINGLE-PROCESS per root — SQLite locking on a shared network filesystem is a known-broken story, so two bundles or replicas sharing one root need a connector-backed store instead. No connector ships an implementation yet (demand-gated, the audit-store shipping order), so setting this today is a clean boot refusal rather than a silent fallback to the embedded file. Since size tiering, rows may carry the object PAYLOAD itself (objects under inlineThreshold), so the store needs binary-safe fields and losing it loses those objects, not just their metadata.",
+                  "default": null
+                },
+                "inlineThreshold": {
+                  "type": "string",
+                  "description": "Size-tiering threshold, as a UNIT-SUFFIXED string (\"64KB\") — objects strictly UNDER it are stored inline in the metadata store (one transaction, no filesystem round-trip; resolve() answers {kind:'inline'} and capabilities.inline is true); at or above it they take the temp+rename file path. \"0B\" disables tiering for this driver, keeping every object a visible dated file. A unit-less value warns at boot and the default applies. The 64KB default is the measured knee on the embedded store (inline puts 2.7-13x faster at or under it, destabilizing above). Changing it is retroactively safe: reads follow where each object's bytes actually live, so existing objects stay readable on either side. Operational tradeoffs to weigh: sub-threshold objects are not individually visible on disk (they live inside .meta.db, which any root-level backup still carries), and on a connector-backed store the payloads land in that backend. Applies to `sharded` and `cas` alike.",
+                  "default": "64KB"
+                },
+                "hash": {
+                  "type": "string",
+                  "description": "cas only — the digest algorithm whose name becomes a path segment in every key (blobs/<hash>/…). Validated at boot against THIS runtime's crypto.getHashes(): an unavailable name refuses the boot (sha256 and sha512 exist on both supported runtimes; blake2b512 is Node-only — measured). Changing it later is ADDITIVE, never a re-key: existing blobs stay addressable under their own namespace, new writes land under the new one, dedup does not span the two, and the boot notes the change once. Ignored (with a warning) under `sharded`.",
+                  "default": "sha256"
+                },
+                "fsync": {
+                  "type": "boolean",
+                  "description": "cas only — whether publishes are fsynced: the temp file before rename(2) (hard — a failure fails the put), the parent directory after it (best-effort — platforms that cannot fsync a directory, e.g. Windows and some network mounts, skip it silently). Defaults ON because cas exists for immutable/legal content where an acknowledged write must survive power loss; `false` opts a driver back into the sharded-class durability (atomic rename, recent writes at risk on host crash). Ignored (with a warning) under `sharded`, whose writes never fsync.",
+                  "default": true
+                },
+                "sweepInterval": {
+                  "type": "string",
+                  "description": "cas only — how often the garbage-collection sweep runs, as a UNIT-SUFFIXED duration string (ms/s/m/h/d, e.g. \"15m\"). The sweep collects blobs whose reference count has sat at zero for longer than sweepGrace: release() itself never deletes bytes. \"0s\" disables the periodic sweep for this driver (references still count; nothing is ever collected until a sweep runs). A unit-less value warns at boot and the default applies. The default is a reasoned reclaim-latency bound, not a benchmark.",
+                  "default": "15m"
+                },
+                "sweepGrace": {
+                  "type": "string",
+                  "description": "cas only — how long a blob must have sat at ZERO references before the sweep may collect it, as a UNIT-SUFFIXED duration string (e.g. \"1h\"). The grace window is a correctness margin, not a convenience: it is what keeps the sweep from racing an in-flight identical upload (re-uploading just-released content within the window is free — the blob is resurrected, no bytes transferred twice). Must be greater than zero; zero or unit-less values warn at boot and the default applies. Reasoned default: comfortably longer than any plausible in-flight upload.",
+                  "default": "1h"
+                }
+              }
+            }
+          }
         }
       }
     },

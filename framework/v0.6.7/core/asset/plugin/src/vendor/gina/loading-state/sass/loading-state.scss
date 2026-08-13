@@ -1,0 +1,130 @@
+/* ==========================================================================
+   Loading state — the default look for `data-gina-loading`.
+
+   The behaviour lives in `lib/loading-state` and is driven by the validator,
+   link and popin plugins. This stylesheet only ships the default appearance,
+   and it sits here rather than beside the primitive because the build's CSS
+   phase discovers stylesheets by scanning `src/vendor/gina/<name>/sass/` and
+   concatenates only the file whose name matches its directory.
+   ========================================================================== */
+
+/*
+ * Everything in this file lives in `@layer gina`, and that is the override
+ * contract: for normal declarations, ANY un-layered project rule beats a
+ * layered one regardless of specificity or stylesheet order. A project does
+ * not need to know gina's selectors, load its stylesheet first, or win a
+ * specificity contest — one plain rule of its own always takes precedence.
+ * Framework defaults sit below project CSS exactly like user-agent defaults
+ * sit below author CSS.
+ *
+ * Projects that organise their OWN styles in cascade layers order themselves
+ * against gina explicitly — `@layer gina, app;` early in their first sheet
+ * declares `gina` first so their own layer wins. Un-layered project CSS needs
+ * nothing at all.
+ *
+ * NEVER add `!important` inside this layer. Layer priority INVERTS for
+ * important declarations, so a layered `!important` would beat un-layered
+ * project `!important` — the exact opposite of this file's contract.
+ *
+ * Degradation: a browser without cascade-layer support drops the whole
+ * block, losing only the default look — the state attributes are still
+ * written, and project CSS keyed on them still applies. This sheet already
+ * ships constructs newer than `@layer` (`@starting-style`,
+ * `transition-behavior: allow-discrete` in the popin rules), so layers do
+ * not move its effective baseline.
+ */
+
+/*
+ * `[data-gina-loading="true"]`, never a bare `[data-gina-loading]`.
+ *
+ * `disarm()` writes the STRING "false" instead of removing the attribute, so a
+ * presence selector matches a RELEASED trigger and pins the loading look on
+ * permanently. Always match the value.
+ */
+
+/*
+ * Three deliberate omissions, each of which would be a regression:
+ *
+ * - No pseudo-element spinner. It would stack with the spinner a consumer
+ *   already ships (measured on a real consumer DOM that styles its own loading
+ *   state and would then show two), and it would need `position: relative` on
+ *   the trigger — mutating layout the framework does not own.
+ *
+ * - No `pointer-events: none`. The link plugin deliberately SUPPORTS a second
+ *   click while a request is in flight: it supersedes the first and drops the
+ *   stale response. Suppressing clicks here would silently disable that.
+ *
+ * - No `disabled`-like colour change. Some triggers are natively disabled while
+ *   loading and some are not, so colouring one to look like the other would
+ *   misreport which controls are still operable.
+ *
+ * Overriding: any un-layered rule of your own wins outright (see the layer
+ * contract above). `animation: none` drops the motion. Renaming the attribute
+ * — `gina.setOptions({ loadingAttribute: 'data-loading' })` — opts out of this
+ * stylesheet entirely, since it is keyed on the default name.
+ */
+@layer gina {
+    [data-gina-loading="true"] {
+        cursor: progress;
+    }
+
+    @keyframes gina-loading-pulse {
+        from {
+            opacity: 1;
+        }
+        to {
+            opacity: 0.55;
+        }
+    }
+
+    /*
+     * Motion only for users who have not asked for less of it — the same gate
+     * the popin dialog transitions use.
+     */
+    @media (prefers-reduced-motion: no-preference) {
+        [data-gina-loading="true"] {
+            animation: gina-loading-pulse 0.9s ease-in-out infinite alternate;
+        }
+    }
+
+    /*
+     * Reduced motion still needs to SEE that something is running, so trade
+     * the pulse for a static dim rather than dropping the signal altogether.
+     */
+    @media (prefers-reduced-motion: reduce) {
+        [data-gina-loading="true"] {
+            opacity: 0.7;
+        }
+    }
+
+    /* ======================================================================
+       Submit-gated state — the default look for `data-gina-form-submit-gated`.
+
+       Written by the form validator on a form's registered submit trigger
+       while the form is invalid and live checking is on (#B312); removed the
+       moment the form validates. The trigger stays fully operable — a click
+       is answered with the validation reveal — so this look signals "not
+       ready yet", never "inert". Hosted in this stylesheet because of the
+       same build-discovery constraint documented in the header above.
+       ====================================================================== */
+
+    /*
+     * Same deliberate omissions as the loading look, for the same reasons —
+     * and above all NO `pointer-events: none`, which would swallow the very
+     * click the validator answers with the error reveal.
+     *
+     * The trigger is NOT `aria-disabled` (it is genuinely operable), so
+     * disabled-control contrast exemptions do NOT apply: if your design needs
+     * strict contrast on the trigger's label, any un-layered rule of your own
+     * overrides the opacity (see the layer contract above).
+     *
+     * `[data-gina-form-submit-gated="true"]` matches the value; the validator
+     * removes the attribute when the form turns valid, so a bare presence
+     * selector would also behave — but match the value anyway, consistent
+     * with the loading marker above.
+     */
+    [data-gina-form-submit-gated="true"] {
+        cursor: not-allowed;
+        opacity: 0.7;
+    }
+}
