@@ -485,9 +485,10 @@
                 "strategy": {
                   "type": "string",
                   "enum": [
-                    "sharded"
+                    "sharded",
+                    "cas"
                   ],
-                  "description": "How keys are laid out. `sharded` = YYYY/MM/DD/<ulid><ext>, which keeps directories small enough to list and — because a ULID sorts by creation time — keeps entries within a day ordered. `cas` (content-addressed, with refcounts) and `stream` (large sequential media, resumable) are designed but NOT implemented: configuring one is a clean boot refusal naming it as deferred, never a silent fallback."
+                  "description": "How keys are laid out. `sharded` = YYYY/MM/DD/<ulid><ext>, which keeps directories small enough to list and — because a ULID sorts by creation time — keeps entries within a day ordered. `cas` = content-addressed (blobs/<algo>/<aa>/<bb>/<hex>, extension-less): identical bytes stored twice yield the SAME key with a reference count of 2, release() drops a reference, and a periodic sweep collects blobs that have sat at zero past a grace window — built for immutable content (in-place mutation is impossible by construction; editing mints a new blob and key). Keys are OPAQUE under every strategy — changing a driver's strategy on populated storage is a re-key migration, not a config edit, and the boot warns when the configured strategy stops matching the one stamped on the root. `stream` (large sequential media, resumable) is designed but NOT implemented: configuring it is a clean boot refusal naming it as deferred, never a silent fallback."
                 },
                 "root": {
                   "type": "string",
@@ -507,8 +508,28 @@
                 },
                 "inlineThreshold": {
                   "type": "string",
-                  "description": "Size-tiering threshold, as a UNIT-SUFFIXED string (\"64KB\") — objects strictly UNDER it are stored inline in the metadata store (one transaction, no filesystem round-trip; resolve() answers {kind:'inline'} and capabilities.inline is true); at or above it they take the temp+rename file path. \"0B\" disables tiering for this driver, keeping every object a visible dated file. A unit-less value warns at boot and the default applies. The 64KB default is the measured knee on the embedded store (inline puts 2.7-13x faster at or under it, destabilizing above). Changing it is retroactively safe: reads follow where each object's bytes actually live, so existing objects stay readable on either side. Operational tradeoffs to weigh: sub-threshold objects are not individually visible on disk (they live inside .meta.db, which any root-level backup still carries), and on a connector-backed store the payloads land in that backend.",
+                  "description": "Size-tiering threshold, as a UNIT-SUFFIXED string (\"64KB\") — objects strictly UNDER it are stored inline in the metadata store (one transaction, no filesystem round-trip; resolve() answers {kind:'inline'} and capabilities.inline is true); at or above it they take the temp+rename file path. \"0B\" disables tiering for this driver, keeping every object a visible dated file. A unit-less value warns at boot and the default applies. The 64KB default is the measured knee on the embedded store (inline puts 2.7-13x faster at or under it, destabilizing above). Changing it is retroactively safe: reads follow where each object's bytes actually live, so existing objects stay readable on either side. Operational tradeoffs to weigh: sub-threshold objects are not individually visible on disk (they live inside .meta.db, which any root-level backup still carries), and on a connector-backed store the payloads land in that backend. Applies to `sharded` and `cas` alike.",
                   "default": "64KB"
+                },
+                "hash": {
+                  "type": "string",
+                  "description": "cas only — the digest algorithm whose name becomes a path segment in every key (blobs/<hash>/…). Validated at boot against THIS runtime's crypto.getHashes(): an unavailable name refuses the boot (sha256 and sha512 exist on both supported runtimes; blake2b512 is Node-only — measured). Changing it later is ADDITIVE, never a re-key: existing blobs stay addressable under their own namespace, new writes land under the new one, dedup does not span the two, and the boot notes the change once. Ignored (with a warning) under `sharded`.",
+                  "default": "sha256"
+                },
+                "fsync": {
+                  "type": "boolean",
+                  "description": "cas only — whether publishes are fsynced: the temp file before rename(2) (hard — a failure fails the put), the parent directory after it (best-effort — platforms that cannot fsync a directory, e.g. Windows and some network mounts, skip it silently). Defaults ON because cas exists for immutable/legal content where an acknowledged write must survive power loss; `false` opts a driver back into the sharded-class durability (atomic rename, recent writes at risk on host crash). Ignored (with a warning) under `sharded`, whose writes never fsync.",
+                  "default": true
+                },
+                "sweepInterval": {
+                  "type": "string",
+                  "description": "cas only — how often the garbage-collection sweep runs, as a UNIT-SUFFIXED duration string (ms/s/m/h/d, e.g. \"15m\"). The sweep collects blobs whose reference count has sat at zero for longer than sweepGrace: release() itself never deletes bytes. \"0s\" disables the periodic sweep for this driver (references still count; nothing is ever collected until a sweep runs). A unit-less value warns at boot and the default applies. The default is a reasoned reclaim-latency bound, not a benchmark.",
+                  "default": "15m"
+                },
+                "sweepGrace": {
+                  "type": "string",
+                  "description": "cas only — how long a blob must have sat at ZERO references before the sweep may collect it, as a UNIT-SUFFIXED duration string (e.g. \"1h\"). The grace window is a correctness margin, not a convenience: it is what keeps the sweep from racing an in-flight identical upload (re-uploading just-released content within the window is free — the blob is resurrected, no bytes transferred twice). Must be greater than zero; zero or unit-less values warn at boot and the default applies. Reasoned default: comfortably longer than any plausible in-flight upload.",
+                  "default": "1h"
                 }
               }
             }

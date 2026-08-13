@@ -1676,7 +1676,11 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
                                                 }
                                             }
                                             try {
-                                                if ( lib.storage.start({ drivers: _stoDrivers, default: _stoSettings.default, stores: _stoStores }) ) {
+                                                // `warn` surfaces the per-root strategy-stamp checks
+                                                // (§4 — a strategy flip on populated storage warns
+                                                // every boot; a hash change warns once). Same sink as
+                                                // the validateConfig warnings above.
+                                                if ( lib.storage.start({ drivers: _stoDrivers, default: _stoSettings.default, stores: _stoStores, warn: function(stoWarnMsg) { console.warn('[storage] ' + stoWarnMsg); } }) ) {
                                                     // console.info, NOT debug — the shipped
                                                     // default log level filters debug, and an
                                                     // operator needs to see which roots went live.

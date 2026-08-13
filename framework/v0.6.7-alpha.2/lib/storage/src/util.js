@@ -158,6 +158,132 @@ function parseSize(value) {
 }
 
 /**
+ * Parse a unit-suffixed duration string into milliseconds.
+ *
+ * The time twin of {@link module:lib/storage/util.parseSize}, with the same
+ * strictness: a bare number returns `NaN` and the boot lint names the fix.
+ * They are SEPARATE parsers on purpose — `'15m'` means 15 minutes here and
+ * 15 megabytes there, so one parser serving both keys would have to guess
+ * from context, which is the exact bug the unit requirement exists to
+ * prevent.
+ *
+ * @memberof module:lib/storage/util
+ * @param {string} value - e.g. `'500ms'`, `'30s'`, `'15m'`, `'1h'`, `'7d'`.
+ * @returns {number} Milliseconds, or `NaN` when the value is not a unit-suffixed string.
+ * @example
+ * parseDuration('15m');  // => 900000
+ * parseDuration('1h');   // => 3600000
+ * parseDuration('0s');   // => 0 (legal — "off" for interval-shaped keys)
+ * parseDuration('15');   // => NaN (no unit — refused, never assumed)
+ * parseDuration(15);     // => NaN (bare number — refused)
+ */
+function parseDuration(value) {
+    if ( typeof(value) != 'string' ) { return NaN; }
+    var m = value.trim().match(/^([0-9]*\.?[0-9]+)\s*(ms|s|m|h|d)$/i);
+    if ( !m ) { return NaN; }
+    var n = parseFloat(m[1]);
+    switch ( m[2].toLowerCase() ) {
+        case 'ms':
+            return n;
+        case 's':
+            return n * 1000;
+        case 'h':
+            return n * 60 * 60 * 1000;
+        case 'd':
+            return n * 24 * 60 * 60 * 1000;
+        case 'm':
+        default:
+            return n * 60 * 1000;
+    }
+}
+
+/**
+ * Whether any segment of `key` names driver-internal state.
+ *
+ * `.tmp` holds in-flight writes and `.meta.db` is the metadata database — both
+ * live INSIDE the root by design, so both are reachable by a key that never
+ * leaves it. Without this, a caller passing `.meta.db` to `release()` would
+ * delete the driver's own index. (The `.driver` strategy-stamp row is store-
+ * level only — it has no path — but the same dot rule keeps it unreachable
+ * too.)
+ *
+ * Checked AFTER confinement, never before — see {@link makeResolvePath} for
+ * why the order is load-bearing.
+ *
+ * @inner
+ * @param {string} key - A key that has already passed confinement.
+ * @returns {boolean} `true` when a segment starts with a dot.
+ * @example
+ * hasReservedSegment('2026/08/10/01K2…'); // => false
+ * hasReservedSegment('.meta.db');         // => true
+ * hasReservedSegment('.tmp/x');           // => true
+ */
+function hasReservedSegment(key) {
+    var segments = key.split(/[\\/]/);
+    for (var i = 0; i < segments.length; i++) {
+        if ( segments[i].charAt(0) === '.' ) { return true; }
+    }
+    return false;
+}
+
+/**
+ * Build the key → confined-absolute-path resolver for one driver.
+ *
+ * ONE implementation for every strategy, hoisted here when cas arrived so the
+ * guard sequence cannot drift between drivers — this is a security boundary,
+ * and two copies of a security boundary is the #B179 failure class waiting to
+ * recur.
+ *
+ * **The guard ORDER is load-bearing, and got this wrong once.** Confinement
+ * runs FIRST. A reserved-segment check placed ahead of it shadows the
+ * security boundary entirely: `..` starts with a dot, so every classic
+ * traversal attempt is answered with "reserved", `confineToBase` is never
+ * reached, and a traversal test passes for the wrong reason — leaving the
+ * real guard unexercised by the one input class it exists for. Caught by a
+ * smoke run before slice 0 shipped; keep confinement first.
+ *
+ * The canonical-form check that follows keeps the key and its path 1:1. A
+ * key like `a/../b` stays inside the root, so confinement accepts it, but
+ * it addresses the same file as `b` while indexing under a different
+ * metadata key — so `stat()` would answer for one and `get()` for the
+ * other. Keys are opaque and always minted by `put()`, so a non-canonical
+ * one never arises honestly.
+ *
+ * @memberof module:lib/storage/util
+ * @param {string} name - Driver name, used only in error messages.
+ * @param {string} root - Absolute driver root.
+ * @returns {function(string): {path: ?string, error: ?Error}} The resolver — exactly one
+ *                        side of its result is set.
+ * @example
+ * var resolvePath = makeResolvePath('assets', '/var/data/assets');
+ * resolvePath('2026/08/10/01K2X.pdf'); // => { path: '/var/data/assets/2026/08/10/01K2X.pdf', error: null }
+ * resolvePath('../../etc/passwd');     // => { path: null, error: Error('… escapes the driver root') }
+ */
+function makeResolvePath(name, root) {
+    return function resolvePath(key) {
+        if ( typeof(key) != 'string' || key.length === 0 ) {
+            return { path: null, error: new Error('[storage:' + name + '] a non-empty string key is required (got: ' + JSON.stringify(key) + ')') };
+        }
+        // 1. Security boundary, first so it is genuinely exercised.
+        var full = confineToBase(nodePath.join(root, key), root);
+        if ( full === null ) {
+            // Deliberately does NOT echo the resolved path — that would confirm
+            // filesystem layout to whoever supplied the hostile key.
+            return { path: null, error: new Error('[storage:' + name + '] key `' + key + '` escapes the driver root') };
+        }
+        // 2. Canonical form, so key and path stay 1:1.
+        if ( nodePath.normalize(key) !== key || nodePath.isAbsolute(key) ) {
+            return { path: null, error: new Error('[storage:' + name + '] key `' + key + '` is not in canonical form') };
+        }
+        // 3. Driver-internal paths, reachable without ever leaving the root.
+        if ( hasReservedSegment(key) ) {
+            return { path: null, error: new Error('[storage:' + name + '] key `' + key + '` is reserved (segments starting with a dot hold driver-internal state)') };
+        }
+        return { path: full, error: null };
+    };
+}
+
+/**
  * Derive a safe file extension from a client-supplied filename.
  *
  * The extension is the ONLY part of an untrusted name that reaches the
@@ -204,5 +330,7 @@ module.exports = {
     ulid              : ulid,
     confineToBase     : confineToBase,
     parseSize         : parseSize,
+    parseDuration     : parseDuration,
+    makeResolvePath   : makeResolvePath,
     sanitiseExtension : sanitiseExtension
 };

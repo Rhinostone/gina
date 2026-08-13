@@ -13,8 +13,10 @@
  * live) crossed with a **strategy** (how keys are laid out), behind one
  * callback-shaped contract. Slice 0 ships the `local` adapter and the `sharded`
  * strategy; the tiering slice adds size tiering (sub-threshold objects live
- * inline in the metadata store — see `inlineThreshold`); `cas`, `stream` and
- * `s3` arrive with the demand that needs them, each capability-gated.
+ * inline in the metadata store — see `inlineThreshold`); the cas slice adds
+ * the `cas` strategy (content-addressed, refcounted, GC-swept — see
+ * `src/local-cas`); `stream` and `s3` arrive with the demand that needs them,
+ * each capability-gated.
  *
  * **Keys are opaque.** A caller stores a stream and receives a key; it must
  * never parse, compose or assume anything about that key's shape. That is what
@@ -34,17 +36,22 @@
  * AMD-only localStorage pseudo-ORM with zero server-side presence. This module
  * is server-side only.
  *
- * **Durability, stated rather than implied.** A file-backed write is published
- * by `rename(2)`, which is atomic — a reader never observes a partial object.
- * It is NOT fsynced: nothing in this codebase fsyncs, and on a host crash an
- * acknowledged write can still be lost. The same disclosure `lib/audit` makes
- * about its own tail. An INLINE write (below `inlineThreshold`) is one
- * metadata-store transaction — under the embedded default that is SQLite WAL
- * with `synchronous=NORMAL`: a crash can lose the last committed transaction
- * but never yields a partial row, which is the same "recent writes at risk,
- * never a torn object" class as the rename path. The flip side is scoped the
- * same way: losing the metadata store loses inline PAYLOADS, not just
- * metadata — file-backed bytes survive an index loss.
+ * **Durability, stated rather than implied — and it differs BY STRATEGY.** A
+ * file-backed write is published by `rename(2)`, which is atomic — a reader
+ * never observes a partial object. Under `sharded` it is NOT fsynced: on a
+ * host crash an acknowledged write can still be lost (the same disclosure
+ * `lib/audit` makes about its own tail). Under `cas` publishes fsync BY
+ * DEFAULT (`fsync: true` — the file before the rename, the parent directory
+ * best-effort after; see `src/local-cas` for the per-platform honesty),
+ * because the strategy exists for immutable/legal content where
+ * "acknowledged means durable" is the point. An INLINE write (below
+ * `inlineThreshold`) is one metadata-store transaction — under the embedded
+ * default that is SQLite WAL with `synchronous=NORMAL`: a crash can lose the
+ * last committed transaction but never yields a partial row, which is the
+ * same "recent writes at risk, never a torn object" class as the un-fsynced
+ * rename path. The flip side is scoped the same way: losing the metadata
+ * store loses inline PAYLOADS, not just metadata — file-backed bytes survive
+ * an index loss.
  *
  * @example
  * // settings.json
@@ -72,6 +79,7 @@
  */
 
 var nodePath = require('path');
+var crypto   = require('crypto');
 
 /**
  * Pure shared helpers — id generation, path confinement, size parsing and
@@ -94,6 +102,30 @@ var util = require('./util');
  * @type {function(string, object, object): StorageDriver}
  */
 var createLocalDriver = require('./local');
+
+/**
+ * The `local` adapter / `cas` strategy pair — content-addressed storage with
+ * refcounts and a GC sweep.
+ *
+ * @inner
+ * @type {function(string, object, object): StorageDriver}
+ */
+var createLocalCasDriver = require('./local-cas');
+
+/**
+ * Strategy name → driver factory. THE dispatch seam: `start()` builds each
+ * driver through this map (strategy names are validated before `start()`
+ * runs, so a miss here is a programming error, not a config one). Adapters
+ * other than `local` will widen this into a two-axis lookup when one ships.
+ *
+ * @inner
+ * @constant
+ * @type {Object.<string, function(string, object, object): StorageDriver>}
+ */
+var FACTORIES = {
+    sharded : createLocalDriver,
+    cas     : createLocalCasDriver
+};
 
 /**
  * Embedded SQLite metadata store factory — the default backend when a driver
@@ -123,29 +155,36 @@ var ADAPTERS = ['local'];
  * @constant
  * @type {string[]}
  */
-var STRATEGIES = ['sharded'];
+var STRATEGIES = ['sharded', 'cas'];
 
 /**
  * Strategies named in the design but not yet implemented. Kept distinct from
  * "unknown" so the boot message can say *deferred* instead of *typo* — an
- * operator who wrote `cas` made a scheduling mistake, not a spelling one.
+ * operator who wrote `stream` made a scheduling mistake, not a spelling one.
  *
  * @inner
  * @constant
  * @type {string[]}
  */
-var DEFERRED_STRATEGIES = ['cas', 'stream'];
+var DEFERRED_STRATEGIES = ['stream'];
 
 /**
- * Per-driver keys the `sharded` strategy consumes. Anything else in a driver
- * block is reported as ignored (the render-cache "named loudly" precedent — a
- * silently-dropped key reads as configured behaviour that never happens).
+ * Per-driver keys, BY STRATEGY. Anything else in a driver block is reported
+ * as ignored (the render-cache "named loudly" precedent — a silently-dropped
+ * key reads as configured behaviour that never happens). Per-strategy rather
+ * than one global list because the warning names the driver's strategy: a
+ * single list would either warn falsely on another strategy's keys or accept
+ * keys the named strategy never reads — both are the exact lie the warning
+ * exists to prevent.
  *
  * @inner
  * @constant
- * @type {string[]}
+ * @type {Object.<string, string[]>}
  */
-var SHARDED_KEYS = ['adapter', 'strategy', 'root', 'maxObjectSize', 'store', 'inlineThreshold'];
+var STRATEGY_KEYS = {
+    sharded : ['adapter', 'strategy', 'root', 'maxObjectSize', 'store', 'inlineThreshold'],
+    cas     : ['adapter', 'strategy', 'root', 'maxObjectSize', 'store', 'inlineThreshold', 'hash', 'fsync', 'sweepInterval', 'sweepGrace']
+};
 
 /**
  * Default per-object byte ceiling when a driver sets no `maxObjectSize`.
@@ -177,6 +216,58 @@ var DEFAULT_MAX_OBJECT_SIZE = 100 * 1024 * 1024;
  * @type {number}
  */
 var DEFAULT_INLINE_THRESHOLD = 64 * 1024;
+
+/**
+ * Default digest algorithm for `cas` drivers. SHA-256: hardware-accelerated
+ * on every deployment target (SHA-NI, ARMv8 crypto extensions put it around
+ * 1.5–2 GB/s per core — two orders of magnitude above the network feeding the
+ * write path), zero dependencies, and present in `crypto.getHashes()` on BOTH
+ * supported runtimes (measured 2026-08-13: node 25 and bun 1.2.21 — where
+ * e.g. `blake2b512` is Node-only). The algorithm is a path segment in every
+ * cas key, so changing it is additive, never a re-key.
+ *
+ * @inner
+ * @constant
+ * @type {string}
+ */
+var DEFAULT_CAS_HASH = 'sha256';
+
+/**
+ * Whether `cas` publishes fsync by default. `true` — the strategy exists for
+ * immutable/legal content, where "acknowledged means durable" is the point.
+ * Per-driver `fsync: false` opts out.
+ *
+ * @inner
+ * @constant
+ * @type {boolean}
+ */
+var DEFAULT_CAS_FSYNC = true;
+
+/**
+ * Default GC sweep period for `cas` drivers, in ms. REASONED, not
+ * benchmarked (unlike the tiering knee above): the sweep gates reclaim
+ * latency only — no hot path — so the default just bounds how long
+ * zero-reference blobs linger. 15 minutes.
+ *
+ * @inner
+ * @constant
+ * @type {number}
+ */
+var DEFAULT_SWEEP_INTERVAL = 15 * 60 * 1000;
+
+/**
+ * Default GC grace window, in ms: how long a blob must sit at zero
+ * references before the sweep may collect it. REASONED, not benchmarked:
+ * it must comfortably exceed the longest plausible in-flight `put()` (a
+ * default-cap 100MB upload on a slow link runs minutes; git's equivalent
+ * grace is two weeks), because the grace window is what keeps the sweep
+ * from racing a concurrent dedup-hit publish across processes. 1 hour.
+ *
+ * @inner
+ * @constant
+ * @type {number}
+ */
+var DEFAULT_SWEEP_GRACE = 60 * 60 * 1000;
 
 /**
  * Built drivers, keyed by name. `null` until {@link start} runs — deliberately
@@ -215,6 +306,11 @@ var _default = null;
  *   - a `root` that sits inside a web-served directory (review C6b) — an
  *     object store under the public tree is directly fetchable, and so is the
  *     metadata DB that sits inside it;
+ *   - a cas `hash` this runtime's crypto does not provide — the digest is the
+ *     content's identity and a path segment in every key, so minting keys
+ *     under a different algorithm than configured is not a degraded mode
+ *     (NB runtime-scoped: `sha256`/`sha512` exist on both supported runtimes,
+ *     `blake2b512` is Node-only — measured 2026-08-13);
  *   - a group binding (#STO1 slice 1) naming a driver that does not exist —
  *     including ANY binding when no `storage`/`drivers` block is configured:
  *     a driver-routed upload group is configured behaviour that can otherwise
@@ -225,9 +321,15 @@ var _default = null;
  *     applies;
  *   - an `inlineThreshold` that is not a unit-suffixed string — the default
  *     (64KB) applies; `'0B'` is legal and silent (tiering off);
+ *   - a cas `fsync` that is not a boolean, a `sweepInterval`/`sweepGrace`
+ *     that is not a unit-suffixed duration string, or a zero `sweepGrace`
+ *     (which would re-open the sweep-vs-put race) — each falls back to its
+ *     default; `'0s'` is legal and silent for `sweepInterval` only (periodic
+ *     sweep off);
  *   - driver keys the selected strategy does not consume — they are ignored,
  *     and a silently-ignored key reads as configured behaviour that never
- *     happens;
+ *     happens (the list is per-strategy: `fsync` is consumed by `cas` and
+ *     ignored-with-warning under `sharded`);
  *   - a binding whose staging `path` sits inside its driver's root — legal to
  *     combine (`path` is only the parse-time staging dir for a routed group),
  *     but staging inside the store tree strands files no key references.
@@ -378,7 +480,53 @@ function validateConfig(storageBlock, context) {
             }
         }
 
-        var extra = Object.keys(d).filter(function (k) { return SHARDED_KEYS.indexOf(k) < 0; });
+        if ( d.strategy === 'cas' ) {
+            // `hash` is FATAL when unusable, never defaulted-around: the
+            // digest is the content's identity and a path segment in every
+            // key, so silently minting sha256 keys under a config that says
+            // otherwise is configured behaviour that never happens — the
+            // fail-fast class, not the warn class. The check runs against
+            // THIS runtime's OpenSSL capability table: measured 2026-08-13,
+            // `sha256`/`sha512` exist on both supported runtimes while
+            // `blake2b512` is Node-only — so the same config can be valid on
+            // one runtime and fatal on the other, and saying so beats
+            // guessing.
+            if ( typeof(d.hash) != 'undefined' && d.hash !== null ) {
+                if ( typeof(d.hash) != 'string' || d.hash.length === 0 ) {
+                    out.fatal = 'driver `' + name + '`: `hash` must be a digest algorithm name (e.g. "sha256")';
+                    return out;
+                }
+                if ( crypto.getHashes().indexOf(d.hash.toLowerCase()) < 0 ) {
+                    out.fatal = 'driver `' + name + '`: `hash` names `' + d.hash + '`, which this runtime\'s crypto does not provide — `sha256` (the default) and `sha512` exist on every supported runtime; run crypto.getHashes() for the full local list';
+                    return out;
+                }
+            }
+
+            if ( typeof(d.fsync) != 'undefined' && d.fsync !== null && typeof(d.fsync) != 'boolean' ) {
+                out.warnings.push('driver `' + name + '`: `fsync` must be a boolean — got ' + JSON.stringify(d.fsync) + '; using the default (' + DEFAULT_CAS_FSYNC + ')');
+            }
+
+            // duration keys mirror the size keys' strictness: a unit is
+            // required (`'15m'` means minutes HERE and megabytes in a size
+            // key, which is exactly why neither parser guesses).
+            if ( typeof(d.sweepInterval) != 'undefined' && d.sweepInterval !== null ) {
+                if ( isNaN(util.parseDuration(d.sweepInterval)) ) {
+                    out.warnings.push('driver `' + name + '`: `sweepInterval` must carry a unit (ms/s/m/h/d, e.g. "15m"), or be "0s" to disable the periodic sweep — got ' + JSON.stringify(d.sweepInterval) + '; using the default (' + DEFAULT_SWEEP_INTERVAL + ' ms)');
+                }
+            }
+            if ( typeof(d.sweepGrace) != 'undefined' && d.sweepGrace !== null ) {
+                if ( isNaN(util.parseDuration(d.sweepGrace)) ) {
+                    out.warnings.push('driver `' + name + '`: `sweepGrace` must carry a unit (ms/s/m/h/d, e.g. "1h") — got ' + JSON.stringify(d.sweepGrace) + '; using the default (' + DEFAULT_SWEEP_GRACE + ' ms)');
+                } else if ( util.parseDuration(d.sweepGrace) <= 0 ) {
+                    // grace 0 would let the sweep race an in-flight identical
+                    // put — the exact window the grace exists to close
+                    out.warnings.push('driver `' + name + '`: `sweepGrace` must be greater than zero — got ' + JSON.stringify(d.sweepGrace) + '; using the default (' + DEFAULT_SWEEP_GRACE + ' ms)');
+                }
+            }
+        }
+
+        var consumed = STRATEGY_KEYS[d.strategy];
+        var extra = Object.keys(d).filter(function (k) { return consumed.indexOf(k) < 0; });
         if ( extra.length > 0 ) {
             out.warnings.push('driver `' + name + '`: key(s) ' + extra.join(', ') + ' are not used by the `' + d.strategy + '` strategy and are ignored');
         }
@@ -418,13 +566,19 @@ function validateConfig(storageBlock, context) {
  * the first build installed (the `lib/job` store-adoption precedent).
  *
  * @memberof module:lib/storage
- * @param {object}  opt                - Boot options.
- * @param {object}  opt.drivers        - The validated `storage.drivers` map.
- * @param {string}  [opt.default]      - Name of the default driver.
- * @param {object}  [opt.stores]       - Pre-built connector metadata stores keyed by driver
+ * @param {object}   opt               - Boot options.
+ * @param {object}   opt.drivers       - The validated `storage.drivers` map.
+ * @param {string}   [opt.default]     - Name of the default driver.
+ * @param {object}   [opt.stores]      - Pre-built connector metadata stores keyed by driver
  *                                       name (the caller resolves them through
  *                                       `lib/storage-store`). A driver absent from this map
  *                                       gets the embedded SQLite store inside its own root.
+ * @param {function} [opt.warn]        - Boot-warning sink for the per-root strategy-stamp
+ *                                       checks (§4: a strategy flip on populated storage is
+ *                                       unrecoverable by config, so it warns every boot; a
+ *                                       hash change is additive and warns once). A callback
+ *                                       rather than a logger import — the framework-
+ *                                       independence rule — and omitted means silent.
  * @returns {boolean} `true` when drivers were built, `false` when the call was refused
  *                    because drivers are already installed. The CALLER reports that —
  *                    this module never logs, so it stays free of `lib/logger` and
@@ -444,6 +598,13 @@ function start(opt) {
     if ( _drivers ) {
         return false;
     }
+
+    // Boot-warning hook — the strategy-stamp checks below surface through it.
+    // A CALLBACK rather than a logger import (the framework-independence
+    // rule) and rather than a changed return shape (`start()`'s boolean is
+    // pinned); the caller decides where warnings go, and a direct caller
+    // that passes none simply gets no stamp chatter.
+    var warn = ( typeof opt.warn === 'function' ) ? opt.warn : function() {};
 
     var drivers = opt.drivers || {};
     var names   = Object.keys(drivers);
@@ -472,17 +633,116 @@ function start(opt) {
             ? opt.stores[name]
             : createEmbeddedMetaStore(nodePath.join(conf.root, '.meta.db'));
 
-        built[name] = createLocalDriver(name, {
+        var resolved = {
             root            : conf.root,
             strategy        : conf.strategy,
             maxObjectSize   : max,
             inlineThreshold : inline
-        }, store);
+        };
+
+        // cas defaults resolve here too, same pattern. `hash` was validated
+        // against crypto.getHashes() by validateConfig; lowercasing makes the
+        // key's algorithm segment canonical.
+        var hash = null;
+        if ( conf.strategy === 'cas' ) {
+            hash = ( typeof conf.hash === 'string' && conf.hash.length > 0 )
+                ? conf.hash.toLowerCase()
+                : DEFAULT_CAS_HASH;
+            resolved.hash  = hash;
+            resolved.fsync = ( typeof conf.fsync === 'boolean' ) ? conf.fsync : DEFAULT_CAS_FSYNC;
+            var si = util.parseDuration(conf.sweepInterval);
+            resolved.sweepInterval = ( isNaN(si) || si < 0 ) ? DEFAULT_SWEEP_INTERVAL : si; // '0s' is legal: periodic sweep off
+            var sg = util.parseDuration(conf.sweepGrace);
+            resolved.sweepGrace = ( isNaN(sg) || sg <= 0 ) ? DEFAULT_SWEEP_GRACE : sg;      // 0 grace would re-open the sweep race
+        }
+
+        // THE strategy dispatch — validateConfig has already refused unknown
+        // and deferred names, so this lookup cannot miss on a validated boot;
+        // a direct caller bypassing validation gets a loud TypeError, which
+        // is the fail-fast it asked for. A factory throw (e.g. cas over a
+        // store lacking the refcount verbs) propagates to the caller, whose
+        // documented contract treats it as fatal.
+        built[name] = FACTORIES[conf.strategy](name, resolved, store);
+
+        // §4 — keys are strategy-specific, so a strategy flip on populated
+        // storage is unrecoverable by config edit; persist the strategy on
+        // the root's own metadata and warn on mismatch, every boot, until it
+        // is resolved. Fire-and-forget: with the embedded store it completes
+        // synchronously, with a connector store the warning simply lands
+        // when it lands — it gates nothing.
+        checkDriverStamp(name, conf.strategy, hash, store, warn);
     }
 
     _drivers = built;
     _default = ( typeof(opt.default) == 'string' && opt.default.length > 0 ) ? opt.default : null;
     return true;
+}
+
+/**
+ * Verify (or install) the `.driver` strategy stamp on a driver root's
+ * metadata store.
+ *
+ * The stamp is a reserved store row — `.driver` starts with a dot, which the
+ * key guards refuse from callers, so it can never collide with an object key
+ * — whose payload column carries `{strategy, hash}` as JSON (the store's
+ * `data` field is the one binary-safe slot the seam already contracts, so a
+ * connector store carries the stamp with zero extra surface).
+ *
+ * §4's two cases stay proportionate, deliberately:
+ *   - a STRATEGY mismatch warns EVERY boot and never restamps — keys are
+ *     strategy-specific, so the hazard (objects written under the old layout
+ *     are unaddressable under the new one) stands until a re-key migration
+ *     resolves it, and silencing it after one notice would hide exactly the
+ *     unrecoverable case;
+ *   - a HASH change warns ONCE and restamps — it is additive (the algorithm
+ *     is a path segment, old blobs stay addressable under their namespace,
+ *     dedup correctly does not span the two), so a routine algorithm bump
+ *     must not look as expensive as a re-key.
+ *
+ * A missing stamp is installed silently: a fresh root and a pre-cas root are
+ * indistinguishable, and warning on either would cry wolf on every upgrade.
+ *
+ * @inner
+ * @param {string}           name     - Driver name, for messages.
+ * @param {string}           strategy - The configured (validated) strategy.
+ * @param {?string}          hash     - The resolved digest algorithm (cas), else `null` —
+ *                                      a null hash skips the hash comparison entirely.
+ * @param {StorageMetaStore} store    - The driver's metadata store.
+ * @param {function}         warn     - Boot-warning sink (`opt.warn`, or a no-op).
+ * @returns {void}
+ */
+function checkDriverStamp(name, strategy, hash, store, warn) {
+    store.get('.driver', function(err, m) {
+        if (err) {
+            return warn('driver `' + name + '`: could not read the strategy stamp — ' + (err.message || err));
+        }
+        if ( !m || m.data == null ) {
+            return store.set('.driver', {
+                createdAt : Date.now(),
+                data      : Buffer.from(JSON.stringify({ strategy: strategy, hash: hash }))
+            }, function(setErr) {
+                if (setErr) { warn('driver `' + name + '`: could not write the strategy stamp — ' + (setErr.message || setErr)); }
+            });
+        }
+        var stamp;
+        try {
+            stamp = JSON.parse(m.data.toString('utf8'));
+        } catch (parseErr) {
+            return warn('driver `' + name + '`: the strategy stamp on this root is unreadable (' + (parseErr.message || parseErr) + ') — leaving it as-is');
+        }
+        if ( stamp.strategy !== strategy ) {
+            return warn('driver `' + name + '`: configured strategy `' + strategy + '` does not match this root\'s stamp (`' + stamp.strategy + '`) — keys are strategy-specific, so objects written under `' + stamp.strategy + '` are NOT addressable under `' + strategy + '`; changing a driver\'s strategy on populated storage requires a re-key migration, not a config edit. This warning repeats each boot while the mismatch stands.');
+        }
+        if ( hash && stamp.hash && stamp.hash !== hash ) {
+            warn('driver `' + name + '`: digest algorithm changed (`' + stamp.hash + '` -> `' + hash + '`) — additive, no migration required: existing blobs stay addressable under their own namespace, new writes land under `' + hash + '`, and dedup does not span the two until content is re-hashed. Stamp updated; this notice does not repeat.');
+            store.set('.driver', {
+                createdAt : ( typeof m.createdAt === 'number' ) ? m.createdAt : Date.now(),
+                data      : Buffer.from(JSON.stringify({ strategy: strategy, hash: hash }))
+            }, function(setErr) {
+                if (setErr) { warn('driver `' + name + '`: could not update the strategy stamp — ' + (setErr.message || setErr)); }
+            });
+        }
+    });
 }
 
 /**
@@ -563,6 +823,12 @@ module.exports = {
     _ADAPTERS                 : ADAPTERS,
     _STRATEGIES               : STRATEGIES,
     _DEFERRED_STRATEGIES      : DEFERRED_STRATEGIES,
+    _STRATEGY_KEYS            : STRATEGY_KEYS,
     _DEFAULT_MAX_OBJECT_SIZE  : DEFAULT_MAX_OBJECT_SIZE,
-    _DEFAULT_INLINE_THRESHOLD : DEFAULT_INLINE_THRESHOLD
+    _DEFAULT_INLINE_THRESHOLD : DEFAULT_INLINE_THRESHOLD,
+    _DEFAULT_CAS_HASH         : DEFAULT_CAS_HASH,
+    _DEFAULT_CAS_FSYNC        : DEFAULT_CAS_FSYNC,
+    _DEFAULT_SWEEP_INTERVAL   : DEFAULT_SWEEP_INTERVAL,
+    _DEFAULT_SWEEP_GRACE      : DEFAULT_SWEEP_GRACE,
+    _parseDuration            : util.parseDuration
 };

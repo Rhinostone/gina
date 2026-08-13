@@ -77,6 +77,16 @@ function noop() {}
  *                                    truncation at NUL): they ARE the object, not a
  *                                    description of it. `get()` returns the key only for
  *                                    file-backed rows so their shape is unchanged.
+ * @property {number}  [refs]       - Reference count, present ONLY on refcounted (`cas`)
+ *                                    rows — mirroring how `data` stays off file-backed
+ *                                    rows, so a non-refcounted row keeps its exact
+ *                                    pre-cas shape. Owned by `acquireRef`/`releaseRef`;
+ *                                    `set()` must never touch a refcounted row (its
+ *                                    REPLACE semantics would reset the count).
+ * @property {?number} [zeroAt]     - Epoch ms at which `refs` last reached 0, or `null`
+ *                                    while `refs` > 0. Present only alongside `refs`.
+ *                                    Invariant: `zeroAt` is non-null exactly when
+ *                                    `refs` === 0 — the GC grace window reads it.
  */
 
 /**
@@ -89,11 +99,31 @@ function noop() {}
  * it, and losing the store loses those objects, not just their metadata. Both
  * facts are part of the contract, not implementation detail.
  *
+ * **The refcount verbs (`acquireRef` / `releaseRef` / `listZeroRefs` /
+ * `removeIfZero`) are OPTIONAL — required only to back a `cas` driver**, which
+ * refuses to build against a store lacking them. Each MUST be atomic with
+ * respect to the others for a given key: `acquireRef` is what makes two
+ * concurrent identical `put()`s yield one blob and two references instead of a
+ * lost update, and `removeIfZero` is what lets the GC sweep claim a blob
+ * without racing a resurrection. The embedded store gets that atomicity from
+ * the driver being synchronous (each verb completes inside one JS turn); an
+ * async connector implementation must provide it itself (a counter mutation,
+ * a compare-and-set loop, a Lua script — whatever the backend's atomic
+ * primitive is) and inherits the documented residual: across PROCESSES, the
+ * sweep's unlink can in principle race a same-content publish in the
+ * nanoseconds between claim and unlink — which is why the sweep only collects
+ * blobs at zero for longer than the grace window, and why multi-process sweep
+ * coordination arrives WITH the first connector implementation, not before.
+ *
  * @typedef  {Object} StorageMetaStore
- * @property {function(string, StorageMeta, function=): void} set    - Upsert `meta` under `key`; `fn(err, meta)`. MUST report failure through the callback, never by throwing.
- * @property {function(string, function): void}               get    - Fetch by `key`; `fn(err, meta|null)`. Rows holding an inline payload include `data` (Buffer); file-backed rows omit the key entirely, keeping their pre-tiering shape.
+ * @property {function(string, StorageMeta, function=): void} set    - Upsert `meta` under `key`; `fn(err, meta)`. MUST report failure through the callback, never by throwing. NEVER call it on a refcounted row — REPLACE semantics would reset the count; `acquireRef` owns those rows.
+ * @property {function(string, function): void}               get    - Fetch by `key`; `fn(err, meta|null)`. Rows holding an inline payload include `data` (Buffer); refcounted rows include `refs` (+ `zeroAt`); rows that are neither omit both keys entirely, keeping their pre-tiering/pre-cas shape.
  * @property {function(string, function=): void}              remove - Delete by `key`; `fn(err, existed)`.
  * @property {function(): void}                               close  - Release the backend handle. NOT called on the request path — provided for teardown and tests.
+ * @property {function(string, StorageMeta, function=): void} [acquireRef]  - Atomically insert `meta` under `key` with `refs`=1, or — when the row exists — increment `refs` and clear `zeroAt`, IGNORING the incoming meta (first-write-wins: identical bytes already have a row, and its identity fields stay). `fn(err, {created, refs, meta})` — `meta` is the STORED row's metadata (payload excluded).
+ * @property {function(string, function=): void}              [releaseRef]  - Atomically decrement `refs`, flooring at 0 and stamping `zeroAt` when 0 is reached. On a missing, non-refcounted, or already-zero row: `{existed:false}`. `fn(err, {existed, refs})`.
+ * @property {function(number, number, function): void}       [listZeroRefs] - Keys with `refs` === 0 whose `zeroAt` <= `olderThanMs`, oldest first, at most `limit`. Non-refcounted rows (refs NULL/absent) are never returned. `fn(err, keys)`.
+ * @property {function(string, function=): void}              [removeIfZero] - Delete the row ONLY IF `refs` is still 0 — the sweep's claim step, so a concurrent `acquireRef` resurrection always wins. `fn(err, removed)`.
  */
 
 /**
@@ -137,7 +167,9 @@ module.exports = function createEmbeddedMetaStore(dbPath) {
 
     // Idempotent schema bootstrap. `key` is the opaque storage key; `data`
     // holds the payload ONLY for size-tiered inline objects — file-backed rows
-    // leave it NULL.
+    // leave it NULL; `refs`/`zero_at` are set ONLY on refcounted (cas) rows —
+    // everything else leaves them NULL, which is what keeps `WHERE refs = 0`
+    // sweeps blind to non-refcounted rows (NULL never equals 0 in SQL).
     db.exec(
         'CREATE TABLE IF NOT EXISTS objects ('
         + '  key           TEXT    PRIMARY KEY,'
@@ -145,27 +177,46 @@ module.exports = function createEmbeddedMetaStore(dbPath) {
         + '  content_type  TEXT,'
         + '  size          INTEGER,'
         + '  created_at    INTEGER NOT NULL,'
-        + '  data          BLOB'
+        + '  data          BLOB,'
+        + '  refs          INTEGER,'
+        + '  zero_at       INTEGER'
         + ')'
     );
 
-    // v1 → v2 migration (additive, idempotent): a database created before size
-    // tiering lacks the `data` column, and CREATE TABLE IF NOT EXISTS will not
-    // add it. ALTER is cheap (a catalog update, no table rewrite) and running
-    // it once is guaranteed by the column probe.
-    var _hasData = false;
+    // Additive, idempotent migrations: a database created before size tiering
+    // lacks `data`; one created before cas lacks `refs`/`zero_at`. CREATE TABLE
+    // IF NOT EXISTS will not add columns to an existing table, ALTER is cheap
+    // (a catalog update, no table rewrite), and running each at most once is
+    // guaranteed by the column probe.
+    var _have = {};
     var _cols = db.prepare('PRAGMA table_info(objects)').all();
     for (var _c = 0; _c < _cols.length; _c++) {
-        if ( _cols[_c].name === 'data' ) { _hasData = true; break; }
+        _have[_cols[_c].name] = true;
     }
-    if ( !_hasData ) {
-        db.exec('ALTER TABLE objects ADD COLUMN data BLOB');
-    }
+    if ( !_have.data )    { db.exec('ALTER TABLE objects ADD COLUMN data BLOB'); }
+    if ( !_have.refs )    { db.exec('ALTER TABLE objects ADD COLUMN refs INTEGER'); }
+    if ( !_have.zero_at ) { db.exec('ALTER TABLE objects ADD COLUMN zero_at INTEGER'); }
 
     // Prepared once — avoids re-parsing SQL on every call.
+    // NB deliberately NO `RETURNING` anywhere: the Bun sqlite adapter covers
+    // exactly the surface measured against node:sqlite (get/all/run with
+    // positional params), and `RETURNING` is not on that list. Every verb
+    // below composes from plain UPDATE/SELECT/INSERT/DELETE instead — atomic
+    // in-process because the driver is synchronous (each verb completes
+    // inside one JS turn; nothing can interleave).
     var stmtUpsert = db.prepare('INSERT OR REPLACE INTO objects (key, original_name, content_type, size, created_at, data) VALUES (?, ?, ?, ?, ?, ?)');
-    var stmtGet    = db.prepare('SELECT original_name, content_type, size, created_at, data FROM objects WHERE key = ?');
+    var stmtGet    = db.prepare('SELECT original_name, content_type, size, created_at, data, refs, zero_at FROM objects WHERE key = ?');
     var stmtDel    = db.prepare('DELETE FROM objects WHERE key = ?');
+    // cas refcount verbs. The `refs IS NOT NULL` guard on the increment keeps
+    // acquireRef from silently "adopting" a non-refcounted row that happens to
+    // share the key (it falls through to INSERT, whose PRIMARY KEY conflict
+    // then surfaces loudly instead).
+    var stmtIncr   = db.prepare('UPDATE objects SET refs = refs + 1, zero_at = NULL WHERE key = ? AND refs IS NOT NULL');
+    var stmtInsRef = db.prepare('INSERT INTO objects (key, original_name, content_type, size, created_at, data, refs, zero_at) VALUES (?, ?, ?, ?, ?, ?, 1, NULL)');
+    var stmtRefs   = db.prepare('SELECT original_name, content_type, size, created_at, refs FROM objects WHERE key = ?');
+    var stmtDecr   = db.prepare('UPDATE objects SET refs = ?, zero_at = ? WHERE key = ?');
+    var stmtZero   = db.prepare('SELECT key FROM objects WHERE refs = 0 AND zero_at <= ? ORDER BY zero_at LIMIT ?');
+    var stmtRmZ    = db.prepare('DELETE FROM objects WHERE key = ? AND refs = 0');
 
     return {
 
@@ -227,6 +278,12 @@ module.exports = function createEmbeddedMetaStore(dbPath) {
             if ( row.data !== null && typeof row.data !== 'undefined' ) {
                 meta.data = Buffer.isBuffer(row.data) ? row.data : Buffer.from(row.data);
             }
+            // Present only for refcounted (cas) rows — the same pattern as
+            // `data` above, so a non-refcounted row keeps its exact shape.
+            if ( row.refs !== null && typeof row.refs !== 'undefined' ) {
+                meta.refs   = row.refs;
+                meta.zeroAt = ( typeof row.zero_at === 'undefined' ) ? null : row.zero_at;
+            }
             return fn(null, meta);
         },
 
@@ -241,6 +298,138 @@ module.exports = function createEmbeddedMetaStore(dbPath) {
             if (typeof fn !== 'function') fn = noop;
             try {
                 var res = stmtDel.run(key);
+                fn(null, res.changes > 0);
+            } catch (err) {
+                fn(err);
+            }
+        },
+
+        /**
+         * Atomically take one reference on `key` — insert-or-increment.
+         *
+         * Missing row: inserted with `meta` and `refs` = 1 (`created: true`).
+         * Existing refcounted row: `refs` incremented, `zeroAt` cleared (a
+         * blob inside the GC grace window is resurrected), and the INCOMING
+         * meta is IGNORED — first-write-wins, because identical bytes already
+         * have a row and its identity fields stay. The returned `meta` is
+         * always the STORED row's (payload excluded — `put()` needs identity
+         * and size, not the bytes it just streamed).
+         *
+         * Atomic in-process: the synchronous driver runs the whole verb in
+         * one JS turn, so two overlapping `put()`s of identical content
+         * serialize here — one creates, the other increments.
+         *
+         * @param {string}      key  - The blob key.
+         * @param {StorageMeta} meta - Metadata for the CREATE case (may carry `data` for
+         *                             an inline-tiered blob).
+         * @param {function}    [fn] - `fn(err, {created: boolean, refs: number, meta: StorageMeta})`.
+         * @returns {void}
+         */
+        acquireRef: function(key, meta, fn) {
+            if (typeof fn !== 'function') fn = noop;
+            meta = meta || {};
+            try {
+                var r = stmtIncr.run(key);
+                if ( r.changes === 1 ) {
+                    var row = stmtRefs.get(key);
+                    return fn(null, {
+                        created : false,
+                        refs    : row.refs,
+                        meta    : {
+                            originalName : row.original_name,
+                            contentType  : row.content_type,
+                            size         : row.size,
+                            createdAt    : row.created_at,
+                            refs         : row.refs
+                        }
+                    });
+                }
+                stmtInsRef.run(
+                    key,
+                    (typeof meta.originalName === 'string') ? meta.originalName : null,
+                    (typeof meta.contentType === 'string') ? meta.contentType : null,
+                    (typeof meta.size === 'number') ? meta.size : null,
+                    (typeof meta.createdAt === 'number') ? meta.createdAt : Date.now(),
+                    // same binary-safety rule as set(): a Buffer IS a
+                    // Uint8Array and binds as BLOB; anything else is refused
+                    // to NULL rather than utf8-coerced.
+                    ( meta.data instanceof Uint8Array ) ? meta.data : null
+                );
+                fn(null, { created: true, refs: 1, meta: meta });
+            } catch (err) {
+                fn(err);
+            }
+        },
+
+        /**
+         * Atomically drop one reference on `key`.
+         *
+         * Floors at 0 and stamps `zeroAt` at the 1 → 0 transition — the
+         * timestamp the GC grace window reads. A missing, non-refcounted, or
+         * already-zero row answers `{existed: false}`: the reference the
+         * caller wanted to drop was already gone, which is the outcome they
+         * asked for (the idempotency shape `release()` has always had).
+         *
+         * @param {string}   key  - The blob key.
+         * @param {function} [fn] - `fn(err, {existed: boolean, refs: number})` — `refs` is the
+         *                          count AFTER the decrement.
+         * @returns {void}
+         */
+        releaseRef: function(key, fn) {
+            if (typeof fn !== 'function') fn = noop;
+            try {
+                var row = stmtRefs.get(key);
+                if ( !row || typeof row.refs !== 'number' || row.refs < 1 ) {
+                    return fn(null, { existed: false, refs: ( row && typeof row.refs === 'number' ) ? row.refs : 0 });
+                }
+                var next = row.refs - 1;
+                // zero_at is non-null exactly when refs === 0 (the invariant
+                // the typedef states) — writing null on a >0 decrement keeps
+                // it without a second statement.
+                stmtDecr.run(next, ( next === 0 ) ? Date.now() : null, key);
+                fn(null, { existed: true, refs: next });
+            } catch (err) {
+                fn(err);
+            }
+        },
+
+        /**
+         * Keys whose refcount has sat at 0 since before `olderThanMs` —
+         * oldest first, at most `limit`. Non-refcounted rows have NULL
+         * `refs`, which `refs = 0` never matches, so they are structurally
+         * invisible here (measured, with a NULL-row control).
+         *
+         * @param {number}   olderThanMs - Epoch ms cutoff (typically now − grace).
+         * @param {number}   limit       - Batch cap.
+         * @param {function} fn          - `fn(err, string[])`.
+         * @returns {void}
+         */
+        listZeroRefs: function(olderThanMs, limit, fn) {
+            if (typeof fn !== 'function') fn = noop;
+            try {
+                var rows = stmtZero.all(olderThanMs, limit);
+                var keys = [];
+                for (var i = 0; i < rows.length; i++) { keys.push(rows[i].key); }
+                fn(null, keys);
+            } catch (err) {
+                fn(err);
+            }
+        },
+
+        /**
+         * Delete the row ONLY IF its refcount is still 0 — the sweep's claim
+         * step. A concurrent `acquireRef` resurrection wins: it clears the
+         * zero state before this runs, the guarded DELETE matches nothing,
+         * and the sweep skips the blob.
+         *
+         * @param {string}   key  - The blob key.
+         * @param {function} [fn] - `fn(err, removed: boolean)`.
+         * @returns {void}
+         */
+        removeIfZero: function(key, fn) {
+            if (typeof fn !== 'function') fn = noop;
+            try {
+                var res = stmtRmZ.run(key);
                 fn(null, res.changes > 0);
             } catch (err) {
                 fn(err);

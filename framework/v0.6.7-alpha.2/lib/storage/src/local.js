@@ -88,33 +88,6 @@ var TMP_DIR = '.tmp';
  */
 
 /**
- * Whether any segment of `key` names driver-internal state.
- *
- * `.tmp` holds in-flight writes and `.meta.db` is the metadata database — both
- * live INSIDE the root by design, so both are reachable by a key that never
- * leaves it. Without this, a caller passing `.meta.db` to `release()` would
- * delete the driver's own index.
- *
- * Checked AFTER confinement, never before — see {@link module:lib/storage/local}'s
- * `resolvePath` for why the order is load-bearing.
- *
- * @inner
- * @param {string} key - A key that has already passed confinement.
- * @returns {boolean} `true` when a segment starts with a dot.
- * @example
- * hasReservedSegment('2026/08/10/01K2…'); // => false
- * hasReservedSegment('.meta.db');         // => true
- * hasReservedSegment('.tmp/x');           // => true
- */
-function hasReservedSegment(key) {
-    var segments = key.split(/[\\/]/);
-    for (var i = 0; i < segments.length; i++) {
-        if ( segments[i].charAt(0) === '.' ) { return true; }
-    }
-    return false;
-}
-
-/**
  * Build a `local` filesystem driver.
  *
  * @param {string}           name              - Driver name, used only in error messages.
@@ -147,46 +120,15 @@ module.exports = function createLocalDriver(name, conf, metaStore) {
     /**
      * Resolve a caller-supplied key to a confined absolute path.
      *
-     * **The guard ORDER is load-bearing, and got this wrong once.** Confinement
-     * runs FIRST. A reserved-segment check placed ahead of it shadows the
-     * security boundary entirely: `..` starts with a dot, so every classic
-     * traversal attempt is answered with "reserved", `confineToBase` is never
-     * reached, and a traversal test passes for the wrong reason — leaving the
-     * real guard unexercised by the one input class it exists for. Caught by a
-     * smoke run before this shipped; keep confinement first.
-     *
-     * The canonical-form check that follows keeps the key and its path 1:1. A
-     * key like `a/../b` stays inside the root, so confinement accepts it, but
-     * it addresses the same file as `b` while indexing under a different
-     * metadata key — so `stat()` would answer for one and `get()` for the
-     * other. Keys are opaque and always minted by `put()`, so a non-canonical
-     * one never arises honestly.
+     * ONE shared implementation for every strategy — see
+     * {@link module:lib/storage/util.makeResolvePath} for the three guards
+     * and why their ORDER is load-bearing (a security boundary must not
+     * exist in two copies that can drift).
      *
      * @inner
-     * @param {string} key - The opaque storage key.
-     * @returns {{path: ?string, error: ?Error}} Exactly one side is set.
+     * @type {function(string): {path: ?string, error: ?Error}}
      */
-    var resolvePath = function(key) {
-        if ( typeof(key) != 'string' || key.length === 0 ) {
-            return { path: null, error: new Error('[storage:' + name + '] a non-empty string key is required (got: ' + JSON.stringify(key) + ')') };
-        }
-        // 1. Security boundary, first so it is genuinely exercised.
-        var full = util.confineToBase(nodePath.join(root, key), root);
-        if ( full === null ) {
-            // Deliberately does NOT echo the resolved path — that would confirm
-            // filesystem layout to whoever supplied the hostile key.
-            return { path: null, error: new Error('[storage:' + name + '] key `' + key + '` escapes the driver root') };
-        }
-        // 2. Canonical form, so key and path stay 1:1.
-        if ( nodePath.normalize(key) !== key || nodePath.isAbsolute(key) ) {
-            return { path: null, error: new Error('[storage:' + name + '] key `' + key + '` is not in canonical form') };
-        }
-        // 3. Driver-internal paths, reachable without ever leaving the root.
-        if ( hasReservedSegment(key) ) {
-            return { path: null, error: new Error('[storage:' + name + '] key `' + key + '` is reserved (segments starting with a dot hold driver-internal state)') };
-        }
-        return { path: full, error: null };
-    };
+    var resolvePath = util.makeResolvePath(name, root);
 
     return {
 

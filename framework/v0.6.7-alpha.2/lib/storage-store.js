@@ -24,6 +24,13 @@ var console = require('./logger');
  * bytes exactly, and losing the store loses inline objects, not just their
  * metadata; file-backed objects keep their bytes in the driver's adapter.
  *
+ * Since cas, a store backing a `cas` driver must ALSO implement the four
+ * refcount verbs (`acquireRef`/`releaseRef`/`listZeroRefs`/`removeIfZero` —
+ * contract in `lib/storage/src/meta-store.js`'s `StorageMetaStore` typedef,
+ * including the per-key atomicity each owes and the multi-process sweep
+ * residual). A `cas` driver refuses to build against a store lacking them;
+ * `sharded` drivers need only the base four verbs.
+ *
  * Do not call this directly — declare the backend in `config/connectors.json`,
  * point the driver's `settings.json` `storage.drivers.<name>.store` at that
  * entry name, and let `gna.js` wire it at boot (before the first `put()`, since
