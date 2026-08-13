@@ -69,6 +69,14 @@ function noop() {}
  * @property {number}  size         - Object size in bytes, measured by the adapter as it
  *                                    wrote (never taken from the client).
  * @property {number}  createdAt    - Epoch ms at publish time.
+ * @property {?Buffer} data         - The object PAYLOAD, present only for size-tiered
+ *                                    inline objects (below the driver's `inlineThreshold`).
+ *                                    `null`/absent means the bytes live in the file tree.
+ *                                    A store implementation MUST round-trip these bytes
+ *                                    exactly (binary-safe — no utf8 coercion, no
+ *                                    truncation at NUL): they ARE the object, not a
+ *                                    description of it. `get()` returns the key only for
+ *                                    file-backed rows so their shape is unchanged.
  */
 
 /**
@@ -76,9 +84,14 @@ function noop() {}
  * implementation; a connector-backed store (resolved by `lib/storage-store`,
  * demand-gated) implements the same three methods plus `close`.
  *
+ * Since size tiering, a row may CARRY the object payload (`meta.data`, a
+ * Buffer) — so a connector implementation needs a binary-safe column/field for
+ * it, and losing the store loses those objects, not just their metadata. Both
+ * facts are part of the contract, not implementation detail.
+ *
  * @typedef  {Object} StorageMetaStore
  * @property {function(string, StorageMeta, function=): void} set    - Upsert `meta` under `key`; `fn(err, meta)`. MUST report failure through the callback, never by throwing.
- * @property {function(string, function): void}               get    - Fetch by `key`; `fn(err, meta|null)`.
+ * @property {function(string, function): void}               get    - Fetch by `key`; `fn(err, meta|null)`. Rows holding an inline payload include `data` (Buffer); file-backed rows omit the key entirely, keeping their pre-tiering shape.
  * @property {function(string, function=): void}              remove - Delete by `key`; `fn(err, existed)`.
  * @property {function(): void}                               close  - Release the backend handle. NOT called on the request path — provided for teardown and tests.
  */
@@ -122,21 +135,36 @@ module.exports = function createEmbeddedMetaStore(dbPath) {
     db.exec('PRAGMA journal_mode=WAL');
     db.exec('PRAGMA synchronous=NORMAL');
 
-    // Idempotent schema bootstrap. `key` is the opaque storage key; the object
-    // BYTES never live here.
+    // Idempotent schema bootstrap. `key` is the opaque storage key; `data`
+    // holds the payload ONLY for size-tiered inline objects — file-backed rows
+    // leave it NULL.
     db.exec(
         'CREATE TABLE IF NOT EXISTS objects ('
         + '  key           TEXT    PRIMARY KEY,'
         + '  original_name TEXT,'
         + '  content_type  TEXT,'
         + '  size          INTEGER,'
-        + '  created_at    INTEGER NOT NULL'
+        + '  created_at    INTEGER NOT NULL,'
+        + '  data          BLOB'
         + ')'
     );
 
+    // v1 → v2 migration (additive, idempotent): a database created before size
+    // tiering lacks the `data` column, and CREATE TABLE IF NOT EXISTS will not
+    // add it. ALTER is cheap (a catalog update, no table rewrite) and running
+    // it once is guaranteed by the column probe.
+    var _hasData = false;
+    var _cols = db.prepare('PRAGMA table_info(objects)').all();
+    for (var _c = 0; _c < _cols.length; _c++) {
+        if ( _cols[_c].name === 'data' ) { _hasData = true; break; }
+    }
+    if ( !_hasData ) {
+        db.exec('ALTER TABLE objects ADD COLUMN data BLOB');
+    }
+
     // Prepared once — avoids re-parsing SQL on every call.
-    var stmtUpsert = db.prepare('INSERT OR REPLACE INTO objects (key, original_name, content_type, size, created_at) VALUES (?, ?, ?, ?, ?)');
-    var stmtGet    = db.prepare('SELECT original_name, content_type, size, created_at FROM objects WHERE key = ?');
+    var stmtUpsert = db.prepare('INSERT OR REPLACE INTO objects (key, original_name, content_type, size, created_at, data) VALUES (?, ?, ?, ?, ?, ?)');
+    var stmtGet    = db.prepare('SELECT original_name, content_type, size, created_at, data FROM objects WHERE key = ?');
     var stmtDel    = db.prepare('DELETE FROM objects WHERE key = ?');
 
     return {
@@ -158,7 +186,11 @@ module.exports = function createEmbeddedMetaStore(dbPath) {
                     (typeof meta.originalName === 'string') ? meta.originalName : null,
                     (typeof meta.contentType === 'string') ? meta.contentType : null,
                     (typeof meta.size === 'number') ? meta.size : null,
-                    (typeof meta.createdAt === 'number') ? meta.createdAt : Date.now()
+                    (typeof meta.createdAt === 'number') ? meta.createdAt : Date.now(),
+                    // Buffer IS a Uint8Array, which the driver binds as BLOB;
+                    // anything else (incl. a string — utf8 coercion would
+                    // corrupt binary payloads) is refused to NULL.
+                    ( meta.data instanceof Uint8Array ) ? meta.data : null
                 );
                 fn(null, meta);
             } catch (err) {
@@ -182,12 +214,20 @@ module.exports = function createEmbeddedMetaStore(dbPath) {
                 return fn(err);
             }
             if (!row) return fn(null, null);
-            return fn(null, {
+            var meta = {
                 originalName : row.original_name,
                 contentType  : row.content_type,
                 size         : row.size,
                 createdAt    : row.created_at
-            });
+            };
+            // Present only for inline objects, so a file-backed row keeps its
+            // exact pre-tiering shape. The driver hands BLOBs back as
+            // Uint8Array; normalise to Buffer (a zero-length BLOB is a real
+            // empty payload, distinct from NULL).
+            if ( row.data !== null && typeof row.data !== 'undefined' ) {
+                meta.data = Buffer.isBuffer(row.data) ? row.data : Buffer.from(row.data);
+            }
+            return fn(null, meta);
         },
 
         /**

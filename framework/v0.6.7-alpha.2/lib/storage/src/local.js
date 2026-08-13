@@ -11,7 +11,10 @@
  * @module lib/storage/local
  * @description The `local` adapter crossed with the `sharded` strategy — bytes
  * on the local filesystem under a per-driver root, keys laid out as
- * `YYYY/MM/DD/<ulid><ext>`.
+ * `YYYY/MM/DD/<ulid><ext>`. With size tiering active (`inlineThreshold` > 0,
+ * the default), objects strictly under the threshold never touch the
+ * filesystem at all: their bytes live inline in the metadata store, under the
+ * SAME key shape, and `resolve()` reports them as `{kind:'inline'}`.
  *
  * **Why a date prefix.** Directories with millions of sibling entries are slow
  * to list and unpleasant to operate; a day-level prefix keeps each directory
@@ -41,6 +44,7 @@
 
 var fs       = require('fs');
 var nodePath = require('path');
+var Readable = require('stream').Readable;
 
 var util = require('./util');
 
@@ -119,6 +123,10 @@ function hasReservedSegment(key) {
  *                                               absolute and outside every web-served tree.
  * @param {string}           conf.strategy     - Key-layout strategy (`sharded`).
  * @param {number}           conf.maxObjectSize - Per-object byte ceiling, already parsed.
+ * @param {number}           [conf.inlineThreshold] - Size-tiering threshold in bytes, already
+ *                                               parsed (defaults resolve in `start()`). Objects
+ *                                               strictly under it are stored inline in the
+ *                                               metadata store; `0`/absent disables tiering.
  * @param {StorageMetaStore} metaStore         - Metadata backend (embedded SQLite by default).
  * @returns {StorageDriver} A ready driver.
  *
@@ -129,6 +137,12 @@ module.exports = function createLocalDriver(name, conf, metaStore) {
 
     var root = conf.root;
     var max  = conf.maxObjectSize;
+    // Size tiering: objects strictly UNDER this many bytes are stored inline
+    // in the metadata store; 0 (or absent — defaults resolve in start(), the
+    // maxObjectSize pattern) means every object goes to the file tree.
+    var inlineThreshold = ( typeof conf.inlineThreshold === 'number' && conf.inlineThreshold > 0 )
+        ? conf.inlineThreshold
+        : 0;
 
     /**
      * Resolve a caller-supplied key to a confined absolute path.
@@ -179,16 +193,25 @@ module.exports = function createLocalDriver(name, conf, metaStore) {
         /**
          * Store a readable stream and return its opaque key.
          *
-         * Streams to a temp file inside the driver root, then publishes with
-         * `rename(2)`. On ANY failure — a source error, a write error, or the
-         * size cap being exceeded mid-stream — the temp file is removed and the
-         * REAL error is reported: never a fabricated one (the #B223 lesson,
-         * where every move failure surfaced as a misleading empty-upload
-         * message and masked ENOSPC/EACCES entirely).
+         * With size tiering active, the head of the stream is buffered in
+         * memory (bounded by the threshold plus one chunk): a stream that ends
+         * strictly under `inlineThreshold` publishes as ONE metadata-store
+         * transaction — no temp file, no directories, no filesystem at all —
+         * while a stream that reaches the threshold crosses over to the file
+         * path below, byte-order-exact.
+         *
+         * The file path streams to a temp file inside the driver root, then
+         * publishes with `rename(2)`. On ANY failure — a source error, a write
+         * error, or the size cap being exceeded mid-stream — the temp file is
+         * removed and the REAL error is reported: never a fabricated one (the
+         * #B223 lesson, where every move failure surfaced as a misleading
+         * empty-upload message and masked ENOSPC/EACCES entirely).
          *
          * The reported size is measured from the PUBLISHED file on disk, not
          * from a byte counter read at an event that may still have data queued
-         * behind it (the #B142 lesson) and never from the client.
+         * behind it (the #B142 lesson) and never from the client. An inline
+         * object's size is its buffer length — the same bytes the store
+         * persists in the same transaction.
          *
          * @param {object}   stream               - Any readable stream.
          * @param {object}   [meta]               - Client-supplied, untrusted.
@@ -225,82 +248,164 @@ module.exports = function createLocalDriver(name, conf, metaStore) {
             var tmpD  = nodePath.join(root, TMP_DIR);
             var tmp   = nodePath.join(tmpD, id + '.tmp');
 
-            try {
-                fs.mkdirSync(nodePath.dirname(final), { recursive: true });
-                fs.mkdirSync(tmpD, { recursive: true });
-            } catch (mkErr) {
-                return fn(mkErr);
-            }
-
             var settled = false;
             var written = 0;
+            var mkdired = false;
+            var spilled = false;
+            var ws      = null;
+            var head    = [];
+
+            var mkdirs = function() {
+                fs.mkdirSync(nodePath.dirname(final), { recursive: true });
+                fs.mkdirSync(tmpD, { recursive: true });
+                mkdired = true;
+            };
+
+            // Tiering off: today's exact sequence — directories up front, a
+            // plain early return on failure, then pipe from the first byte.
+            if ( inlineThreshold === 0 ) {
+                try {
+                    mkdirs();
+                } catch (mkErr) {
+                    return fn(mkErr);
+                }
+            }
 
             var onError = function(err) {
                 if (settled) return;
                 settled = true;
+                head = null;
                 try { stream.destroy(); } catch (_e) {}
-                try { ws.destroy(); } catch (_e) {}
+                if (ws) { try { ws.destroy(); } catch (_e) {} }
                 try { if ( fs.existsSync(tmp) ) fs.unlinkSync(tmp); } catch (_e) {}
                 fn(( err instanceof Error ) ? err : new Error(String(err)));
             };
 
-            var ws = fs.createWriteStream(tmp);
+            /**
+             * Cross over to the file tree: create the directories (deferred
+             * while the object could still land inline — a pure-inline put
+             * touches the filesystem not at all), open the temp write stream,
+             * flush whatever head was buffered, and hand delivery to pipe().
+             *
+             * @inner
+             * @returns {void}
+             */
+            var spill = function() {
+                spilled = true;
+                if ( !mkdired ) {
+                    try {
+                        mkdirs();
+                    } catch (mkErr) {
+                        return onError(mkErr);
+                    }
+                }
 
-            // #B143 — armed at creation, never in a later handler: Node does not
-            // replay 'error' for a listener attached after the fact, and an
-            // unlistened stream 'error' becomes an uncaughtException that takes
-            // the bundle down. Both streams need their own; `.pipe()` returns the
-            // DESTINATION, so a single chained listener would cover only one.
-            ws.on('error', onError);
+                ws = fs.createWriteStream(tmp);
+
+                // #B143 — armed at creation, never in a later handler: Node does not
+                // replay 'error' for a listener attached after the fact, and an
+                // unlistened stream 'error' becomes an uncaughtException that takes
+                // the bundle down. Both streams need their own; `.pipe()` returns the
+                // DESTINATION, so a single chained listener would cover only one.
+                ws.on('error', onError);
+
+                // 'close' also follows 'error' on an autoDestroyed stream, so the
+                // settled latch is what keeps a failed write from publishing.
+                ws.on('close', function() {
+                    if (settled) return;
+
+                    var size;
+                    try {
+                        // The published-file size is the honest one: it cannot be
+                        // ahead of the bytes actually on disk the way an in-flight
+                        // counter can.
+                        size = fs.statSync(tmp).size;
+                        fs.renameSync(tmp, final);
+                    } catch (err) {
+                        return onError(err);
+                    }
+
+                    settled = true;
+                    metaStore.set(key, {
+                        originalName : (typeof meta.originalName === 'string') ? meta.originalName : null,
+                        contentType  : (typeof meta.contentType === 'string') ? meta.contentType : null,
+                        size         : size,
+                        createdAt    : now.getTime()
+                    }, function(metaErr) {
+                        if (metaErr) {
+                            // The bytes are published but unindexed. Roll the object
+                            // back rather than leave a file `stat()` will deny exists
+                            // — a caller that got no key can never reference it.
+                            try { fs.unlinkSync(final); } catch (_e) {}
+                            return fn(metaErr);
+                        }
+                        fn(null, {
+                            key         : key,
+                            size        : size,
+                            contentType : (typeof meta.contentType === 'string') ? meta.contentType : null
+                        });
+                    });
+                });
+
+                // The buffered head is queued before pipe() attaches, and both
+                // feed the same write stream FIFO — so the crossing is
+                // byte-order-exact. pipe() only forwards chunks emitted AFTER
+                // it attaches, and the chunk that crossed the threshold was
+                // pushed onto the head inside its own 'data' tick.
+                if ( head && head.length ) {
+                    ws.write(Buffer.concat(head));
+                }
+                head = null;
+                stream.pipe(ws);
+            };
+
             stream.on('error', onError);
 
             stream.on('data', function(chunk) {
                 if (settled) return;
                 written += chunk.length;
                 if ( written > max ) {
-                    onError(new Error('[storage:' + name + '] object exceeds maxObjectSize (' + max + ' bytes) — refused'));
+                    return onError(new Error('[storage:' + name + '] object exceeds maxObjectSize (' + max + ' bytes) — refused'));
+                }
+                if (spilled) return; // pipe() owns delivery from here
+                head.push(chunk);
+                // Strictly-under inlines: the moment the running total REACHES
+                // the threshold the final size cannot be under it, so cross
+                // over — including this chunk, via the head flush.
+                if ( written >= inlineThreshold ) {
+                    spill();
                 }
             });
 
-            stream.pipe(ws);
-
-            // 'close' also follows 'error' on an autoDestroyed stream, so the
-            // settled latch is what keeps a failed write from publishing.
-            ws.on('close', function() {
-                if (settled) return;
-
-                var size;
-                try {
-                    // The published-file size is the honest one: it cannot be
-                    // ahead of the bytes actually on disk the way an in-flight
-                    // counter can.
-                    size = fs.statSync(tmp).size;
-                    fs.renameSync(tmp, final);
-                } catch (err) {
-                    return onError(err);
-                }
-
+            stream.on('end', function() {
+                if (settled || spilled) return;
+                // Inline publish: the object never touched the filesystem —
+                // one metadata-store transaction IS the write, so there is
+                // nothing to roll back on failure.
+                var buf = Buffer.concat(head);
+                head = null;
                 settled = true;
                 metaStore.set(key, {
                     originalName : (typeof meta.originalName === 'string') ? meta.originalName : null,
                     contentType  : (typeof meta.contentType === 'string') ? meta.contentType : null,
-                    size         : size,
-                    createdAt    : now.getTime()
+                    size         : buf.length,
+                    createdAt    : now.getTime(),
+                    data         : buf
                 }, function(metaErr) {
                     if (metaErr) {
-                        // The bytes are published but unindexed. Roll the object
-                        // back rather than leave a file `stat()` will deny exists
-                        // — a caller that got no key can never reference it.
-                        try { fs.unlinkSync(final); } catch (_e) {}
                         return fn(metaErr);
                     }
                     fn(null, {
                         key         : key,
-                        size        : size,
+                        size        : buf.length,
                         contentType : (typeof meta.contentType === 'string') ? meta.contentType : null
                     });
                 });
             });
+
+            if ( inlineThreshold === 0 ) {
+                spill();
+            }
         },
 
         /**
@@ -326,22 +431,34 @@ module.exports = function createLocalDriver(name, conf, metaStore) {
             }
             var r = resolvePath(key);
             if ( r.error ) { return fn(r.error); }
-            if ( !fs.existsSync(r.path) ) {
-                return fn(new Error('[storage:' + name + '] no object for key `' + key + '`'));
-            }
-            var rs = fs.createReadStream(r.path);
-            // Armed before the caller can touch it (#B143) — an fs error after
-            // handoff is the caller's, but one raised during open is ours.
-            var handed = false;
-            rs.on('error', function(err) {
-                if (handed) return;
-                handed = true;
-                fn(err);
-            });
-            rs.on('open', function() {
-                if (handed) return;
-                handed = true;
-                fn(null, rs);
+            // Metadata first: an inline row IS the object, and a row without
+            // a payload answers exactly like the pre-tiering store did — so a
+            // file-backed (or legacy) key falls through to the identical
+            // filesystem path below.
+            metaStore.get(key, function(metaErr, m) {
+                if (metaErr) { return fn(metaErr); }
+                if ( m && m.data != null ) {
+                    // NB: the buffer must be wrapped in an array —
+                    // Readable.from(buffer) would iterate it as INTEGERS.
+                    return fn(null, Readable.from([m.data]));
+                }
+                if ( !fs.existsSync(r.path) ) {
+                    return fn(new Error('[storage:' + name + '] no object for key `' + key + '`'));
+                }
+                var rs = fs.createReadStream(r.path);
+                // Armed before the caller can touch it (#B143) — an fs error after
+                // handoff is the caller's, but one raised during open is ours.
+                var handed = false;
+                rs.on('error', function(err) {
+                    if (handed) return;
+                    handed = true;
+                    fn(err);
+                });
+                rs.on('open', function() {
+                    if (handed) return;
+                    handed = true;
+                    fn(null, rs);
+                });
             });
         },
 
@@ -364,11 +481,28 @@ module.exports = function createLocalDriver(name, conf, metaStore) {
             }
             var r = resolvePath(key);
             if ( r.error ) { return fn(r.error); }
-            metaStore.get(key, fn);
+            metaStore.get(key, function(err, m) {
+                if (err) { return fn(err); }
+                if (!m) { return fn(null, null); }
+                // The payload is not metadata: an inline row's `data` is
+                // stripped so stat() keeps its contracted shape — the
+                // existence question and the bytes question stay separate
+                // verbs (`resolve()` says where the bytes live).
+                fn(null, {
+                    originalName : m.originalName,
+                    contentType  : m.contentType,
+                    size         : m.size,
+                    createdAt    : m.createdAt
+                });
+            });
         },
 
         /**
          * Delete the object and its metadata row.
+         *
+         * Handles both tiers with the same code: an inline object has no file
+         * (the unlink branch no-ops on a missing path) and its row removal IS
+         * the deletion — `existed` comes from whichever side found something.
          *
          * @param {string}   key  - The opaque storage key.
          * @param {function} [fn] - `fn(err, existed)`.
@@ -399,18 +533,22 @@ module.exports = function createLocalDriver(name, conf, metaStore) {
         /**
          * How to serve `key`.
          *
-         * Always `{kind:'path'}` for this adapter. `'inline'` arrives with size
-         * tiering and `'url'` with the s3 adapter — which is why callers must
-         * branch on `kind` rather than assume a path is always available.
+         * `{kind:'path'}` for a file-backed object; `{kind:'inline'}` for a
+         * size-tiered one, whose bytes are reached through `get()` — an inline
+         * object has no path to hand to a sendfile/X-Accel offload. `'url'`
+         * arrives with the s3 adapter. Callers must branch on `kind` rather
+         * than assume a path is always available.
          *
          * @param {string}   key - The opaque storage key.
-         * @param {function} fn  - `fn(err, {kind: 'path', path: string})`.
+         * @param {function} fn  - `fn(err, {kind: 'path', path: string} | {kind: 'inline'})`.
          * @returns {void}
          *
          * @example
          * driver.resolve(key, function (err, r) {
          *     if (err) { return next(err); }
          *     if (r.kind === 'path') { return res.sendFile(r.path); }
+         *     // 'inline' — stream the bytes yourself
+         *     driver.get(key, function (err, stream) { stream.pipe(res); });
          * });
          */
         resolve: function(key, fn) {
@@ -419,15 +557,23 @@ module.exports = function createLocalDriver(name, conf, metaStore) {
             }
             var r = resolvePath(key);
             if ( r.error ) { return fn(r.error); }
-            if ( !fs.existsSync(r.path) ) {
-                return fn(new Error('[storage:' + name + '] no object for key `' + key + '`'));
-            }
-            fn(null, { kind: 'path', path: r.path });
+            metaStore.get(key, function(metaErr, m) {
+                if (metaErr) { return fn(metaErr); }
+                if ( m && m.data != null ) {
+                    return fn(null, { kind: 'inline' });
+                }
+                if ( !fs.existsSync(r.path) ) {
+                    return fn(new Error('[storage:' + name + '] no object for key `' + key + '`'));
+                }
+                fn(null, { kind: 'path', path: r.path });
+            });
         },
 
         /**
          * What this driver can do. Consumers branch on these rather than
-         * assuming — every one of them flips to `true` in a later slice.
+         * assuming. `inline` is conf-dependent: `true` when size tiering is
+         * active (`inlineThreshold` > 0), meaning `resolve()` may answer
+         * `{kind:'inline'}`; the rest flip to `true` in later slices.
          *
          * `offload` is `false` and measured, not assumed: no X-Accel /
          * X-Sendfile handling exists anywhere in either engine today, so a
@@ -440,7 +586,7 @@ module.exports = function createLocalDriver(name, conf, metaStore) {
             ranges    : false,
             dedup     : false,
             resumable : false,
-            inline    : false
+            inline    : ( inlineThreshold > 0 )
         },
 
         /**

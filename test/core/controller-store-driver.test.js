@@ -145,7 +145,11 @@ describe('04 - behavioral arms (createTestInstance + real lib/storage driver)', 
         assert.equal(storage.isStarted(), false,
             'control: storage must not be started yet in this process');
         storage.start({
-            drivers : { testdrv: { adapter: 'local', strategy: 'sharded', root: driverRoot } },
+            // inlineThreshold '0B' pins these arms to the FILE path: this suite
+            // exercises the facade's mechanics (partition, slot shapes, source
+            // consumption), which read only `key`/`size` and are tier-agnostic
+            // — the inline tier has its own suite (test/lib/storage-tiering).
+            drivers : { testdrv: { adapter: 'local', strategy: 'sharded', root: driverRoot, inlineThreshold: '0B' } },
             default : 'testdrv'
         });
     });

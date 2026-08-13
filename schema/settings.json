@@ -502,8 +502,13 @@
                 "store": {
                   "type": ["string", "null"],
                   "minLength": 1,
-                  "description": "Connector-backed metadata store: names a connectors.json entry whose .connector supplies core/connectors/<connector>/lib/storage-store.js. Omit it (the default) and metadata goes to an embedded SQLite file at <root>/.meta.db, which is documented SINGLE-PROCESS per root — SQLite locking on a shared network filesystem is a known-broken story, so two bundles or replicas sharing one root need a connector-backed store instead. No connector ships an implementation yet (demand-gated, the audit-store shipping order), so setting this today is a clean boot refusal rather than a silent fallback to the embedded file.",
+                  "description": "Connector-backed metadata store: names a connectors.json entry whose .connector supplies core/connectors/<connector>/lib/storage-store.js. Omit it (the default) and metadata goes to an embedded SQLite file at <root>/.meta.db, which is documented SINGLE-PROCESS per root — SQLite locking on a shared network filesystem is a known-broken story, so two bundles or replicas sharing one root need a connector-backed store instead. No connector ships an implementation yet (demand-gated, the audit-store shipping order), so setting this today is a clean boot refusal rather than a silent fallback to the embedded file. Since size tiering, rows may carry the object PAYLOAD itself (objects under inlineThreshold), so the store needs binary-safe fields and losing it loses those objects, not just their metadata.",
                   "default": null
+                },
+                "inlineThreshold": {
+                  "type": "string",
+                  "description": "Size-tiering threshold, as a UNIT-SUFFIXED string (\"64KB\") — objects strictly UNDER it are stored inline in the metadata store (one transaction, no filesystem round-trip; resolve() answers {kind:'inline'} and capabilities.inline is true); at or above it they take the temp+rename file path. \"0B\" disables tiering for this driver, keeping every object a visible dated file. A unit-less value warns at boot and the default applies. The 64KB default is the measured knee on the embedded store (inline puts 2.7-13x faster at or under it, destabilizing above). Changing it is retroactively safe: reads follow where each object's bytes actually live, so existing objects stay readable on either side. Operational tradeoffs to weigh: sub-threshold objects are not individually visible on disk (they live inside .meta.db, which any root-level backup still carries), and on a connector-backed store the payloads land in that backend.",
+                  "default": "64KB"
                 }
               }
             }

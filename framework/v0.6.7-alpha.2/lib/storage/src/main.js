@@ -12,8 +12,9 @@
  * @description Pluggable object storage (#STO1) — an **adapter** (where bytes
  * live) crossed with a **strategy** (how keys are laid out), behind one
  * callback-shaped contract. Slice 0 ships the `local` adapter and the `sharded`
- * strategy; `cas`, `stream`, `s3` and size tiering arrive with the demand that
- * needs them, each capability-gated.
+ * strategy; the tiering slice adds size tiering (sub-threshold objects live
+ * inline in the metadata store — see `inlineThreshold`); `cas`, `stream` and
+ * `s3` arrive with the demand that needs them, each capability-gated.
  *
  * **Keys are opaque.** A caller stores a stream and receives a key; it must
  * never parse, compose or assume anything about that key's shape. That is what
@@ -33,11 +34,17 @@
  * AMD-only localStorage pseudo-ORM with zero server-side presence. This module
  * is server-side only.
  *
- * **Durability, stated rather than implied.** A write is published by
- * `rename(2)`, which is atomic — a reader never observes a partial object. It
- * is NOT fsynced: nothing in this codebase fsyncs, and on a host crash an
+ * **Durability, stated rather than implied.** A file-backed write is published
+ * by `rename(2)`, which is atomic — a reader never observes a partial object.
+ * It is NOT fsynced: nothing in this codebase fsyncs, and on a host crash an
  * acknowledged write can still be lost. The same disclosure `lib/audit` makes
- * about its own tail.
+ * about its own tail. An INLINE write (below `inlineThreshold`) is one
+ * metadata-store transaction — under the embedded default that is SQLite WAL
+ * with `synchronous=NORMAL`: a crash can lose the last committed transaction
+ * but never yields a partial row, which is the same "recent writes at risk,
+ * never a torn object" class as the rename path. The flip side is scoped the
+ * same way: losing the metadata store loses inline PAYLOADS, not just
+ * metadata — file-backed bytes survive an index loss.
  *
  * @example
  * // settings.json
@@ -138,7 +145,7 @@ var DEFERRED_STRATEGIES = ['cas', 'stream'];
  * @constant
  * @type {string[]}
  */
-var SHARDED_KEYS = ['adapter', 'strategy', 'root', 'maxObjectSize', 'store'];
+var SHARDED_KEYS = ['adapter', 'strategy', 'root', 'maxObjectSize', 'store', 'inlineThreshold'];
 
 /**
  * Default per-object byte ceiling when a driver sets no `maxObjectSize`.
@@ -150,6 +157,26 @@ var SHARDED_KEYS = ['adapter', 'strategy', 'root', 'maxObjectSize', 'store'];
  * @type {number}
  */
 var DEFAULT_MAX_OBJECT_SIZE = 100 * 1024 * 1024;
+
+/**
+ * Default size-tiering threshold when a driver sets no `inlineThreshold`:
+ * objects strictly UNDER this many bytes are stored inline in the metadata
+ * store; at or above it they go to the file tree. `'0B'` disables tiering for
+ * a driver.
+ *
+ * 64KB is the measured knee, not folklore: benchmarked 2026-08-13 on the
+ * shipped stack (`lib/sqlite-driver`, WAL, the real temp+rename+meta-row write
+ * sequence, sequential puts) — inline wins 10.8–12.9x on put at 1KB, 8.0–8.5x
+ * at 4KB, 5.7–6.6x at 16KB, 2.7–3.3x at 64KB, and the win destabilises above
+ * (256KB medians straddled 1.0x across runs, p95 dominated by WAL-checkpoint
+ * stalls). Measured on APFS/NVMe — the case MOST favourable to the file path,
+ * so slower or network filesystems widen the inline win.
+ *
+ * @inner
+ * @constant
+ * @type {number}
+ */
+var DEFAULT_INLINE_THRESHOLD = 64 * 1024;
 
 /**
  * Built drivers, keyed by name. `null` until {@link start} runs — deliberately
@@ -196,6 +223,8 @@ var _default = null;
  * WARN (the driver still builds):
  *   - a `maxObjectSize` that is not a unit-suffixed string — the default cap
  *     applies;
+ *   - an `inlineThreshold` that is not a unit-suffixed string — the default
+ *     (64KB) applies; `'0B'` is legal and silent (tiering off);
  *   - driver keys the selected strategy does not consume — they are ignored,
  *     and a silently-ignored key reads as configured behaviour that never
  *     happens;
@@ -341,6 +370,14 @@ function validateConfig(storageBlock, context) {
             }
         }
 
+        // `'0B'` is a legal, silent value — it is the documented way to turn
+        // tiering off for a driver, so only an UNPARSEABLE value warns.
+        if ( typeof(d.inlineThreshold) != 'undefined' && d.inlineThreshold !== null ) {
+            if ( isNaN(util.parseSize(d.inlineThreshold)) ) {
+                out.warnings.push('driver `' + name + '`: `inlineThreshold` must carry a unit (B/KB/MB/GB, e.g. "64KB"), or be "0B" to disable size tiering — got ' + JSON.stringify(d.inlineThreshold) + '; using the default (' + DEFAULT_INLINE_THRESHOLD + ' bytes)');
+            }
+        }
+
         var extra = Object.keys(d).filter(function (k) { return SHARDED_KEYS.indexOf(k) < 0; });
         if ( extra.length > 0 ) {
             out.warnings.push('driver `' + name + '`: key(s) ' + extra.join(', ') + ' are not used by the `' + d.strategy + '` strategy and are ignored');
@@ -418,6 +455,15 @@ function start(opt) {
         var max  = util.parseSize(conf.maxObjectSize);
         if ( isNaN(max) || max <= 0 ) { max = DEFAULT_MAX_OBJECT_SIZE; }
 
+        // Size tiering: absent or unparseable resolves to the measured 64KB
+        // default; an explicit `'0B'` keeps its zero and disables tiering.
+        // Defaults resolve HERE, not in the factory (the maxObjectSize
+        // pattern) — a direct factory caller passing no threshold gets
+        // tiering off, which is what keeps the adapter's low-level tests
+        // pinned to the file path.
+        var inline = util.parseSize(conf.inlineThreshold);
+        if ( isNaN(inline) || inline < 0 ) { inline = DEFAULT_INLINE_THRESHOLD; }
+
         // A connector store when one was built for this driver, else the
         // embedded SQLite file inside the driver's own root — self-contained,
         // so moving the root moves its metadata with it, and never web-served
@@ -427,9 +473,10 @@ function start(opt) {
             : createEmbeddedMetaStore(nodePath.join(conf.root, '.meta.db'));
 
         built[name] = createLocalDriver(name, {
-            root          : conf.root,
-            strategy      : conf.strategy,
-            maxObjectSize : max
+            root            : conf.root,
+            strategy        : conf.strategy,
+            maxObjectSize   : max,
+            inlineThreshold : inline
         }, store);
     }
 
@@ -513,8 +560,9 @@ module.exports = {
     _parseSize               : util.parseSize,
     _confineToBase           : util.confineToBase,
     _sanitiseExtension       : util.sanitiseExtension,
-    _ADAPTERS                : ADAPTERS,
-    _STRATEGIES              : STRATEGIES,
-    _DEFERRED_STRATEGIES     : DEFERRED_STRATEGIES,
-    _DEFAULT_MAX_OBJECT_SIZE : DEFAULT_MAX_OBJECT_SIZE
+    _ADAPTERS                 : ADAPTERS,
+    _STRATEGIES               : STRATEGIES,
+    _DEFERRED_STRATEGIES      : DEFERRED_STRATEGIES,
+    _DEFAULT_MAX_OBJECT_SIZE  : DEFAULT_MAX_OBJECT_SIZE,
+    _DEFAULT_INLINE_THRESHOLD : DEFAULT_INLINE_THRESHOLD
 };

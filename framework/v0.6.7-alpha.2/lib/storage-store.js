@@ -18,8 +18,11 @@ var console = require('./logger');
  * `lib/render-cache-store` sibling for the object-storage layer (#STO1).
  *
  * The store holds the per-object metadata row (originalName, contentType,
- * size, createdAt) that backs `stat()`; the object BYTES live in the driver's
- * adapter, never here.
+ * size, createdAt) that backs `stat()` — and, since size tiering, the PAYLOAD
+ * itself (`data`, a Buffer) for objects under the driver's `inlineThreshold`.
+ * An implementation therefore needs a binary-safe field that round-trips
+ * bytes exactly, and losing the store loses inline objects, not just their
+ * metadata; file-backed objects keep their bytes in the driver's adapter.
  *
  * Do not call this directly — declare the backend in `config/connectors.json`,
  * point the driver's `settings.json` `storage.drivers.<name>.store` at that
@@ -45,7 +48,9 @@ var console = require('./logger');
  *                            `storage.drivers.<name>.store`). The entry's `.connector` field
  *                            selects the implementation (a connector without a
  *                            `lib/storage-store.js` is rejected).
- * @returns {object}        - A `StorageMetaStore` instance (`set/get/remove/close`).
+ * @returns {object}        - A `StorageMetaStore` instance (`set/get/remove/close`; rows may
+ *                            carry an inline payload — see the typedef in
+ *                            `lib/storage/src/meta-store.js` for the binary-safety contract).
  * @throws {Error}          - When the entry is missing, has no `connector` field, or the
  *                            connector has no storage-store implementation. `gna.js`
  *                            treats a throw as fatal — an explicitly configured store must
