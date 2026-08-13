@@ -11,10 +11,14 @@
  * #STO1 — the `cas` strategy: content-addressed keys, refcounted dedup, the
  * GC sweep, fsync durability, and the strategy stamp.
  *
- * ⚠️ This file contains NUL bytes in binary fixtures (the byte-fidelity
- * describe) — plain grep treats it as binary and SUPPRESSES matches; always
- * `grep -a` it (the storage-local.test.js lesson, recorded in
- * measurement-traps).
+ * NB this file's binary fixtures are BUILT at runtime (`Buffer.from([0x00,…])`,
+ * `crypto.randomBytes`), so no NUL byte reaches the source and plain `grep`
+ * reads it fine — deliberately, because a source-literal NUL makes git treat
+ * the file as binary and silently suppresses every grep match. Measured
+ * 2026-08-13: of the storage suite only `storage.test.js` and
+ * `storage-local.test.js` carry one (git shows them as `Bin` in `--stat`, `-`
+ * in `--numstat`); those two need `grep -a`. Keep new fixtures constructed,
+ * not pasted.
  *
  * Everything asserted here is a runtime VALUE — a key's shape, a refcount, a
  * rejection, the presence or absence of a file or row — except §09's fsync
