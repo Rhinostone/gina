@@ -34,6 +34,26 @@
  * The scene here deliberately KEEPS live-check ON (the sibling spec forces it
  * off) and KEEPS the trigger id (#B333's id-less variable is irrelevant to
  * this window): one thing under test.
+ *
+ * SLICE 2 (same arc, arms 05-07): the SAME misclassification refused
+ * wrapped-label submits (`<button type="submit"><span>` — the click targets
+ * the span, so the click proxy's submit branch never fires and the native
+ * activation surfaces as a TRUSTED `submit` at the #B308 gate) — and the
+ * programmatic `$forms[id].submit()` path, which never consulted the gate,
+ * starved UN-LATCHED: with the query field not declared last, its waiter's
+ * completion resolves to display-only re-validation work that never runs the
+ * pass callback. Both doors now proceed through the same carve-out, and the
+ * fresh-validate path LATCHES when it enters a pending window (releasing
+ * before any consumer `submit.<id>` dispatch), so the latched completion
+ * (#B342) can dispatch it. Arm 07 guards the carve-out's boundary: an
+ * AUTHORED `aria-disabled` keeps refusing.
+ *
+ * NB measured while red-firsting these arms: Enter with a DEFAULT BUTTON
+ * present is NOT a trusted-gate scene — implicit submission synthesizes a
+ * click on the default button (HTML spec), which routes through the click
+ * proxy, so slice 1's carve-out already covers it (an Enter arm read GREEN on
+ * the pre-slice-2 bundle for exactly that reason). The trusted gate owns the
+ * wrapped-label and button-less-form shapes.
  */
 
 const { test, expect } = require('@playwright/test');
@@ -233,5 +253,100 @@ test.describe('#B346 — a submit click landing while the live-check query is in
         await expect.poll(() => posts.length, { timeout: 10000 }).toBe(1);
         await page.waitForTimeout(800);
         expect(posts.length, 'the re-entry belt must hold: one cycle, one POST').toBe(1);
+    });
+
+    test('05 - the wrapped-label door: a span-targeted click inside the window waits and sends exactly once', async ({ page }) => {
+        const seen  = await installInFlightScene(page, '{"isValid":true}');
+        const posts = countPosts(page);
+
+        await gotoFaceAndBoot(page);
+        expect(seen.liveCheckSeen, 'this scene REQUIRES live-check on').toBe(true);
+
+        // Recreate the #B308 canonical shape on the live trigger: the click
+        // then targets the SPAN (no `.type`), the click proxy's submit branch
+        // never fires, and the native activation surfaces as a TRUSTED submit
+        // at the proxy gate — the door slice 1's click carve-out never touches.
+        await page.evaluate(() => {
+            const b = document.getElementById('parent-submit');
+            b.textContent = '';
+            const s = document.createElement('span');
+            s.id = 'parent-submit-label';
+            s.textContent = 'Submit';
+            b.appendChild(s);
+        });
+
+        await fillInsideWindow(page, seen);
+        await page.click('#parent-submit-label');
+
+        // The pass must be visibly ALIVE while it waits (#B247 parity — the
+        // loading arm's own #B346 carve-out; pre-fix the refusal armed nothing).
+        const midWait = await page.evaluate(() =>
+            (document.getElementById('parent-submit').getAttribute('data-gina-loading') || ''));
+        expect(midWait, 'the waiting wrapped-label submission must arm the loading state').toBe('true');
+
+        await expect.poll(() => posts.length, {
+            message: '#B346 slice 2 — a wrapped-label click inside the window must submit once the verdict lands',
+            timeout: 10000
+        }).toBe(1);
+        await page.waitForTimeout(800);
+        expect(posts.length, 'exactly ONE POST').toBe(1);
+        expect(posts[0], 'the POST must never precede the settle').toBeGreaterThanOrEqual(seen.queryAnsweredAt);
+    });
+
+    test('06 - the programmatic door: $forms.submit() inside the window latches, waits, and sends exactly once', async ({ page }) => {
+        const seen  = await installInFlightScene(page, '{"isValid":true}');
+        const posts = countPosts(page);
+
+        await gotoFaceAndBoot(page);
+        await fillInsideWindow(page, seen);
+
+        // An UNTRUSTED programmatic submit skips the gesture gate entirely —
+        // pre-fix it ran the fresh-validate pass UN-latched and its completion
+        // starved (display-only re-validation; this pass's callback never ran).
+        await page.evaluate(() => window.gina.validator.getFormById('parent').submit());
+
+        await expect.poll(() => posts.length, {
+            message: '#B346 slice 2 — a programmatic submit inside the window must complete on the settle',
+            timeout: 10000
+        }).toBe(1);
+        await page.waitForTimeout(800);
+        expect(posts.length, 'exactly ONE POST — the latch must hold the pass together').toBe(1);
+        expect(posts[0], 'the POST must never precede the settle').toBeGreaterThanOrEqual(seen.queryAnsweredAt);
+
+        const latch = await page.evaluate(() => String(window.gina.validator.$forms['parent'].isSubmitting));
+        expect(latch === 'true', 'the latch must be released after the send left, got: ' + latch).toBe(false);
+    });
+
+    test('07 - authored aria-disabled still refuses inside the window (the carve-out must not override authors)', async ({ page }) => {
+        const seen  = await installInFlightScene(page, '{"isValid":true}');
+        const posts = countPosts(page);
+
+        await gotoFaceAndBoot(page);
+        await page.evaluate(() => document.getElementById('parent-submit').setAttribute('aria-disabled', 'true'));
+
+        await fillInsideWindow(page, seen);
+        // force: Playwright's actionability check counts aria-disabled as NOT
+        // enabled and would time out without ever dispatching (the documented
+        // harness trap) — force delivers a real trusted click, which is the
+        // whole point: the FRAMEWORK's gate must do the refusing, not the
+        // harness.
+        await page.click('#parent-submit', { force: true });
+
+        await expect.poll(() => seen.queryAnswered, { timeout: 10000 }).toBeGreaterThanOrEqual(1);
+        await page.waitForTimeout(1200);
+        expect(posts.length,
+            'an AUTHORED aria-disabled must keep refusing even in a pending window').toBe(0);
+
+        // FIRING CONTROL for the zero above: §01 — the identical scene and
+        // gesture minus the authored mark, sending exactly once in this same
+        // file. An in-arm "remove the mark and re-click" control is NOT usable
+        // here: measured, the force-click's refusal runs revealValidationState,
+        // whose own pass on a not-last query form STARVES its callback (the
+        // pre-existing async-completion shape), so the gate never re-syncs in
+        // this contaminated scene and a post-settle click cannot fire — on the
+        // pre-fix and post-fix bundle alike. NB this arm is green on the
+        // pre-slice-2 bundle too (the refusal fires for BOTH reasons there);
+        // its job is to guard the carve-out from ever widening onto authored
+        // marks.
     });
 });

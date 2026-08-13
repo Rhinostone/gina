@@ -19631,7 +19631,15 @@ function ValidatorPlugin(rules, data, formId, culture) {
             // }
             if ($formInstance && e.isTrusted) {
                 var $registeredTrigger = document.getElementById($formInstance.submitTrigger) || null;
-                if ( isTriggerDisabled($registeredTrigger) ) {
+                // #B346 — same carve-out as the click proxy's gate: when the ONLY
+                // refusal reason is a query verdict still on the wire, refusing
+                // here ate Enter-key and wrapped-label submits silently (nothing
+                // committed to reveal). Let the pass run and wait for the settle;
+                // every other refusal shape is unchanged.
+                if (
+                    isTriggerDisabled($registeredTrigger)
+                    && !isAwaitingQueryVerdictOnly($registeredTrigger, $target, $formInstance)
+                ) {
                     cancelEvent(e);
                     revealValidationState($formInstance);
                     return false;
@@ -19652,12 +19660,19 @@ function ValidatorPlugin(rules, data, formId, culture) {
             // so the registered trigger is the best and only referent. Placed after the
             // disabled + defaultPrevented guards above, which both return first.
             // NB. the #B308 gesture gate above already cancelled any TRUSTED submit on
-            // a marked trigger, so this skip now guards the UNTRUSTED path: a
-            // programmatic submit on a marked form runs the fresh validate pass below
-            // and must not flash the trigger armed for the length of that pass.
+            // a marked trigger (#B346 excepted: a pending-verdict-only refusal now
+            // proceeds, and the arm below covers it via the same carve-out), so this
+            // skip otherwise guards the UNTRUSTED path: a programmatic submit on a
+            // marked form runs the fresh validate pass below and must not flash the
+            // trigger armed for the length of that pass.
             if ($formInstance) {
                 var $loadingTrigger = document.getElementById($formInstance.submitTrigger);
-                if ( !isTriggerDisabled($loadingTrigger) ) {
+                // #B346 — a pending-verdict bypass proceeds to a real cycle, so it
+                // gets the loading state too (#B247 parity with the click proxy).
+                if (
+                    !isTriggerDisabled($loadingTrigger)
+                    || isAwaitingQueryVerdictOnly($loadingTrigger, $target, $formInstance)
+                ) {
                     armSubmitLoading($formInstance, $loadingTrigger);
                 }
             }
@@ -19767,6 +19782,36 @@ function ValidatorPlugin(rules, data, formId, culture) {
                 } else {
                     rule = getRuleObjByName(id.replace(/\-/g, '.'))
                 }
+                // #B346 — this pass may proceed while an async query verdict is
+                // still on the wire: the pending-aware gate above lets a trusted
+                // gesture through, and a programmatic submit() never consulted
+                // the gate at all. An un-latched async pass STARVES — with the
+                // query field not declared last, its waiter's completion resolves
+                // to the needsGlobalReValidation display-only work and never runs
+                // this callback. Latch exactly as bindSubmitEl does, so the
+                // latched completion dispatches (#B342) — and mirror the #B332
+                // belt for the window this pass now enters: one cycle at a time.
+                // The owned-field scan mirrors isAwaitingQueryVerdictOnly's
+                // (kept inline THERE — its body literals are pinned); trigger
+                // marks and recorded errors are deliberately not consulted here,
+                // because they do not affect LATCH soundness: an invalid pass
+                // completes through the errors branch and releases via the
+                // rejected-validation release, a clean pass through the latched
+                // dispatch and the send release.
+                var _pendingSel = '[data-gina-form-validator-query-pending]';
+                var _formDomId = $target.id || ( typeof($target.getAttribute) == 'function' ? $target.getAttribute('id') : null );
+                var _safeFormDomId = ( _formDomId && typeof(CSS) != 'undefined' && typeof(CSS.escape) == 'function' ) ? CSS.escape(_formDomId) : _formDomId;
+                var _awaitsQueryVerdict = (
+                    typeof($target.querySelector) == 'function' && $target.querySelector(_pendingSel)
+                    || _safeFormDomId && document.querySelector('[form="'+ _safeFormDomId +'"]'+ _pendingSel)
+                ) ? true : false;
+                if (_awaitsQueryVerdict) {
+                    if ( /^true$/i.test(instance.$forms[id].isSubmitting) ) {
+                        return false;
+                    }
+                    instance.$forms[id].isSubmitting = true;
+                    instance.$forms[id].isSending = false;
+                }
                 instance.$forms[id].isValidating = true;
                 validate($target, fields, $fields, rule, function onSubmitValidation(result){
                     instance.$forms[id].isValidating = false;
@@ -19777,6 +19822,12 @@ function ValidatorPlugin(rules, data, formId, culture) {
                     // } else {
                         // handleErrorsDisplay($target, result.error, result.data);
                         if ( typeof(gina.events['submit.' + id]) != 'undefined' ) { // if `on('submit', cb)` is binded
+                            // #B346 — a consumer's own `on('submit')` handler owns
+                            // the rest of the cycle and may never reach send():
+                            // the latch cannot ride this dispatch (a stopping
+                            // handler would strand it — the #B342 lockout shape).
+                            // False -> false when this pass never latched.
+                            instance.$forms[id].isSubmitting = false;
                             triggerEvent(gina, $target, 'submit.' + id, result);
                         } else {
                             triggerEvent(gina, $target, 'validate.' + id, result);
@@ -19840,8 +19891,10 @@ function ValidatorPlugin(rules, data, formId, culture) {
      * marks are removed the moment the form validates. The marker is the
      * framework's OWN channel — the trigger carries no ARIA disabled claim,
      * because it stays genuinely operable: a click on a gated trigger is
-     * answered by the display-only reveal (#B246), and `isValid()` remains the
-     * real send gate.
+     * answered by the display-only reveal (#B246) — or, when the only blocker
+     * is a query verdict still on the wire, proceeds into a submit pass that
+     * waits for the settle (#B346) — and `isValid()` remains the real send
+     * gate.
      *
      * `aria-disabled` is deliberately neither written nor cleared here: an
      * authored mark belongs to the author (the gates enforce it, and nothing
@@ -20938,6 +20991,13 @@ function ValidatorPlugin(rules, data, formId, culture) {
                                 // hard-return while the latch is held), so dispatch it — display
                                 // work belongs to the `validate.<id>` handler's send/reject
                                 // branches, same as the errors>0 dispatch above.
+                                // #B346 note: waiters ARMED before the latch — live-check
+                                // passes mid-window, the reveal's own pass — also wake through
+                                // this branch once a pending-window gesture latches; each such
+                                // dispatch carries THAT waiter's own pass cb, and the #B334
+                                // own-pass listener filtering keeps every completion with its
+                                // own pass. NEW live-check passes still hard-return on the
+                                // latch.
                                 if ( /^true$/i.test(instance.$forms[formId].isSubmitting) ) {
                                     triggerEvent(gina, $formOrElement, 'validated.' + formId, cb);
                                     return;
