@@ -2472,6 +2472,20 @@ function SuperController(options) {
      *
      * if you are free to use the redirection [ code ] of your choice, we've set it to 301 by default
      *
+     * Add [ keep-params ] to carry the incoming request's query string onto the
+     * redirect target (#B352). Default is `false`: the target is used verbatim and the
+     * caller's query is dropped, which is the historical behaviour of every redirect
+     * route. Set it when the redirect is a path normalisation and must stay transparent
+     * to request state — the framework's own auto-generated `webroot@<bundle>` route
+     * does exactly that, which is why `/webroot?token=…` now lands on
+     * `/webroot/?token=…` instead of losing the parameter:
+     * { "control": "redirect", "path": "/documentation/", "keep-params": true }
+     *
+     * Only a LOCAL target inherits the query. An absolute [ url ] names another origin,
+     * and forwarding the caller's parameters there would disclose whatever the query
+     * carried to a third party, so the flag is ignored for the absolute form. If the
+     * target already carries a query the incoming one is appended with `&`.
+     *
      *
      * 2) By calling this.redirect(rule, [ignoreWebRoot]):
      * ------------------------------------------------
@@ -2791,6 +2805,51 @@ function SuperController(options) {
 
                 path = hostname + path
                 //path = local.req.headers.host + path
+            }
+
+            // #B352 — `keep-params`: carry the incoming request's query string onto the
+            // redirect target. The option has been documented as a redirect-route key
+            // since the pre-GitHub import, but was never implemented: `keepParams` was
+            // read into a local above and then dropped, so EVERY redirect-control route
+            // silently discarded the caller's query.
+            //
+            // This is what made the framework's own auto-generated `webroot@<bundle>`
+            // route lossy (config.js — it now sets the flag): that route's `param.path`
+            // is a CONSTANT (the configured webroot), so nothing else could ever have
+            // carried the query, and a bare-webroot hit carrying a token or a redirect
+            // target — `/app?t=…` -> 302 `/app/` — arrived at the application with the
+            // parameter already gone. A path-normalisation redirect must be transparent
+            // to request state.
+            //
+            // Query source is `originalUrl || url`, the established idiom here (#B219,
+            // pauseRequest, server.js access logs): the isaac engine strips the query
+            // from `req.url` before controllers run and preserves the byte-exact
+            // incoming URL on `req.originalUrl` (stamped as its listener's first
+            // statement); express sets `originalUrl` natively. A request carrying
+            // neither (bare/harness) simply contributes no query.
+            //
+            // Deliberately narrow scope — LOCAL targets only. An absolute `param.url`
+            // names another origin, and forwarding the caller's parameters there would
+            // hand a third party whatever the query carried (session tokens, ids). An
+            // opt-in convenience flag must not be able to leak cross-origin, so the
+            // absolute form is excluded rather than trusted.
+            //
+            // Placement is load-bearing: it runs BEFORE the `inheritedData` block below,
+            // whose `?`-vs-`&` test must see the query appended here. On the wrong-method
+            // (HEAD -> GET, 303) path both mechanisms fire, so the target carries the
+            // query verbatim AND the `inheritedData` copy — redundant but consistent.
+            if ( keepParams && !(/\:\/\//).test(path) ) {
+                var _incomingUrl = local.req.originalUrl || local.req.url || '';
+                var _queryIndex  = _incomingUrl.indexOf('?');
+                if ( _queryIndex > -1 ) {
+                    // verbatim — already percent-encoded as received, so re-encoding
+                    // would corrupt it. CR/LF stripped: a Location built from client
+                    // input must not be able to split the response header.
+                    var _incomingQuery = _incomingUrl.substring(_queryIndex + 1).replace(/[\r\n]/g, '');
+                    if ( _incomingQuery ) {
+                        path += ( (/\?/).test(path) ? '&' : '?' ) + _incomingQuery;
+                    }
+                }
             }
 
             var isPopinContext = false;

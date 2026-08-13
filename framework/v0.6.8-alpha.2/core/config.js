@@ -2051,6 +2051,16 @@ function Config(opt, contextResetNeeded) {
                     ignoreWebRoot: true,
                     path: wroot,
                     code: 302,
+                    // #B352 — this route's `path` is a CONSTANT (the configured webroot),
+                    // so without this flag the redirect discards the caller's query: a
+                    // bare-webroot hit (`/app?t=…`) landed on `/app/` with the parameter
+                    // gone, and the application saw an unexplained missing value rather
+                    // than a bad link. A path-normalisation redirect must be transparent
+                    // to request state, hence opted in here rather than left to consumers.
+                    // Note `webrootAutoredirect: false` does NOT avoid this — that flag
+                    // only drops the extra site-root (`/`) match added below; the
+                    // bare-webroot match comes from this route's base `url` and remains.
+                    'keep-params': true,
                     // #COMPLY10 — with `webrootAutoredirect` this route's url becomes
                     // `'/,'+ …`, i.e. it also matches the SITE ROOT, across
                     // GET/POST/PUT/DELETE/HEAD. Gating it would make `/` itself deny,
