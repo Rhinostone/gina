@@ -688,3 +688,87 @@ describe('12 - renderStream: per-request deps are function-scoped (#B62 module-s
         await sleep(5);
     });
 });
+
+
+// ─── 10 — status-code preservation (#B351) ───────────────────────────────────
+
+describe('10 - renderStream: status-code preservation (#B351)', function() {
+
+    // Pre-fix, BOTH engines were 200-only: the h2 frame hardcoded `':status': 200`
+    // and the h1 arm assigned `response.statusCode = 200` unconditionally inside the
+    // !headersSent block, clobbering whatever the caller had chosen. That makes
+    // 206/416 (Range) and 404 unreachable through renderStream on either engine.
+
+    function makeH2(statusCode) {
+        var responded = null;
+        var stream2   = {
+            headersSent: false, destroyed: false, closed: false,
+            respond: function(h) { responded = h; stream2.headersSent = true; },
+            write  : function() {},
+            end    : function() {}
+        };
+        var deps = makeDeps();
+        deps.local.res.stream      = stream2;
+        deps.local.res.getHeaders  = function() { return {}; };
+        deps.local.res.headersSent = false;
+        deps.local.res.statusCode  = statusCode;
+        return { deps: deps, get responded() { return responded; } };
+    }
+
+    // NOTE: renderStream nulls local.req/res/next on every exit path (suite 09), so
+    // the res object must be captured BEFORE the call — reading deps.local.res after
+    // the await is a null deref, not a status assertion. The object itself survives;
+    // only the local.* reference is cleared.
+    function makeH1(statusCode) {
+        var deps = makeDeps();
+        var res  = deps.local.res;
+        res.statusCode = statusCode;
+        res.setHeader  = function() {};
+        res.write      = function() {};
+        res.end        = function() {};
+        return { deps: deps, res: res };
+    }
+
+    it('h2: carries a caller-set 206 into the stream.respond() frame', async function() {
+        var h = makeH2(206);
+        renderStream(from(['a']), 'application/octet-stream', h.deps);
+        await sleep(50);
+        assert.ok(h.responded, 'stream.respond() should have been called');
+        assert.strictEqual(h.responded[':status'], 206);
+    });
+
+    it('h2: carries a caller-set 404 into the stream.respond() frame', async function() {
+        var h = makeH2(404);
+        renderStream(from([]), 'application/octet-stream', h.deps);
+        await sleep(50);
+        assert.strictEqual(h.responded[':status'], 404);
+    });
+
+    it('h2: falls back to 200 when the caller left no status', async function() {
+        var h = makeH2(undefined);
+        renderStream(from([]), 'text/event-stream', h.deps);
+        await sleep(50);
+        assert.strictEqual(h.responded[':status'], 200);
+    });
+
+    it('h1: preserves a caller-set 206 rather than clobbering it with 200', async function() {
+        var h = makeH1(206);
+        renderStream(from(['a']), 'application/octet-stream', h.deps);
+        await sleep(50);
+        assert.strictEqual(h.res.statusCode, 206);
+    });
+
+    it('h1: preserves a caller-set 404 rather than clobbering it with 200', async function() {
+        var h = makeH1(404);
+        renderStream(from([]), 'application/octet-stream', h.deps);
+        await sleep(50);
+        assert.strictEqual(h.res.statusCode, 404);
+    });
+
+    it('h1: falls back to 200 when the caller left no status', async function() {
+        var h = makeH1(undefined);
+        renderStream(from([]), 'text/event-stream', h.deps);
+        await sleep(50);
+        assert.strictEqual(h.res.statusCode, 200);
+    });
+});

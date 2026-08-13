@@ -89,7 +89,12 @@ module.exports = function renderStream(asyncIterable, contentType, deps) {
 
                 if (!stream.headersSent) {
                     var _headers = {
-                        ':status'          : 200,
+                        // #B351 — never a literal: a hand-built h2 frame must carry the
+                        // caller's status, because `setHeader(':status', …)` throws and no
+                        // later merge can repair a pseudo-header. Without this, renderStream
+                        // can only ever answer 200 — so 206/416 (Range) and 404 are
+                        // unreachable on the h2 engine. Same class as #B172 (render-json).
+                        ':status'          : response.statusCode || 200,
                         'content-type'     : contentType,
                         'cache-control'    : 'no-cache',
                         'x-accel-buffering': 'no'
@@ -128,7 +133,10 @@ module.exports = function renderStream(asyncIterable, contentType, deps) {
                     response.setHeader('cache-control', 'no-cache');
                     response.setHeader('connection', 'keep-alive');
                     if (isSSE) response.setHeader('x-accel-buffering', 'no');
-                    response.statusCode = 200;
+                    // #B351 — preserve a status the caller pre-set. The bare assignment
+                    // clobbered it, which is worse than the h2 arm's literal: a controller
+                    // that had already chosen 206/404 was silently answered 200.
+                    response.statusCode = response.statusCode || 200;
                 }
 
                 for await (chunk of asyncIterable) {
