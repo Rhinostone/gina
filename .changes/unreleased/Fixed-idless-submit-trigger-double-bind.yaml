@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'FormValidator: a submit trigger without a markup id was bound TWICE at page load, so every click ran two full validation cycles (#B333). `getOwnedElements` deduped collected controls by id — an id-less control entered once from `$form.elements` and again from the in-tree sweep (gina assigns the auto id only later, in the submit-binding loop) — and the rebind guard tested a registry key nothing writes (the bare button id, while `bindSubmitEl` registers `submit.<id>`). Collection is deduped by node identity now and the guard tests the key that actually gets registered. Id-carrying and form-reassociated controls are unaffected.'
-time: 2026-08-11T03:49:20+01:00

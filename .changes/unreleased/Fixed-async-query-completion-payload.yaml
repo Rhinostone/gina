@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'FormValidator: when an async `query` rule settles on a full-form submit, the completion payload now carries the WHOLE form''s verdict instead of the query field''s slice (#B337). Every other invalid field''s error was adjudicated but never rendered on the submit path, and the first-invalid focus could only ever land on the query field; the inverse scene — query passes but another field is invalid — dispatched an empty error set and refused the submit silently. Single-element live-check passes are byte-equivalent (their validator instance holds one field), and the touched-field-only live-check display keeps its scope.'
-time: 2026-08-11T04:24:00+01:00

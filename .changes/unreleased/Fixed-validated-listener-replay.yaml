@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'FormValidator: every validation pass used to leave its `validated.<formId>` listener attached for the page''s lifetime (the removal call carried no function reference, which detaches nothing), and each stale listener executed the DISPATCHING pass''s callback — one completion dispatch could replay a submit once per leftover listener (#B334). The listener now registers only when the pass carries a callback, consumes only its own pass''s dispatch (callback identity on `event.detail`), and detaches itself on consumption. Async query completions also dispatch on the node the pass''s listener actually sits on, so a single-element live-check pass is no longer structurally deaf to its own completion.'
-time: 2026-08-11T03:49:21+01:00

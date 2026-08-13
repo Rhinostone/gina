@@ -1,3 +1,0 @@
-kind: Changed
-body: 'Framework default styling for the state-hook attributes now ships inside a CSS cascade layer (`@layer gina`): the default looks for `data-gina-loading` and `data-gina-form-submit-gated` are overridden by any un-layered project rule regardless of selector specificity or stylesheet load order, so a project''s own CSS always wins without `!important` or specificity games. Functional rules (popin structure, scroll lock) deliberately stay un-layered so generic project resets cannot break them. Browsers without cascade-layer support drop only the default look — the attributes are still written and project CSS keyed on them still applies.'
-time: 2026-08-10T03:13:48+01:00

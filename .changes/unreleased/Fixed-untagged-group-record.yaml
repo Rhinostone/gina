@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'req.files entries now carry the resolved upload group — untagged when the part had no group tag — instead of an undefined group field (#B140), matching what the group gate enforces and what self.store() routes on. A controller testing the field''s truthiness now enters the branch for untagged files.'
-time: 2026-08-11T01:51:19+01:00
