@@ -124,6 +124,8 @@ function noop() {}
  * @property {function(string, function=): void}              [releaseRef]  - Atomically decrement `refs`, flooring at 0 and stamping `zeroAt` when 0 is reached. On a missing, non-refcounted, or already-zero row: `{existed:false}`. `fn(err, {existed, refs})`.
  * @property {function(number, number, function): void}       [listZeroRefs] - Keys with `refs` === 0 whose `zeroAt` <= `olderThanMs`, oldest first, at most `limit`. Non-refcounted rows (refs NULL/absent) are never returned. `fn(err, keys)`.
  * @property {function(string, function=): void}              [removeIfZero] - Delete the row ONLY IF `refs` is still 0 — the sweep's claim step, so a concurrent `acquireRef` resurrection always wins. `fn(err, removed)`.
+ * @property {function(function): void}                       [stats]        - Aggregate counts for the operator surface (`storage:stats`): `fn(err, {objects, refcounted, zeroRefPending, inline, bytes})` — reserved rows (dot-keys, e.g. the `.driver` stamp) excluded, `bytes` the SUM of logical object sizes (a deduplicated blob counts once). OPTIONAL — a store lacking it degrades to "store reports no stats" (the refcount-verb vocabulary).
+ * @property {function(string, number, function): void}       [listKeys]     - Page over object keys: keys strictly AFTER `afterKey` (lexicographic; `''` starts), reserved dot-key rows excluded, at most `limit`, ordered by key so the cursor is stable under concurrent writes. `fn(err, keys)`. OPTIONAL — backs `storage:verify`'s rows-without-files direction; a store lacking it degrades verify to the files direction only.
  */
 
 /**
@@ -217,6 +219,11 @@ module.exports = function createEmbeddedMetaStore(dbPath) {
     var stmtDecr   = db.prepare('UPDATE objects SET refs = ?, zero_at = ? WHERE key = ?');
     var stmtZero   = db.prepare('SELECT key FROM objects WHERE refs = 0 AND zero_at <= ? ORDER BY zero_at LIMIT ?');
     var stmtRmZ    = db.prepare('DELETE FROM objects WHERE key = ? AND refs = 0');
+    // operator-surface verbs (#STO1 CLI slice). Reserved dot-key rows (the
+    // `.driver` stamp) are excluded in SQL — they are infrastructure, and
+    // counting the stamp would report one "object" on every empty root.
+    var stmtStats  = db.prepare('SELECT COUNT(*) AS objects, COALESCE(SUM(CASE WHEN refs IS NOT NULL THEN 1 ELSE 0 END), 0) AS refcounted, COALESCE(SUM(CASE WHEN refs = 0 THEN 1 ELSE 0 END), 0) AS zeroRefPending, COALESCE(SUM(CASE WHEN data IS NOT NULL THEN 1 ELSE 0 END), 0) AS inline, COALESCE(SUM(size), 0) AS bytes FROM objects WHERE key NOT LIKE \'.%\'');
+    var stmtKeys   = db.prepare('SELECT key FROM objects WHERE key > ? AND key NOT LIKE \'.%\' ORDER BY key LIMIT ?');
 
     return {
 
@@ -431,6 +438,57 @@ module.exports = function createEmbeddedMetaStore(dbPath) {
             try {
                 var res = stmtRmZ.run(key);
                 fn(null, res.changes > 0);
+            } catch (err) {
+                fn(err);
+            }
+        },
+
+        /**
+         * Aggregate counts over the object rows — the `storage:stats`
+         * operator surface. One SELECT; reserved dot-key rows (the `.driver`
+         * stamp) are excluded, so an empty root reports zero objects.
+         *
+         * @param {function} fn - `fn(err, {objects, refcounted, zeroRefPending, inline, bytes})`.
+         * @returns {void}
+         */
+        stats: function(fn) {
+            if (typeof fn !== 'function') fn = noop;
+            var row;
+            try {
+                row = stmtStats.get();
+            } catch (err) {
+                return fn(err);
+            }
+            fn(null, {
+                objects        : row.objects,
+                refcounted     : row.refcounted,
+                zeroRefPending : row.zeroRefPending,
+                inline         : row.inline,
+                bytes          : row.bytes
+            });
+        },
+
+        /**
+         * Page over object keys, ordered by key — the enumeration
+         * `storage:verify` walks for its rows-without-files direction.
+         * Keys strictly AFTER `afterKey` (pass `''` to start); reserved
+         * dot-key rows are excluded. Ordering by the PRIMARY KEY makes the
+         * cursor stable under concurrent inserts/deletes: a page never
+         * re-shuffles, it only ever misses rows created behind the cursor —
+         * which the caller's age gate tolerates by construction.
+         *
+         * @param {string}   afterKey - Exclusive lower bound (`''` for the first page).
+         * @param {number}   limit    - Page size cap.
+         * @param {function} fn       - `fn(err, string[])`.
+         * @returns {void}
+         */
+        listKeys: function(afterKey, limit, fn) {
+            if (typeof fn !== 'function') fn = noop;
+            try {
+                var rows = stmtKeys.all(( typeof afterKey === 'string' ) ? afterKey : '', limit);
+                var keys = [];
+                for (var i = 0; i < rows.length; i++) { keys.push(rows[i].key); }
+                fn(null, keys);
             } catch (err) {
                 fn(err);
             }

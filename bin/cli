@@ -394,6 +394,7 @@ async function onExec() {
         'scheme:',
         'secrets:',
         'service:',
+        'storage:',
         'view:',
         '--', //options or other aliases.
         '-' //options or other aliases.

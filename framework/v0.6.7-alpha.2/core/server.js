@@ -4471,6 +4471,192 @@ function Server(options) {
                 });
             }
 
+            // ── /_gina/storage/* — storage maintenance (#STO1 CLI slice; always-on, admin-gated) ──
+            // Engine-agnostic ONLY — no isaac fast-path, per the /_gina/agent
+            // precedent (the isaac instance runs this same onRequest chain, so
+            // one handler covers both engines). Same admin IP allowlist as
+            // /_gina/info & /_gina/cache/* — the surface discloses filesystem
+            // ROOTS and gc DELETES, the /_gina/cache/stats class. NO dev gate:
+            // operational tooling. Patterns are ^-anchored (the RW-F9 lesson —
+            // unanchored, any URL that merely EMBEDS the path would match).
+            // No fix-over-HTTP: verify's racy half stays offline where it is
+            // safe by construction — the running process serves REPORTS, and
+            // the gc sweep is the one sanctioned mutation.
+            //
+            // GET /_gina/storage/stats?driver=<name>
+            //   → { configured, drivers: [ {name, strategy, root, capabilities,
+            //     store: {objects, refcounted, zeroRefPending, inline, bytes}|null }
+            //     | {name, error} ] } — the driver's own stats() shape, verbatim.
+            if (
+                request.method.toUpperCase() === 'GET'
+                && /^\/_gina\/storage\/stats(\?.*)?$/i.test(request.url)
+            ) {
+                response.setHeader('content-type',  'application/json; charset=utf8');
+                response.setHeader('cache-control', 'no-cache, no-store, must-revalidate');
+                response.setHeader('pragma',  'no-cache');
+                response.setHeader('expires', '0');
+                if ( !lib.admin.isClientAllowed(request) ) {
+                    response.statusCode = 403;
+                    return response.end(JSON.stringify({ error: 'forbidden', message: '/_gina/storage/stats: client IP not in app.json admin.allowFrom' }));
+                }
+                var _stoStatsNames  = lib.storage.list();
+                var _stoStatsDriver = null;
+                var _stoStatsQi     = request.url.indexOf('?');
+                if ( _stoStatsQi > -1 ) {
+                    _stoStatsDriver = new URLSearchParams(request.url.slice(_stoStatsQi + 1)).get('driver') || null;
+                }
+                if ( _stoStatsDriver ) {
+                    if ( _stoStatsNames.indexOf(_stoStatsDriver) < 0 ) {
+                        response.statusCode = 404;
+                        return response.end(JSON.stringify({ error: 'not_found', message: '/_gina/storage/stats: no driver `' + _stoStatsDriver + '` (configured: ' + (_stoStatsNames.join(', ') || 'none') + ')' }));
+                    }
+                    _stoStatsNames = [ _stoStatsDriver ];
+                }
+                var _stoStatsOut  = { configured: lib.storage.isStarted(), drivers: [] };
+                var _stoStatsNext = function(_stoI) {
+                    if ( _stoI >= _stoStatsNames.length ) {
+                        return response.end(JSON.stringify(_stoStatsOut));
+                    }
+                    lib.storage.get(_stoStatsNames[_stoI]).stats(function(_stoErr, _stoView) {
+                        _stoStatsOut.drivers.push(_stoErr
+                            ? { name: _stoStatsNames[_stoI], error: _stoErr.message || String(_stoErr) }
+                            : _stoView);
+                        _stoStatsNext(_stoI + 1);
+                    });
+                };
+                return _stoStatsNext(0);
+            }
+
+            // POST /_gina/storage/gc?dryRun=1&driver=<name> — POST only: a gc
+            // pass is a mutation (a prefetch/crawler must never fire it — the
+            // /_gina/cache/clear rationale). `dryRun=1` lists what a real pass
+            // would collect and touches NOTHING. A real pass LOOPS sweepNow()
+            // until the driver reports `drained` (each pass is batch-capped),
+            // bounded so a pathological store cannot pin the request forever.
+            // A driver without a sweep (sharded) is named-and-skipped, never
+            // an error — the design's "no sweep" is a strategy fact.
+            if (
+                request.method.toUpperCase() === 'POST'
+                && /^\/_gina\/storage\/gc(\?.*)?$/i.test(request.url)
+            ) {
+                response.setHeader('content-type',  'application/json; charset=utf8');
+                response.setHeader('cache-control', 'no-cache, no-store, must-revalidate');
+                response.setHeader('pragma',  'no-cache');
+                response.setHeader('expires', '0');
+                if ( !lib.admin.isClientAllowed(request) ) {
+                    response.statusCode = 403;
+                    return response.end(JSON.stringify({ error: 'forbidden', message: '/_gina/storage/gc: client IP not in app.json admin.allowFrom' }));
+                }
+                var _stoGcNames  = lib.storage.list();
+                var _stoGcDriver = null;
+                var _stoGcDry    = false;
+                var _stoGcQi     = request.url.indexOf('?');
+                if ( _stoGcQi > -1 ) {
+                    var _stoGcQs = new URLSearchParams(request.url.slice(_stoGcQi + 1));
+                    _stoGcDriver = _stoGcQs.get('driver') || null;
+                    _stoGcDry    = ( _stoGcQs.get('dryRun') === '1' || _stoGcQs.get('dryRun') === 'true' );
+                }
+                if ( _stoGcDriver ) {
+                    if ( _stoGcNames.indexOf(_stoGcDriver) < 0 ) {
+                        response.statusCode = 404;
+                        return response.end(JSON.stringify({ error: 'not_found', message: '/_gina/storage/gc: no driver `' + _stoGcDriver + '` (configured: ' + (_stoGcNames.join(', ') || 'none') + ')' }));
+                    }
+                    _stoGcNames = [ _stoGcDriver ];
+                }
+                var _stoGcOut  = { configured: lib.storage.isStarted(), dryRun: _stoGcDry, drivers: [] };
+                var _stoGcNext = function(_stoI) {
+                    if ( _stoI >= _stoGcNames.length ) {
+                        return response.end(JSON.stringify(_stoGcOut));
+                    }
+                    var _stoGcName = _stoGcNames[_stoI];
+                    var _stoGcDrv  = lib.storage.get(_stoGcName);
+                    if ( typeof _stoGcDrv.sweepNow !== 'function' ) {
+                        _stoGcOut.drivers.push({ name: _stoGcName, skipped: true, reason: 'this driver\'s strategy has no sweep (only `cas` collects garbage)' });
+                        return _stoGcNext(_stoI + 1);
+                    }
+                    if ( _stoGcDry ) {
+                        return _stoGcDrv.sweepNow({ dryRun: true }, function(_stoErr, _stoRes) {
+                            _stoGcOut.drivers.push(_stoErr
+                                ? { name: _stoGcName, error: _stoErr.message || String(_stoErr) }
+                                : { name: _stoGcName, collectable: _stoRes.collectable, drained: _stoRes.drained });
+                            _stoGcNext(_stoI + 1);
+                        });
+                    }
+                    // full drain: loop the batch-capped pass until `drained`,
+                    // hard-bounded at 1000 passes (100k blobs per request)
+                    var _stoGcTotal  = 0;
+                    var _stoGcPasses = 0;
+                    var _stoGcLoop   = function() {
+                        _stoGcDrv.sweepNow(function(_stoErr, _stoRes) {
+                            if (_stoErr) {
+                                _stoGcOut.drivers.push({ name: _stoGcName, error: _stoErr.message || String(_stoErr) });
+                                return _stoGcNext(_stoI + 1);
+                            }
+                            _stoGcTotal += _stoRes.collected;
+                            _stoGcPasses++;
+                            if ( !_stoRes.drained && _stoGcPasses < 1000 ) {
+                                return setImmediate(_stoGcLoop);
+                            }
+                            _stoGcOut.drivers.push({ name: _stoGcName, collected: _stoGcTotal, drained: _stoRes.drained, passes: _stoGcPasses });
+                            _stoGcNext(_stoI + 1);
+                        });
+                    };
+                    _stoGcLoop();
+                };
+                return _stoGcNext(0);
+            }
+
+            // GET /_gina/storage/verify?driver=<name> — REPORT-ONLY over HTTP,
+            // deliberately: `fix` is not even parsed here (the CLI refuses
+            // --fix while the bundle runs, and this handler is what makes that
+            // refusal structural rather than advisory). A driver without
+            // verify (sharded, v1) is named-and-skipped, never an error.
+            if (
+                request.method.toUpperCase() === 'GET'
+                && /^\/_gina\/storage\/verify(\?.*)?$/i.test(request.url)
+            ) {
+                response.setHeader('content-type',  'application/json; charset=utf8');
+                response.setHeader('cache-control', 'no-cache, no-store, must-revalidate');
+                response.setHeader('pragma',  'no-cache');
+                response.setHeader('expires', '0');
+                if ( !lib.admin.isClientAllowed(request) ) {
+                    response.statusCode = 403;
+                    return response.end(JSON.stringify({ error: 'forbidden', message: '/_gina/storage/verify: client IP not in app.json admin.allowFrom' }));
+                }
+                var _stoVerNames  = lib.storage.list();
+                var _stoVerDriver = null;
+                var _stoVerQi     = request.url.indexOf('?');
+                if ( _stoVerQi > -1 ) {
+                    _stoVerDriver = new URLSearchParams(request.url.slice(_stoVerQi + 1)).get('driver') || null;
+                }
+                if ( _stoVerDriver ) {
+                    if ( _stoVerNames.indexOf(_stoVerDriver) < 0 ) {
+                        response.statusCode = 404;
+                        return response.end(JSON.stringify({ error: 'not_found', message: '/_gina/storage/verify: no driver `' + _stoVerDriver + '` (configured: ' + (_stoVerNames.join(', ') || 'none') + ')' }));
+                    }
+                    _stoVerNames = [ _stoVerDriver ];
+                }
+                var _stoVerOut  = { configured: lib.storage.isStarted(), drivers: [] };
+                var _stoVerNext = function(_stoI) {
+                    if ( _stoI >= _stoVerNames.length ) {
+                        return response.end(JSON.stringify(_stoVerOut));
+                    }
+                    var _stoVerName = _stoVerNames[_stoI];
+                    var _stoVerDrv  = lib.storage.get(_stoVerName);
+                    if ( typeof _stoVerDrv.verify !== 'function' ) {
+                        _stoVerOut.drivers.push({ name: _stoVerName, skipped: true, reason: 'verify is cas-only in v1' });
+                        return _stoVerNext(_stoI + 1);
+                    }
+                    _stoVerDrv.verify(function(_stoErr, _stoRep) {
+                        _stoVerOut.drivers.push(_stoErr
+                            ? { name: _stoVerName, error: _stoErr.message || String(_stoErr) }
+                            : _stoRep);
+                        _stoVerNext(_stoI + 1);
+                    });
+                };
+                return _stoVerNext(0);
+            }
+
             // ── /_gina/release/* — stale built-release watch (#RWATCH) ──────────
             // Present ONLY when the service armed at boot (local scope + non-dev +
             // server.releaseWatch.enabled) — when inactive the URLs fall through to

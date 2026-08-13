@@ -559,6 +559,62 @@ function validateConfig(storageBlock, context) {
 }
 
 /**
+ * Resolve one VALIDATED driver block to the concrete configuration a strategy
+ * factory consumes — defaults applied, sizes/durations parsed, the cas hash
+ * lowercased. Extracted from {@link start} for the `storage:*` CLI (#STO1 CLI
+ * slice): the CLI's offline path builds per-bundle drivers OUTSIDE this
+ * module's once-only `start()` state, and resolving through ONE shared
+ * function is what keeps a CLI-built driver behaviourally identical to the
+ * booted one (two copies of default resolution would drift the moment a new
+ * strategy key arrives).
+ *
+ * The input must already have passed {@link validateConfig} — like the
+ * FACTORIES lookup, this resolves; it does not re-validate.
+ *
+ * @inner
+ * @param {object} conf - One `storage.drivers.<name>` block (validated).
+ * @returns {object} The resolved configuration `start()` hands the strategy factory
+ *                   (`root`/`strategy`/`maxObjectSize`/`inlineThreshold`, plus
+ *                   `hash`/`fsync`/`sweepInterval`/`sweepGrace` under `cas`).
+ */
+function resolveDriverConf(conf) {
+    var max = util.parseSize(conf.maxObjectSize);
+    if ( isNaN(max) || max <= 0 ) { max = DEFAULT_MAX_OBJECT_SIZE; }
+
+    // Size tiering: absent or unparseable resolves to the measured 64KB
+    // default; an explicit `'0B'` keeps its zero and disables tiering.
+    // Defaults resolve HERE, not in the factory (the maxObjectSize
+    // pattern) — a direct factory caller passing no threshold gets
+    // tiering off, which is what keeps the adapter's low-level tests
+    // pinned to the file path.
+    var inline = util.parseSize(conf.inlineThreshold);
+    if ( isNaN(inline) || inline < 0 ) { inline = DEFAULT_INLINE_THRESHOLD; }
+
+    var resolved = {
+        root            : conf.root,
+        strategy        : conf.strategy,
+        maxObjectSize   : max,
+        inlineThreshold : inline
+    };
+
+    // cas defaults resolve here too, same pattern. `hash` was validated
+    // against crypto.getHashes() by validateConfig; lowercasing makes the
+    // key's algorithm segment canonical.
+    if ( conf.strategy === 'cas' ) {
+        resolved.hash = ( typeof conf.hash === 'string' && conf.hash.length > 0 )
+            ? conf.hash.toLowerCase()
+            : DEFAULT_CAS_HASH;
+        resolved.fsync = ( typeof conf.fsync === 'boolean' ) ? conf.fsync : DEFAULT_CAS_FSYNC;
+        var si = util.parseDuration(conf.sweepInterval);
+        resolved.sweepInterval = ( isNaN(si) || si < 0 ) ? DEFAULT_SWEEP_INTERVAL : si; // '0s' is legal: periodic sweep off
+        var sg = util.parseDuration(conf.sweepGrace);
+        resolved.sweepGrace = ( isNaN(sg) || sg <= 0 ) ? DEFAULT_SWEEP_GRACE : sg;      // 0 grace would re-open the sweep race
+    }
+
+    return resolved;
+}
+
+/**
  * Build every configured driver and hold them for {@link get}.
  *
  * Adoption is once-only: a second call is refused with a warning rather than
@@ -613,17 +669,6 @@ function start(opt) {
     for (var i = 0; i < names.length; i++) {
         var name = names[i];
         var conf = drivers[name];
-        var max  = util.parseSize(conf.maxObjectSize);
-        if ( isNaN(max) || max <= 0 ) { max = DEFAULT_MAX_OBJECT_SIZE; }
-
-        // Size tiering: absent or unparseable resolves to the measured 64KB
-        // default; an explicit `'0B'` keeps its zero and disables tiering.
-        // Defaults resolve HERE, not in the factory (the maxObjectSize
-        // pattern) — a direct factory caller passing no threshold gets
-        // tiering off, which is what keeps the adapter's low-level tests
-        // pinned to the file path.
-        var inline = util.parseSize(conf.inlineThreshold);
-        if ( isNaN(inline) || inline < 0 ) { inline = DEFAULT_INLINE_THRESHOLD; }
 
         // A connector store when one was built for this driver, else the
         // embedded SQLite file inside the driver's own root — self-contained,
@@ -633,28 +678,10 @@ function start(opt) {
             ? opt.stores[name]
             : createEmbeddedMetaStore(nodePath.join(conf.root, '.meta.db'));
 
-        var resolved = {
-            root            : conf.root,
-            strategy        : conf.strategy,
-            maxObjectSize   : max,
-            inlineThreshold : inline
-        };
-
-        // cas defaults resolve here too, same pattern. `hash` was validated
-        // against crypto.getHashes() by validateConfig; lowercasing makes the
-        // key's algorithm segment canonical.
-        var hash = null;
-        if ( conf.strategy === 'cas' ) {
-            hash = ( typeof conf.hash === 'string' && conf.hash.length > 0 )
-                ? conf.hash.toLowerCase()
-                : DEFAULT_CAS_HASH;
-            resolved.hash  = hash;
-            resolved.fsync = ( typeof conf.fsync === 'boolean' ) ? conf.fsync : DEFAULT_CAS_FSYNC;
-            var si = util.parseDuration(conf.sweepInterval);
-            resolved.sweepInterval = ( isNaN(si) || si < 0 ) ? DEFAULT_SWEEP_INTERVAL : si; // '0s' is legal: periodic sweep off
-            var sg = util.parseDuration(conf.sweepGrace);
-            resolved.sweepGrace = ( isNaN(sg) || sg <= 0 ) ? DEFAULT_SWEEP_GRACE : sg;      // 0 grace would re-open the sweep race
-        }
+        // Defaults, size/duration parsing and the cas hash canonicalisation —
+        // ONE shared resolver, also driven by the `storage:*` CLI's offline
+        // path (see resolveDriverConf).
+        var resolved = resolveDriverConf(conf);
 
         // THE strategy dispatch — validateConfig has already refused unknown
         // and deferred names, so this lookup cannot miss on a validated boot;
@@ -670,7 +697,7 @@ function start(opt) {
         // is resolved. Fire-and-forget: with the embedded store it completes
         // synchronously, with a connector store the warning simply lands
         // when it lands — it gates nothing.
-        checkDriverStamp(name, conf.strategy, hash, store, warn);
+        checkDriverStamp(name, conf.strategy, resolved.hash || null, store, warn);
     }
 
     _drivers = built;
@@ -789,6 +816,27 @@ function isStarted() {
 }
 
 /**
+ * Names of the built drivers — the operator surface's enumeration door
+ * (`GET /_gina/storage/stats` and the `storage:*` CLI iterate it). Answers
+ * `[]` before {@link start} has run (or when storage is unconfigured), so an
+ * iterating caller needs no `isStarted()` pre-check.
+ *
+ * Names only, deliberately: the drivers themselves stay behind {@link get},
+ * whose throw-on-unknown contract is what surfaces a typo at the call site.
+ *
+ * @memberof module:lib/storage
+ * @returns {string[]} Driver names, in configuration order.
+ *
+ * @example
+ * lib.storage.list().forEach(function (name) {
+ *     lib.storage.get(name).stats(function (err, s) { });
+ * });
+ */
+function list() {
+    return _drivers ? Object.keys(_drivers) : [];
+}
+
+/**
  * Release every driver's metadata handle and clear module state.
  *
  * Test/teardown seam — the runtime never calls it. Without it each test file
@@ -813,9 +861,17 @@ module.exports = {
     validateConfig : validateConfig,
     start          : start,
     get            : get,
+    list           : list,
     isStarted      : isStarted,
     reset          : reset,
-    // test seams — may change without notice
+    // test seams — may change without notice. The three #STO1-CLI seams
+    // (_resolveDriverConf / _FACTORIES / _createEmbeddedMetaStore) are ALSO
+    // the `storage:*` cmd handlers' offline door: the CLI builds per-bundle
+    // drivers outside start()'s once-only state, through the exact resolver
+    // and factories a boot uses — in-tree consumers, versioned together.
+    _resolveDriverConf       : resolveDriverConf,
+    _FACTORIES                : FACTORIES,
+    _createEmbeddedMetaStore  : createEmbeddedMetaStore,
     _ulid                    : util.ulid,
     _parseSize               : util.parseSize,
     _confineToBase           : util.confineToBase,

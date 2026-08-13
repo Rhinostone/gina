@@ -1,0 +1,6 @@
+[
+    "--driver",
+    "--dry-run",
+    "--fix",
+    "--format"
+]

@@ -85,6 +85,9 @@ var TMP_DIR = '.tmp';
  * @property {function(string, function): void}         resolve      - How to serve `key`; `fn(err, {kind:'path', path})`.
  * @property {function(): void}                         close        - Release the metadata handle. Teardown/tests only.
  * @property {object}                                   capabilities - What this driver can do; every consumer must branch on it rather than assume.
+ * @property {function(function): void}                 [stats]      - Driver statistics for the operator surface (`storage:stats`); `fn(err, {name, strategy, root, capabilities, store})` — `store` is the metadata store's aggregate counts, or `null` when the store reports no stats. Present on both local strategies.
+ * @property {function((object|function)=, function=): void} [sweepNow] - cas-only: run one GC pass now; `{dryRun: true}` lists collectable keys without touching anything. `fn(err, {collected, drained}|{collectable, drained})`. A strategy without a sweep simply lacks the verb — callers branch, never assume.
+ * @property {function(object, function): void}         [verify]     - cas-only: files↔rows consistency scan (age-gated); see `src/local-cas`.
  */
 
 /**
@@ -129,6 +132,22 @@ module.exports = function createLocalDriver(name, conf, metaStore) {
      * @type {function(string): {path: ?string, error: ?Error}}
      */
     var resolvePath = util.makeResolvePath(name, root);
+
+    /**
+     * What this driver can do — hoisted to a closure var so `stats()` can
+     * include it in its report without reaching back into the returned
+     * literal. Documented on the `capabilities` property below.
+     *
+     * @inner
+     * @type {{offload: boolean, ranges: boolean, dedup: boolean, resumable: boolean, inline: boolean}}
+     */
+    var capabilities = {
+        offload   : false,
+        ranges    : false,
+        dedup     : false,
+        resumable : false,
+        inline    : ( inlineThreshold > 0 )
+    };
 
     return {
 
@@ -512,6 +531,48 @@ module.exports = function createLocalDriver(name, conf, metaStore) {
         },
 
         /**
+         * Driver-level statistics for the operator surface (`storage:stats`
+         * and `GET /_gina/storage/stats`): the driver's identity — strategy,
+         * root, capabilities — plus the metadata store's aggregate counts.
+         *
+         * The store half is OPTIONAL seam surface: a store lacking `stats()`
+         * reports `store: null` ("store reports no stats") rather than
+         * erroring, so a connector-backed driver degrades instead of failing
+         * the whole stats sweep.
+         *
+         * @param {function} fn - `fn(err, {name, strategy, root, capabilities, store})` —
+         *                        `store` is `{objects, refcounted, zeroRefPending, inline,
+         *                        bytes}`, or `null` when the store reports no stats.
+         * @returns {void}
+         *
+         * @example
+         * driver.stats(function (err, s) {
+         *     if (err) { return next(err); }
+         *     // s.store.objects, s.store.bytes …
+         * });
+         */
+        stats: function(fn) {
+            if ( typeof fn !== 'function' ) {
+                throw new Error('[storage:' + name + '] stats() requires a callback');
+            }
+            var view = {
+                name         : name,
+                strategy     : conf.strategy,
+                root         : root,
+                capabilities : capabilities,
+                store        : null
+            };
+            if ( typeof metaStore.stats !== 'function' ) {
+                return fn(null, view);
+            }
+            metaStore.stats(function(err, s) {
+                if (err) { return fn(err); }
+                view.store = s;
+                fn(null, view);
+            });
+        },
+
+        /**
          * What this driver can do. Consumers branch on these rather than
          * assuming. `inline` is conf-dependent: `true` when size tiering is
          * active (`inlineThreshold` > 0), meaning `resolve()` may answer
@@ -523,13 +584,7 @@ module.exports = function createLocalDriver(name, conf, metaStore) {
          *
          * @type {{offload: boolean, ranges: boolean, dedup: boolean, resumable: boolean, inline: boolean}}
          */
-        capabilities: {
-            offload   : false,
-            ranges    : false,
-            dedup     : false,
-            resumable : false,
-            inline    : ( inlineThreshold > 0 )
-        },
+        capabilities: capabilities,
 
         /**
          * Release the metadata handle. Teardown and tests only — the runtime

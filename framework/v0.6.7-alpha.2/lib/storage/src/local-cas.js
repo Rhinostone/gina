@@ -42,7 +42,7 @@
  * delete a concurrent resurrection always beats) and unlinks the file second:
  * the inverse order could lose bytes under a racing dedup-hit `put()`, while
  * this order's crash window merely orphans an UNREFERENCED file — harmless,
- * and scrubbing belongs to the future `storage:verify` CLI. In-process the
+ * and scrubbing belongs to the `storage:verify` CLI (`verify()` below). In-process the
  * race cannot interleave at all: the embedded store is synchronous and so are
  * the sweep's file ops, so acquire→check→publish and claim→unlink each run in
  * one uninterruptible JS turn. Across processes (a future async connector
@@ -109,6 +109,20 @@ var TMP_DIR = '.tmp';
  * @type {number}
  */
 var SWEEP_BATCH = 100;
+
+/**
+ * Ceiling on how many individual findings a `verify()` report LISTS. The
+ * COUNTS stay exact past it (`findingCounts` keeps counting, and `--fix`
+ * keeps fixing) — only the itemised list is capped, flagged by
+ * `findingsTruncated`, so a pathological store cannot balloon one HTTP
+ * response or terminal dump. A cap that was silent would read as "that was
+ * all of them", which is the lie the flag exists to prevent.
+ *
+ * @inner
+ * @constant
+ * @type {number}
+ */
+var VERIFY_FINDINGS_CAP = 1000;
 
 /**
  * The metadata-store verbs the cas strategy cannot work without — the
@@ -297,28 +311,74 @@ module.exports = function createLocalCasDriver(name, conf, metaStore) {
      * discard its temp, and leave a live key with no bytes. This order's
      * crash window (row gone, file still there) merely orphans an
      * unreferenced file — invisible to `stat()`/`get()`, reclaimed by the
-     * future `storage:verify` scrub, harmless meanwhile. ENOENT on the
-     * unlink is normal: inline blobs have no file, and a healed crash residue
-     * may already be gone.
+     * `storage:verify` scrub, harmless meanwhile. ENOENT on the unlink is
+     * normal: inline blobs have no file, and a healed crash residue may
+     * already be gone.
      *
-     * Exposed as `_sweepOnce` on the driver — a test seam (tests drive the
-     * race orderings deterministically), may change without notice.
+     * Exposed as `sweepNow` on the driver (#STO1 CLI slice — `storage:gc`
+     * and `POST /_gina/storage/gc` drive it), with the historical
+     * `_sweepOnce` name kept as an alias for the cas test seam. Both the
+     * options bag and the callback are optional, so the periodic timer's
+     * bare `sweepOnce()` call keeps its exact pre-promotion behaviour.
      *
-     * @inner
+     * `drained` answers "is there anything older-than-grace left?": `true`
+     * when this pass's listing came back under the batch cap, so a caller
+     * that wants a full drain loops until it reads `true` instead of
+     * guessing at the cap.
+     *
+     * @param {object}   [opt]        - Options.
+     * @param {boolean}  [opt.dryRun] - List the collectable keys and touch NOTHING —
+     *                                  no row is claimed, no file unlinked.
+     * @param {function} [fn]         - `fn(err, {collected, drained})`, or
+     *                                  `fn(err, {collectable, drained})` under `dryRun` —
+     *                                  `collected` counts CLAIMED rows (an inline blob has
+     *                                  no file to unlink; claiming its row IS collecting it).
      * @returns {void}
+     *
+     * @example
+     * driver.sweepNow(function (err, r) {
+     *     if (r && !r.drained) { }  // more older-than-grace blobs remain — loop
+     * });
+     *
+     * @example
+     * driver.sweepNow({ dryRun: true }, function (err, r) {
+     *     // r.collectable — keys a real pass would collect; nothing was touched
+     * });
      */
-    var sweepOnce = function() {
-        metaStore.listZeroRefs(Date.now() - sweepGraceMs, SWEEP_BATCH, function(listErr, keys) {
-            if ( listErr || !keys || !keys.length ) { return; }
+    var sweepOnce = function(opt, fn) {
+        if ( typeof opt === 'function' ) { fn = opt; opt = null; }
+        opt = opt || {};
+        if ( typeof fn !== 'function' ) { fn = function() {}; }
+        var cutoff = Date.now() - sweepGraceMs;
+        if ( opt.dryRun === true ) {
+            return metaStore.listZeroRefs(cutoff, SWEEP_BATCH, function(listErr, keys) {
+                if (listErr) { return fn(listErr); }
+                keys = keys || [];
+                fn(null, { collectable: keys, drained: ( keys.length < SWEEP_BATCH ) });
+            });
+        }
+        metaStore.listZeroRefs(cutoff, SWEEP_BATCH, function(listErr, keys) {
+            if (listErr) { return fn(listErr); }
+            if ( !keys || !keys.length ) { return fn(null, { collected: 0, drained: true }); }
+            var collected = 0;
+            var pending   = keys.length;
+            var advance   = function() {
+                pending--;
+                if ( pending === 0 ) {
+                    fn(null, { collected: collected, drained: ( keys.length < SWEEP_BATCH ) });
+                }
+            };
             for (var i = 0; i < keys.length; i++) {
                 (function(key) {
                     metaStore.removeIfZero(key, function(rmErr, removed) {
-                        if ( rmErr || !removed ) { return; }
+                        if ( rmErr || !removed ) { return advance(); }
                         var r = resolvePath(key);
-                        if ( !r.path ) { return; } // cannot happen for keys this driver minted
+                        if ( !r.path ) { return advance(); } // cannot happen for keys this driver minted
                         try {
                             fs.unlinkSync(r.path);
                         } catch (e) { /* ENOENT — inline blob, or already gone */ }
+                        collected++;
+                        advance();
                     });
                 })(keys[i]);
             }
@@ -338,6 +398,271 @@ module.exports = function createLocalCasDriver(name, conf, metaStore) {
         sweepTimer = setInterval(sweepOnce, sweepIntervalMs);
         if ( sweepTimer.unref ) { sweepTimer.unref(); }
     }
+
+    /**
+     * Files ↔ rows consistency scan — the `storage:verify` engine (#STO1 CLI
+     * slice). Lives on the driver, not in the cmd handler: root and store sit
+     * in this closure, which is what makes the logic unit-testable without a
+     * CLI process.
+     *
+     * Both directions are AGE-GATED past the grace window, because each has a
+     * legitimate in-flight shape that must never read as a finding:
+     *   - a file younger than grace may belong to work in flight (and the
+     *     row snapshot a walker compares against goes stale the moment a
+     *     concurrent put lands), so young files are skipped;
+     *   - a row younger than grace may sit inside `put()`'s acquire→rename
+     *     window, where the row legitimately precedes its file — skipped too.
+     *
+     * Two finding classes, deliberately ASYMMETRIC (the design):
+     *   - `file-without-row` — the sweep's documented crash residue (row
+     *     claimed, crash before the unlink). Harmless, invisible to every
+     *     read verb, and FIXABLE: `opt.fix` unlinks it. The CLI only allows
+     *     `--fix` offline; nothing in this driver enforces that, the caller
+     *     owns it.
+     *   - `row-without-file` — a file-backed row (refs ≥ 1, no inline
+     *     payload) whose bytes are gone. That is LOSS EVIDENCE: reported,
+     *     never auto-fixed — deleting the row would destroy the only signal
+     *     that content vanished. Zero-ref rows are skipped: their content is
+     *     unreachable through every verb already, and the sweep's claim +
+     *     ENOENT-tolerant unlink self-heals them, so reporting would flap.
+     *
+     * The rows direction needs row enumeration, which is OPTIONAL seam
+     * surface (`listKeys`): a store lacking it degrades to the files
+     * direction only, flagged by `rowsChecked: false`.
+     *
+     * @param {object}   [opt]     - Options.
+     * @param {boolean}  [opt.fix] - Unlink `file-without-row` findings (the fixable
+     *                               class ONLY). Offline-only by CLI policy.
+     * @param {function} fn        - `fn(err, report)` — `report` is
+     *                               `{driver, strategy, checked: {files, rows}, findings,
+     *                               findingCounts: {filesWithoutRows, rowsWithoutFiles},
+     *                               fixedCount, findingsTruncated, rowsChecked}`.
+     * @returns {void}
+     *
+     * @example
+     * driver.verify(function (err, report) {
+     *     if (report.findingCounts.rowsWithoutFiles) { }  // loss evidence — investigate
+     * });
+     *
+     * @example
+     * // offline scrub of sweep crash residue
+     * driver.verify({ fix: true }, function (err, report) {
+     *     // report.fixedCount orphaned files were unlinked
+     * });
+     */
+    var verify = function(opt, fn) {
+        if ( typeof opt === 'function' ) { fn = opt; opt = null; }
+        opt = opt || {};
+        if ( typeof fn !== 'function' ) {
+            throw new Error('[storage:' + name + '] verify() requires a callback');
+        }
+        var fix    = ( opt.fix === true );
+        var cutoff = Date.now() - sweepGraceMs;
+
+        var out = {
+            driver            : name,
+            strategy          : conf.strategy,
+            checked           : { files: 0, rows: 0 },
+            findings          : [],
+            findingCounts     : { filesWithoutRows: 0, rowsWithoutFiles: 0 },
+            fixedCount        : 0,
+            findingsTruncated : false,
+            rowsChecked       : true
+        };
+
+        var settled = false;
+        var settle  = function(err) {
+            if (settled) { return; }
+            settled = true;
+            if (err) { return fn(err); }
+            fn(null, out);
+        };
+
+        var pushFinding = function(finding) {
+            if ( out.findings.length < VERIFY_FINDINGS_CAP ) {
+                out.findings.push(finding);
+            } else {
+                out.findingsTruncated = true;
+            }
+        };
+
+        /**
+         * Files direction: enumerate the fixed-depth blob grammar
+         * (`blobs/<algo>/<aa>/<bb>/<hex>`) rather than a generic recursive
+         * walk — only files at the depth this driver mints can be its
+         * residue, and the explicit levels double as the layout's
+         * documentation. The two index levels are listed up front (name
+         * listings, cheap); each LEAF directory — where the actual files and
+         * their store lookups are — is processed one per macrotask, so a
+         * verify on a running bundle never starves the event loop.
+         *
+         * @inner
+         * @param {function} done - `done(err?)`.
+         * @returns {void}
+         */
+        var walkFiles = function(done) {
+            var blobsRoot = nodePath.join(root, 'blobs');
+            var leafDirs  = []; // [algo, aa, bb] triples
+            try {
+                if ( !fs.existsSync(blobsRoot) ) { return done(); }
+                var algos = fs.readdirSync(blobsRoot);
+                for (var a = 0; a < algos.length; a++) {
+                    var aPath = nodePath.join(blobsRoot, algos[a]);
+                    if ( !fs.statSync(aPath).isDirectory() ) { continue; }
+                    var l1 = fs.readdirSync(aPath);
+                    for (var i = 0; i < l1.length; i++) {
+                        var iPath = nodePath.join(aPath, l1[i]);
+                        if ( !fs.statSync(iPath).isDirectory() ) { continue; }
+                        var l2 = fs.readdirSync(iPath);
+                        for (var j = 0; j < l2.length; j++) {
+                            leafDirs.push([algos[a], l1[i], l2[j]]);
+                        }
+                    }
+                }
+            } catch (walkErr) {
+                return done(walkErr);
+            }
+
+            var processLeaf = function(idx) {
+                if ( idx >= leafDirs.length ) { return done(); }
+                var algoName = leafDirs[idx][0];
+                var aa       = leafDirs[idx][1];
+                var bb       = leafDirs[idx][2];
+                var dirPath  = nodePath.join(blobsRoot, algoName, aa, bb);
+                var entries;
+                try {
+                    entries = fs.readdirSync(dirPath);
+                } catch (e) {
+                    entries = []; // raced away — nothing left to check here
+                }
+                var processEntry = function(eIdx) {
+                    if ( eIdx >= entries.length ) {
+                        return setImmediate(function() { processLeaf(idx + 1); });
+                    }
+                    var filePath = nodePath.join(dirPath, entries[eIdx]);
+                    var st;
+                    try {
+                        st = fs.statSync(filePath);
+                    } catch (e) {
+                        return processEntry(eIdx + 1); // raced away
+                    }
+                    if ( !st.isFile() ) { return processEntry(eIdx + 1); }
+                    out.checked.files++;
+                    if ( st.mtimeMs > cutoff ) { return processEntry(eIdx + 1); } // the age gate
+                    var key = 'blobs/' + algoName + '/' + aa + '/' + bb + '/' + entries[eIdx];
+                    metaStore.get(key, function(getErr, m) {
+                        if (getErr) { return settle(getErr); }
+                        if ( !m ) {
+                            out.findingCounts.filesWithoutRows++;
+                            var finding = {
+                                'class' : 'file-without-row',
+                                key     : key,
+                                size    : st.size,
+                                ageMs   : Math.max(0, Date.now() - st.mtimeMs)
+                            };
+                            if (fix) {
+                                try {
+                                    fs.unlinkSync(filePath);
+                                    finding.fixed = true;
+                                    out.fixedCount++;
+                                } catch (fixErr) {
+                                    finding.fixed = false;
+                                    finding.error = fixErr.message || String(fixErr);
+                                }
+                            }
+                            pushFinding(finding);
+                        }
+                        processEntry(eIdx + 1);
+                    });
+                };
+                processEntry(0);
+            };
+            setImmediate(function() { processLeaf(0); });
+        };
+
+        /**
+         * Rows direction: page over the store's keys (`listKeys`, optional
+         * seam surface) and check each file-backed refcounted row's bytes.
+         * One page per macrotask. Key-ordered pagination is what keeps the
+         * cursor stable while the bundle keeps writing.
+         *
+         * @inner
+         * @param {function} done - `done(err?)`.
+         * @returns {void}
+         */
+        var walkRows = function(done) {
+            if ( typeof metaStore.listKeys !== 'function' ) {
+                out.rowsChecked = false;
+                return done();
+            }
+            var PAGE = 500;
+            var page = function(afterKey) {
+                metaStore.listKeys(afterKey, PAGE, function(listErr, keys) {
+                    if (listErr) { return done(listErr); }
+                    if ( !keys || !keys.length ) { return done(); }
+                    var processKey = function(kIdx) {
+                        if ( kIdx >= keys.length ) {
+                            if ( keys.length < PAGE ) { return done(); }
+                            return setImmediate(function() { page(keys[keys.length - 1]); });
+                        }
+                        var key = keys[kIdx];
+                        metaStore.get(key, function(getErr, m) {
+                            if (getErr) { return settle(getErr); }
+                            if ( !m ) { return processKey(kIdx + 1); } // raced away
+                            out.checked.rows++;
+                            if ( m.data != null ) { return processKey(kIdx + 1); }              // inline — no file expected
+                            if ( typeof m.refs !== 'number' ) { return processKey(kIdx + 1); } // foreign row — stamp territory
+                            if ( m.refs < 1 ) { return processKey(kIdx + 1); }                 // zero-ref — the sweep self-heals
+                            if ( typeof m.createdAt === 'number' && m.createdAt > cutoff ) {
+                                return processKey(kIdx + 1); // the age gate — acquire→rename in flight
+                            }
+                            var r = resolvePath(key);
+                            if ( !r.path ) { return processKey(kIdx + 1); } // not a key this driver minted
+                            var missing = false;
+                            try { missing = !fs.existsSync(r.path); } catch (e) {}
+                            if (missing) {
+                                out.findingCounts.rowsWithoutFiles++;
+                                pushFinding({
+                                    'class'      : 'row-without-file',
+                                    key          : key,
+                                    refs         : m.refs,
+                                    size         : ( typeof m.size === 'number' ) ? m.size : null,
+                                    originalName : m.originalName || null
+                                });
+                            }
+                            processKey(kIdx + 1);
+                        });
+                    };
+                    processKey(0);
+                });
+            };
+            page('');
+        };
+
+        walkFiles(function(filesErr) {
+            if (filesErr) { return settle(filesErr); }
+            walkRows(function(rowsErr) {
+                if (rowsErr) { return settle(rowsErr); }
+                settle(null);
+            });
+        });
+    };
+
+    /**
+     * What this driver can do — hoisted to a closure var so `stats()` can
+     * include it in its report without reaching back into the returned
+     * literal. Documented on the `capabilities` property below.
+     *
+     * @inner
+     * @type {{offload: boolean, ranges: boolean, dedup: boolean, resumable: boolean, inline: boolean}}
+     */
+    var capabilities = {
+        offload   : false,
+        ranges    : false,
+        dedup     : true,
+        resumable : false,
+        inline    : ( inlineThreshold > 0 )
+    };
 
     return {
 
@@ -771,19 +1096,74 @@ module.exports = function createLocalCasDriver(name, conf, metaStore) {
         },
 
         /**
+         * Driver-level statistics for the operator surface (`storage:stats`
+         * and `GET /_gina/storage/stats`): the driver's identity — strategy,
+         * root, capabilities — plus the metadata store's aggregate counts.
+         *
+         * The store half is OPTIONAL seam surface: a store lacking `stats()`
+         * reports `store: null` ("store reports no stats") rather than
+         * erroring, so a connector-backed driver degrades instead of failing
+         * the whole stats sweep. On a cas driver `store.zeroRefPending` is
+         * the sweep's queue depth — released blobs awaiting collection.
+         *
+         * @param {function} fn - `fn(err, {name, strategy, root, capabilities, store})` —
+         *                        `store` is `{objects, refcounted, zeroRefPending, inline,
+         *                        bytes}`, or `null` when the store reports no stats.
+         * @returns {void}
+         *
+         * @example
+         * driver.stats(function (err, s) {
+         *     if (err) { return next(err); }
+         *     // s.store.zeroRefPending — blobs the next sweeps will collect
+         * });
+         */
+        stats: function(fn) {
+            if ( typeof fn !== 'function' ) {
+                throw new Error('[storage:' + name + '] stats() requires a callback');
+            }
+            var view = {
+                name         : name,
+                strategy     : conf.strategy,
+                root         : root,
+                capabilities : capabilities,
+                store        : null
+            };
+            if ( typeof metaStore.stats !== 'function' ) {
+                return fn(null, view);
+            }
+            metaStore.stats(function(err, s) {
+                if (err) { return fn(err); }
+                view.store = s;
+                fn(null, view);
+            });
+        },
+
+        /**
+         * Run one GC pass now — the documented door `storage:gc` and
+         * `POST /_gina/storage/gc` drive. See the inner {@link sweepOnce}
+         * JSDoc for the full contract (`{dryRun}`, `{collected|collectable,
+         * drained}`, and why the claim-first order is load-bearing).
+         *
+         * @type {function((object|function)=, function=): void}
+         */
+        sweepNow: sweepOnce,
+
+        /**
+         * Files ↔ rows consistency scan — see the inner {@link verify} JSDoc
+         * for the two finding classes, the age gates, and the fix asymmetry.
+         *
+         * @type {function((object|function)=, function=): void}
+         */
+        verify: verify,
+
+        /**
          * What this driver can do. `dedup` is the cas flag — it is what
          * gates `findByDigest`. `inline` is conf-dependent, as under
          * `sharded`. The rest stay `false` until their slice ships.
          *
          * @type {{offload: boolean, ranges: boolean, dedup: boolean, resumable: boolean, inline: boolean}}
          */
-        capabilities: {
-            offload   : false,
-            ranges    : false,
-            dedup     : true,
-            resumable : false,
-            inline    : ( inlineThreshold > 0 )
-        },
+        capabilities: capabilities,
 
         /**
          * Stop the GC timer and release the metadata handle. Teardown and
@@ -799,8 +1179,8 @@ module.exports = function createLocalCasDriver(name, conf, metaStore) {
             try { metaStore.close(); } catch (e) { /* already closed */ }
         },
 
-        // test seam — drives one GC pass deterministically; may change
-        // without notice
+        // promoted to sweepNow (#STO1 CLI slice) — this underscore alias
+        // predates the promotion and stays for the cas test seam
         _sweepOnce: sweepOnce
     };
 };

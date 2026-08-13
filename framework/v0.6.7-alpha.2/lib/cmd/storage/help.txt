@@ -1,0 +1,63 @@
+******************************
+* Storage command lines e.g. *
+******************************
+
+
+[ Per-driver storage statistics ]
+
+    $ gina storage:stats <bundle> @<project_name>
+
+    or for every bundle in the project
+
+    $ gina storage:stats @<project_name>
+
+    or one driver only / JSON output (for scripting)
+
+    $ gina storage:stats <bundle> @<project_name> --driver=<driver_name>
+    $ gina storage:stats <bundle> @<project_name> --format=json
+
+
+[ Collecting released cas blobs now (garbage collection) ]
+
+    $ gina storage:gc <bundle> @<project_name>
+
+    or preview what a pass would collect (nothing is touched)
+
+    $ gina storage:gc <bundle> @<project_name> --dry-run
+
+
+[ Checking blob files against metadata rows (consistency scan) ]
+
+    $ gina storage:verify <bundle> @<project_name>
+
+    or scrub orphaned files left by a crashed sweep (bundle must be STOPPED)
+
+    $ gina storage:verify <bundle> @<project_name> --fix
+
+
+Notes:
+  - Who touches the store depends on who OWNS it. A RUNNING bundle owns its
+    embedded metadata store, so every command routes through the bundle's
+    admin-gated /_gina/storage/* endpoint (app.json admin.allowFrom —
+    loopback by default). A STOPPED bundle (every assigned port refusing
+    connections) has its storage opened directly, offline. A bundle that
+    answers neither way (e.g. a timeout) is reported as unknown and its
+    store is NOT opened — it may still be owned by a live process.
+  - The offline path reads the bundle's raw config/settings.json `storage`
+    block. A driver backed by a connector `store` has nothing local to
+    open: it is reachable through the running bundle only, and is named
+    and skipped offline.
+  - storage:gc drives the cas sweep: blobs whose reference count has sat
+    at zero for longer than sweepGrace are collected (row claimed first,
+    file unlinked second). `sharded` drivers have no sweep and are named
+    and skipped, never an error.
+  - storage:verify reports two classes, asymmetric by design:
+    files-without-rows (sweep crash residue — harmless, fixable with
+    --fix) and rows-without-files (LOSS EVIDENCE — reported, never
+    auto-fixed: deleting the row would destroy the signal). Both
+    directions are age-gated past sweepGrace, so in-flight uploads are
+    never reported. --fix is refused while the bundle runs; over HTTP the
+    scan is always report-only.
+  - A root shared by several bundles appears under each of them; gc and
+    verify against a shared root are idempotent — the same result from
+    whichever bundle you point at.
