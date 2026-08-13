@@ -9,6 +9,7 @@
 
 var fs        = require('fs');
 var sqlParser = require('./../sql-parser'); // #SQL1 state-machine comment stripper
+var paramRedact = require('./../param-redact'); // #B350 — bound-value redaction for dev/Inspector sinks
 var lib       = require('./../../../lib') || require.cache[require.resolve('./../../../lib')];
 var inherits  = lib.inherits;
 var console   = lib.logger;
@@ -336,7 +337,9 @@ function Mysql(conn, infos) {
             if (envIsDev) {
                 console.debug('[ ' + trigger + ' ] ' + queryString);
                 if (args.length > 0) {
-                    console.debug('[ ' + trigger + ' ] params: ' + JSON.stringify(args));
+                    // #B350 — bound values redacted by default (count + types);
+                    // `inspector.queries.captureValues` opts in to real values.
+                    console.debug('[ ' + trigger + ' ] params: ' + (paramRedact.captureValues() ? JSON.stringify(args) : paramRedact.describeParams(args)));
                 }
             }
 
@@ -364,7 +367,7 @@ function Mysql(conn, infos) {
                         type        : 'MySQL',
                         trigger     : entityName.toLowerCase() + '#' + name,
                         statement   : String(queryString),
-                        params      : args.length > 0 ? args.slice() : [],
+                        params      : args.length > 0 ? (paramRedact.captureValues() ? args.slice() : paramRedact.summarize(args)) : [],
                         durationMs  : 0,
                         resultCount : 0,
                         resultSize  : 0,

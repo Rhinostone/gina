@@ -10,6 +10,7 @@
 var fs       = require('fs');
 var loader   = require('./lib/pipeline-loader');
 var lib      = require('./../../../lib') || require.cache[require.resolve('./../../../lib')];
+var paramRedact = require('./../param-redact'); // #B350 — bound-value redaction for dev/Inspector sinks
 var inherits = lib.inherits;
 var console  = lib.logger;
 
@@ -409,7 +410,11 @@ function Mongodb(conn, infos) {
             }
 
             if (envIsDev) {
-                console.debug('[ ' + trigger + ' ] op=' + op + ' body=' + JSON.stringify(resolvedBody));
+                // #B350 — the resolved body inlines the caller's values (filter values,
+                // whole documents); the default logs a structure-preserving redaction
+                // (keys + nesting kept, every primitive leaf replaced by its type marker),
+                // and `inspector.queries.captureValues` opts back in to real values.
+                console.debug('[ ' + trigger + ' ] op=' + op + ' body=' + JSON.stringify(paramRedact.captureValues() ? resolvedBody : paramRedact.redactValuesDeep(resolvedBody)));
             }
 
             var _devLog = null, _queryEntry = null;
@@ -422,8 +427,8 @@ function Mongodb(conn, infos) {
                     _queryEntry = {
                         type        : 'MQL',
                         trigger     : entityName.toLowerCase() + '#' + name,
-                        statement   : op + ' ' + JSON.stringify(resolvedBody),
-                        params      : args.length > 0 ? args.slice() : [],
+                        statement   : op + ' ' + JSON.stringify(paramRedact.captureValues() ? resolvedBody : paramRedact.redactValuesDeep(resolvedBody)),
+                        params      : args.length > 0 ? (paramRedact.captureValues() ? args.slice() : paramRedact.summarize(args)) : [],
                         durationMs  : 0,
                         resultCount : 0,
                         resultSize  : 0,

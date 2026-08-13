@@ -2,6 +2,7 @@
 // Imports.
 var fs              = require('fs');
 var sqlParser       = require('./../sql-parser'); // #SQL1 state-machine comment stripper
+var paramRedact     = require('./../param-redact'); // #B350 — bound-value redaction for dev/Inspector sinks
 // CB-LOW-3 fix: removed dead `const { version } = require('os')` — `version` was never referenced.
 // Use couchbase module from the user's project dependencies if not found
 var couchbasePath   = _(getPath('project') +'/node_modules/couchbase');
@@ -933,7 +934,11 @@ function Couchbase(conn, infos) {
                         console.debug('[ ' + trigger +' ] '+ statement);
                         //console.debug('[ ' + trigger +' ] options: '+ JSON.stringify(queryOptions, null, 2));
                         if (queryParams.length > 0) {
-                            console.debug('[ ' + trigger +' ] Found query params: '+ queryParams);
+                            // #B350 — bound values are secrets to the calling app (tokens, key
+                            // hashes); this line previously printed them verbatim. A positional
+                            // bind array has no key names for the key-based redactor, so the
+                            // default is count + types; `inspector.queries.captureValues` opts in.
+                            console.debug('[ ' + trigger +' ] Found query params: '+ (paramRedact.captureValues() ? queryParams : paramRedact.describeParams(queryParams)));
                         }
 
                         var _alsStore = process.gina && process.gina._queryALS ? process.gina._queryALS.getStore() : null;
@@ -943,7 +948,7 @@ function Couchbase(conn, infos) {
                                 type        : 'N1QL',
                                 trigger     : entityName.toLowerCase() + '#' + name,
                                 statement   : String(statement),
-                                params      : queryParams.length > 0 ? queryParams.slice() : [],
+                                params      : queryParams.length > 0 ? (paramRedact.captureValues() ? queryParams.slice() : paramRedact.summarize(queryParams)) : [],
                                 durationMs  : 0,
                                 resultCount : 0,
                                 resultSize  : 0,
@@ -1428,7 +1433,14 @@ function Couchbase(conn, infos) {
             var _biQueryEntry = null;
             // #INS10 — capture during a prod instrumentation window too (not just dev mode).
             if (envIsDev || (process.gina && process.gina._inspectorWindowUntil > Date.now())) {
-                console.debug('[ ' + trigger +' ] '+statement);
+                // #B350 — the bulkInsert statement inlines every record's full document
+                // values (stringified per record above), so the raw statement is itself a
+                // value disclosure; the default logs op + record count, and
+                // `inspector.queries.captureValues` opts back in to the full statement.
+                var _biStatementForLog = paramRedact.captureValues()
+                    ? statement
+                    : 'INSERT INTO ' + this.database + ' (KEY, VALUE) -- ' + recCount + ' record(s) [values redacted]';
+                console.debug('[ ' + trigger +' ] '+_biStatementForLog);
 
                 var _biAlsStore = process.gina && process.gina._queryALS ? process.gina._queryALS.getStore() : null;
                 var _biDevLog = _biAlsStore ? _biAlsStore._devQueryLog : null;
@@ -1436,7 +1448,7 @@ function Couchbase(conn, infos) {
                     _biQueryEntry = {
                         type        : 'N1QL',
                         trigger     : this.name.toLowerCase() + '#' + name,
-                        statement   : String(statement),
+                        statement   : String(_biStatementForLog),
                         params      : [],
                         durationMs  : 0,
                         resultCount : 0,

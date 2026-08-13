@@ -1406,6 +1406,29 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
                                     process.gina._inspectorEventTopics = [];
                                 }
 
+                                // #B350 — opt-in from settings.json `inspector.queries.captureValues`
+                                // (default false). Query statements + timing/shape metadata are always
+                                // captured under the dev/window gate; bound parameter VALUES — and
+                                // value-bearing statement bodies (a document database's resolved body,
+                                // a bulk-insert's inlined records) — reach the console lines and the
+                                // Inspector query log only when this is true. A positional bind array
+                                // has no key names, so the key-based redact library structurally cannot
+                                // cover it; the gate + opt-in are the protection (same contract as the
+                                // AI captureText and events captureArgs opt-ins above). Stored on
+                                // process.gina so connectors read a cheap slot. Fail-closed.
+                                try {
+                                    var _qInspSettings = (typeof gna.getConfig === 'function') ? gna.getConfig('settings') : null;
+                                    var _qInspConf     = (_qInspSettings && _qInspSettings.inspector && _qInspSettings.inspector.queries && typeof _qInspSettings.inspector.queries === 'object')
+                                        ? _qInspSettings.inspector.queries
+                                        : {};
+                                    if (!process.gina) process.gina = {};
+                                    process.gina._inspectorQueryCaptureValues = (_qInspConf.captureValues === true);
+                                } catch (qInspErr) {
+                                    console.warn('[inspector-queries] init skipped: ' + (qInspErr.message || qInspErr));
+                                    if (!process.gina) process.gina = {};
+                                    process.gina._inspectorQueryCaptureValues = false;
+                                }
+
                                 // #INS8 — dev-only auto-start of the standalone Inspector
                                 // bundle (inspector@gina). Best-effort + fail-closed.
                                 // Gated on:

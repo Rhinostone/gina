@@ -361,7 +361,7 @@ describe('08 - Query instrumentation: Couchbase connector pushes via AsyncLocalS
         var src = getCbSrc();
         var entryIdx = src.indexOf('_queryEntry = {');
         assert.ok(entryIdx > -1, '_queryEntry object literal must exist');
-        var block = src.substring(entryIdx, entryIdx + 750);
+        var block = src.substring(entryIdx, entryIdx + 1200); // #B350 widened from 750: the gated params field grew the entry (worst need ~800)
         var requiredFields = ['type', 'trigger', 'statement', 'params', 'durationMs', 'resultCount', 'resultSize', 'error', 'source', 'origin', 'connector'];
         for (var i = 0; i < requiredFields.length; i++) {
             assert.ok(
@@ -375,7 +375,7 @@ describe('08 - Query instrumentation: Couchbase connector pushes via AsyncLocalS
         var src = getCbSrc();
         var pushIdx = src.indexOf('_devLog.push(_queryEntry)');
         assert.ok(pushIdx > -1, '_devLog push must exist');
-        var before = src.substring(Math.max(0, pushIdx - 1800), pushIdx);
+        var before = src.substring(Math.max(0, pushIdx - 3500), pushIdx); // #B350 widened from 1800: the gated Found-query-params line + comment sit between the gate and the push (need ~2115)
         assert.ok(
             before.indexOf('envIsDev') > -1,
             '_devLog push must be inside envIsDev guard'
@@ -588,7 +588,7 @@ describe('08d - Query instrumentation: index extraction via profile timings', fu
         var src = getCbSrc();
         var entryIdx = src.indexOf('_queryEntry = {');
         assert.ok(entryIdx > -1, '_queryEntry must exist');
-        var block = src.substring(entryIdx, entryIdx + 750);
+        var block = src.substring(entryIdx, entryIdx + 1200); // #B350 widened from 750: the gated params field grew the entry (worst need ~800)
         assert.ok(
             block.indexOf('indexes') > -1,
             'expected "indexes" field in _queryEntry'
@@ -599,7 +599,7 @@ describe('08d - Query instrumentation: index extraction via profile timings', fu
         var src = getCbSrc();
         var entryIdx = src.indexOf('_biQueryEntry = {');
         assert.ok(entryIdx > -1, '_biQueryEntry must exist');
-        var block = src.substring(entryIdx, entryIdx + 750);
+        var block = src.substring(entryIdx, entryIdx + 1200); // #B350 widened from 750: the gated params field grew the entry (worst need ~800)
         assert.ok(
             block.indexOf('indexes') > -1,
             'expected "indexes" field in _biQueryEntry'
@@ -3832,7 +3832,7 @@ describe('40 - MySQL connector QI: AsyncLocalStorage instrumentation', function(
         var src = getMysqlSrc();
         var entryIdx = src.indexOf('_queryEntry = {');
         assert.ok(entryIdx > -1, '_queryEntry object literal must exist');
-        var block = src.substring(entryIdx, entryIdx + 750);
+        var block = src.substring(entryIdx, entryIdx + 1200); // #B350 widened from 750: the gated params field grew the entry (worst need ~800)
         var requiredFields = ['type', 'trigger', 'statement', 'params', 'durationMs',
             'resultCount', 'resultSize', 'error', 'source', 'origin', 'connector'];
         for (var i = 0; i < requiredFields.length; i++) {
@@ -3856,7 +3856,7 @@ describe('40 - MySQL connector QI: AsyncLocalStorage instrumentation', function(
     it('_queryEntry connector is mysql', function() {
         var src = getMysqlSrc();
         var entryIdx = src.indexOf('_queryEntry = {');
-        var block = src.substring(entryIdx, entryIdx + 750);
+        var block = src.substring(entryIdx, entryIdx + 1200); // #B350 widened from 750: the gated params field grew the entry (worst need ~800)
         assert.ok(
             /connector\s*:\s*'mysql'/.test(block),
             'expected connector: "mysql" in _queryEntry'
@@ -3866,7 +3866,7 @@ describe('40 - MySQL connector QI: AsyncLocalStorage instrumentation', function(
     it('_queryEntry origin uses infos.bundle', function() {
         var src = getMysqlSrc();
         var entryIdx = src.indexOf('_queryEntry = {');
-        var block = src.substring(entryIdx, entryIdx + 750);
+        var block = src.substring(entryIdx, entryIdx + 1200); // #B350 widened from 750: the gated params field grew the entry (worst need ~800)
         assert.ok(
             /origin\s*:\s*infos\.bundle/.test(block),
             'expected origin: infos.bundle in _queryEntry'
@@ -3877,7 +3877,7 @@ describe('40 - MySQL connector QI: AsyncLocalStorage instrumentation', function(
         var src = getMysqlSrc();
         var pushIdx = src.indexOf('_devLog.push(_queryEntry)');
         assert.ok(pushIdx > -1, '_devLog push must exist');
-        var before = src.substring(Math.max(0, pushIdx - 2000), pushIdx);
+        var before = src.substring(Math.max(0, pushIdx - 3500), pushIdx); // #B350 widened from 2000 (9-12 chars headroom pre-fix): the gated console + params lines sit between the gate and the push (need ~2055)
         assert.ok(
             before.indexOf('envIsDev') > -1,
             '_devLog push must be inside envIsDev guard'
@@ -3960,7 +3960,7 @@ describe('40 - MySQL connector QI: AsyncLocalStorage instrumentation', function(
             'expected _knownIndexes variable in MySQL connector'
         );
         var entryIdx = src.indexOf('_queryEntry = {');
-        var block = src.substring(entryIdx, entryIdx + 750);
+        var block = src.substring(entryIdx, entryIdx + 1200); // #B350 widened from 750: the gated params field grew the entry (worst need ~800)
         assert.ok(
             /indexes\s*:\s*_indexes/.test(block),
             'expected indexes: _indexes (resolved from _knownIndexes) in MySQL _queryEntry'
@@ -4397,7 +4397,7 @@ describe('41 - PostgreSQL connector QI: AsyncLocalStorage instrumentation', func
         var src = getPgSrc();
         var entryIdx = src.indexOf('_queryEntry = {');
         assert.ok(entryIdx > -1, '_queryEntry object literal must exist');
-        var block = src.substring(entryIdx, entryIdx + 750);
+        var block = src.substring(entryIdx, entryIdx + 1200); // #B350 widened from 750: the gated params field grew the entry (worst need ~800)
         var requiredFields = ['type', 'trigger', 'statement', 'params', 'durationMs',
             'resultCount', 'resultSize', 'error', 'source', 'origin', 'connector'];
         for (var i = 0; i < requiredFields.length; i++) {
@@ -4421,7 +4421,7 @@ describe('41 - PostgreSQL connector QI: AsyncLocalStorage instrumentation', func
     it('_queryEntry connector is postgresql', function() {
         var src = getPgSrc();
         var entryIdx = src.indexOf('_queryEntry = {');
-        var block = src.substring(entryIdx, entryIdx + 750);
+        var block = src.substring(entryIdx, entryIdx + 1200); // #B350 widened from 750: the gated params field grew the entry (worst need ~800)
         assert.ok(
             /connector\s*:\s*'postgresql'/.test(block),
             'expected connector: "postgresql" in _queryEntry'
@@ -4431,7 +4431,7 @@ describe('41 - PostgreSQL connector QI: AsyncLocalStorage instrumentation', func
     it('_queryEntry origin uses infos.bundle', function() {
         var src = getPgSrc();
         var entryIdx = src.indexOf('_queryEntry = {');
-        var block = src.substring(entryIdx, entryIdx + 750);
+        var block = src.substring(entryIdx, entryIdx + 1200); // #B350 widened from 750: the gated params field grew the entry (worst need ~800)
         assert.ok(
             /origin\s*:\s*infos\.bundle/.test(block),
             'expected origin: infos.bundle in _queryEntry'
@@ -4442,7 +4442,7 @@ describe('41 - PostgreSQL connector QI: AsyncLocalStorage instrumentation', func
         var src = getPgSrc();
         var pushIdx = src.indexOf('_devLog.push(_queryEntry)');
         assert.ok(pushIdx > -1, '_devLog push must exist');
-        var before = src.substring(Math.max(0, pushIdx - 2000), pushIdx);
+        var before = src.substring(Math.max(0, pushIdx - 3500), pushIdx); // #B350 widened from 2000 (9-12 chars headroom pre-fix): the gated console + params lines sit between the gate and the push (need ~2055)
         assert.ok(
             before.indexOf('envIsDev') > -1,
             '_devLog push must be inside envIsDev guard'
@@ -4523,7 +4523,7 @@ describe('41 - PostgreSQL connector QI: AsyncLocalStorage instrumentation', func
             'expected _knownIndexes variable in PG connector'
         );
         var entryIdx = src.indexOf('_queryEntry = {');
-        var block = src.substring(entryIdx, entryIdx + 750);
+        var block = src.substring(entryIdx, entryIdx + 1200); // #B350 widened from 750: the gated params field grew the entry (worst need ~800)
         assert.ok(
             /indexes\s*:\s*_indexes/.test(block),
             'expected indexes: _indexes (resolved from _knownIndexes) in PG _queryEntry'
@@ -4574,7 +4574,7 @@ describe('42 - SQLite connector QI: AsyncLocalStorage instrumentation', function
         var src = getSqliteSrc();
         var entryIdx = src.indexOf('_queryEntry = {');
         assert.ok(entryIdx > -1, '_queryEntry object literal must exist');
-        var block = src.substring(entryIdx, entryIdx + 750);
+        var block = src.substring(entryIdx, entryIdx + 1200); // #B350 widened from 750: the gated params field grew the entry (worst need ~800)
         var requiredFields = ['type', 'trigger', 'statement', 'params', 'durationMs',
             'resultCount', 'resultSize', 'error', 'source', 'origin', 'connector'];
         for (var i = 0; i < requiredFields.length; i++) {
@@ -4598,7 +4598,7 @@ describe('42 - SQLite connector QI: AsyncLocalStorage instrumentation', function
     it('_queryEntry connector is sqlite', function() {
         var src = getSqliteSrc();
         var entryIdx = src.indexOf('_queryEntry = {');
-        var block = src.substring(entryIdx, entryIdx + 750);
+        var block = src.substring(entryIdx, entryIdx + 1200); // #B350 widened from 750: the gated params field grew the entry (worst need ~800)
         assert.ok(
             /connector\s*:\s*'sqlite'/.test(block),
             'expected connector: "sqlite" in _queryEntry'
@@ -4608,7 +4608,7 @@ describe('42 - SQLite connector QI: AsyncLocalStorage instrumentation', function
     it('_queryEntry origin uses infos.bundle', function() {
         var src = getSqliteSrc();
         var entryIdx = src.indexOf('_queryEntry = {');
-        var block = src.substring(entryIdx, entryIdx + 750);
+        var block = src.substring(entryIdx, entryIdx + 1200); // #B350 widened from 750: the gated params field grew the entry (worst need ~800)
         assert.ok(
             /origin\s*:\s*infos\.bundle/.test(block),
             'expected origin: infos.bundle in _queryEntry'
@@ -4619,7 +4619,7 @@ describe('42 - SQLite connector QI: AsyncLocalStorage instrumentation', function
         var src = getSqliteSrc();
         var pushIdx = src.indexOf('_devLog.push(_queryEntry)');
         assert.ok(pushIdx > -1, '_devLog push must exist');
-        var before = src.substring(Math.max(0, pushIdx - 2000), pushIdx);
+        var before = src.substring(Math.max(0, pushIdx - 3500), pushIdx); // #B350 widened from 2000 (9-12 chars headroom pre-fix): the gated console + params lines sit between the gate and the push (need ~2055)
         assert.ok(
             before.indexOf('envIsDev') > -1,
             '_devLog push must be inside envIsDev guard'
@@ -4700,7 +4700,7 @@ describe('42 - SQLite connector QI: AsyncLocalStorage instrumentation', function
             'expected _knownIndexes variable in SQLite connector'
         );
         var entryIdx = src.indexOf('_queryEntry = {');
-        var block = src.substring(entryIdx, entryIdx + 750);
+        var block = src.substring(entryIdx, entryIdx + 1200); // #B350 widened from 750: the gated params field grew the entry (worst need ~800)
         assert.ok(
             /indexes\s*:\s*_indexes/.test(block),
             'expected indexes: _indexes (resolved from _knownIndexes) in SQLite _queryEntry'
@@ -5746,21 +5746,21 @@ describe('48 - Live index introspection (#QI2)', function() {
     it('MySQL _queryEntry includes table field', function() {
         var src = getMysqlSrc();
         var entryIdx = src.indexOf("type        : 'MySQL'");
-        var entryBlock = src.substring(entryIdx, entryIdx + 500);
+        var entryBlock = src.substring(entryIdx, entryIdx + 800); // #B350 widened from 500: the gated params line grew the entry (need ~549)
         assert.ok(entryBlock.indexOf('table') > -1, 'expected table field in MySQL _queryEntry');
     });
 
     it('PostgreSQL _queryEntry includes table field', function() {
         var src = getPgSrc();
         var entryIdx = src.indexOf("type        : 'PG'");
-        var entryBlock = src.substring(entryIdx, entryIdx + 500);
+        var entryBlock = src.substring(entryIdx, entryIdx + 800); // #B350 widened from 500: the gated params line grew the entry (need ~549)
         assert.ok(entryBlock.indexOf('table') > -1, 'expected table field in PostgreSQL _queryEntry');
     });
 
     it('SQLite _queryEntry includes table field', function() {
         var src = getSqliteSrc();
         var entryIdx = src.indexOf("type        : 'SQL'");
-        var entryBlock = src.substring(entryIdx, entryIdx + 500);
+        var entryBlock = src.substring(entryIdx, entryIdx + 800); // #B350 widened from 500: the gated params line grew the entry (need ~549)
         assert.ok(entryBlock.indexOf('table') > -1, 'expected table field in SQLite _queryEntry');
     });
 
