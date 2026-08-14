@@ -117,6 +117,12 @@ var TMP_DIR = '.tmp';
  *                                               parsed (defaults resolve in `start()`). Objects
  *                                               strictly under it are stored inline in the
  *                                               metadata store; `0`/absent disables tiering.
+ * @param {number}           [conf.sweepGrace] - How old a temp file must be before the
+ *                                               build-time orphan sweep reclaims it, in ms
+ *                                               (defaults resolve in `start()`). Same key,
+ *                                               default and meaning as cas's; `sharded` has no
+ *                                               periodic sweep, so this gates the build pass
+ *                                               alone (#B349).
  * @param {StorageMetaStore} metaStore         - Metadata backend (embedded SQLite by default).
  * @returns {StorageDriver} A ready driver.
  *
@@ -133,6 +139,38 @@ module.exports = function createLocalDriver(name, conf, metaStore) {
     var inlineThreshold = ( typeof conf.inlineThreshold === 'number' && conf.inlineThreshold > 0 )
         ? conf.inlineThreshold
         : 0;
+    var sweepGraceMs = ( typeof conf.sweepGrace === 'number' && conf.sweepGrace > 0 )
+        ? conf.sweepGrace
+        : 0;
+
+    // #B349 — build-time temp-orphan sweep, age-gated. A put() whose PROCESS
+    // died leaves its temp behind, and until now nothing on `sharded` ever
+    // removed it: cas has this same pass and `stream` has its own, so sharded
+    // was the one strategy where the leak was permanent. Build time is the
+    // right and only trigger — a restart is the earliest moment the previous
+    // process is provably gone — and the age gate is what keeps a SIBLING
+    // process's in-flight write safe on a shared root, which is precisely the
+    // shape a connector-backed store exists to support. Never throws: an
+    // unreadable temp dir is the next put()'s problem to report properly, and
+    // a sweep that took the build down would be a worse failure than the leak
+    // it prevents.
+    if ( sweepGraceMs > 0 ) {
+        try {
+            var _tmpD = nodePath.join(root, TMP_DIR);
+            if ( fs.existsSync(_tmpD) ) {
+                var _cutoff  = Date.now() - sweepGraceMs;
+                var _entries = fs.readdirSync(_tmpD);
+                for (var _t = 0; _t < _entries.length; _t++) {
+                    var _tp = nodePath.join(_tmpD, _entries[_t]);
+                    try {
+                        if ( fs.statSync(_tp).mtimeMs < _cutoff ) {
+                            fs.unlinkSync(_tp);
+                        }
+                    } catch (_e) { /* raced or unreadable — leave it */ }
+                }
+            }
+        } catch (_e) { /* never blocks the build */ }
+    }
 
     /**
      * Resolve a caller-supplied key to a confined absolute path.

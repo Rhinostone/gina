@@ -202,7 +202,11 @@ var DEFERRED_STRATEGIES = [];
  * @type {Object.<string, string[]>}
  */
 var STRATEGY_KEYS = {
-    sharded : ['adapter', 'strategy', 'root', 'maxObjectSize', 'store', 'inlineThreshold'],
+    // NB `sharded` consumes `sweepGrace` but NOT `sweepInterval`: it reclaims
+    // crashed-put temp orphans at BUILD only, and has no periodic machinery to
+    // hang a tick on. A restart is also the earliest moment the previous
+    // process is provably gone, which is the whole safety argument (#B349).
+    sharded : ['adapter', 'strategy', 'root', 'maxObjectSize', 'store', 'inlineThreshold', 'sweepGrace'],
     cas     : ['adapter', 'strategy', 'root', 'maxObjectSize', 'store', 'inlineThreshold', 'hash', 'fsync', 'sweepInterval', 'sweepGrace'],
     // NB `stream` carries NEITHER `inlineThreshold` NOR `hash`, deliberately:
     // a multi-gigabyte strategy has no business inlining its payload into a
@@ -604,12 +608,21 @@ function validateConfig(storageBlock, context) {
                     out.warnings.push('driver `' + name + '`: `sweepInterval` must carry a unit (ms/s/m/h/d, e.g. "15m"), or be "0s" to disable the periodic sweep — got ' + JSON.stringify(d.sweepInterval) + '; using the default (' + DEFAULT_SWEEP_INTERVAL + ' ms)');
                 }
             }
+        }
+
+        // `sweepGrace` is shared, so its lint is too: under `cas` it gates the
+        // blob GC AND the temp-orphan cutoff, under `sharded` the temp-orphan
+        // cutoff alone (#B349). `sweepInterval` deliberately stays cas-only —
+        // sharded sweeps at build, never on a tick.
+        if ( d.strategy === 'cas' || d.strategy === 'sharded' ) {
             if ( typeof(d.sweepGrace) != 'undefined' && d.sweepGrace !== null ) {
                 if ( isNaN(util.parseDuration(d.sweepGrace)) ) {
                     out.warnings.push('driver `' + name + '`: `sweepGrace` must carry a unit (ms/s/m/h/d, e.g. "1h") — got ' + JSON.stringify(d.sweepGrace) + '; using the default (' + DEFAULT_SWEEP_GRACE + ' ms)');
                 } else if ( util.parseDuration(d.sweepGrace) <= 0 ) {
-                    // grace 0 would let the sweep race an in-flight identical
-                    // put — the exact window the grace exists to close
+                    // grace 0 would let the sweep eat a temp still being
+                    // written — under cas it would also race an in-flight
+                    // identical put. Either way it re-opens the exact window
+                    // the grace exists to close.
                     out.warnings.push('driver `' + name + '`: `sweepGrace` must be greater than zero — got ' + JSON.stringify(d.sweepGrace) + '; using the default (' + DEFAULT_SWEEP_GRACE + ' ms)');
                 }
             }
@@ -723,6 +736,15 @@ function resolveDriverConf(conf) {
         maxObjectSize   : max,
         inlineThreshold : inline
     };
+
+    // sharded takes `sweepGrace` alone — the age gate on its build-time
+    // temp-orphan sweep (#B349). Same key, same default and same meaning as
+    // cas's ("how long before an unfinished temp is presumed abandoned"), but
+    // no `sweepInterval`: there is no periodic pass to configure.
+    if ( conf.strategy === 'sharded' ) {
+        var tsg = util.parseDuration(conf.sweepGrace);
+        resolved.sweepGrace = ( isNaN(tsg) || tsg <= 0 ) ? DEFAULT_SWEEP_GRACE : tsg;
+    }
 
     // cas defaults resolve here too, same pattern. `hash` was validated
     // against crypto.getHashes() by validateConfig; lowercasing makes the
