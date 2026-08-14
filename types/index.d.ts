@@ -411,6 +411,24 @@ declare namespace gina {
         downloadFromLocal(filename: string): void;
 
         /**
+         * Serve a stored object over HTTP with full Range support — the
+         * read-side companion of `store()`'s driver routing. Terminal:
+         * answers 200/206/416/304 (or 404/500 via `throwError`) with
+         * `Accept-Ranges`/`Content-Range`, a strong key-derived `ETag`,
+         * `Last-Modified`, conditional GET and `If-Range`, on both engines.
+         */
+        serveFromStorage(driverName: string, key: string, opts?: {
+            /** Explicit Content-Type; served verbatim, bypasses the active-content downgrade. */
+            contentType?: string;
+            /** Replaces the `private, max-age=31536000, immutable` default, verbatim. */
+            cacheControl?: string;
+            /** `true` emits `Content-Disposition: attachment`. */
+            download?: boolean;
+            /** Download filename (implies attachment); defaults to the stored originalName. */
+            filename?: string;
+        }): void;
+
+        /**
          * Store uploaded file(s) to a target directory.
          */
         store(target: string, files?: any, cb?: (err: Error | null, files?: any[]) => void): Promise<void>;
