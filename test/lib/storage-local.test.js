@@ -398,11 +398,11 @@ describe('06 - extension handling end-to-end', function () {
 
 describe('07 - capabilities', function () {
 
-    it('declares every deferred capability as false', function () {
+    it('declares ranges (it implements getRange) and every still-deferred capability as false', function () {
         var f = freshDriver();
         assert.deepEqual(f.driver.capabilities, {
             offload   : false,
-            ranges    : false,
+            ranges    : true,
             dedup     : false,
             resumable : false,
             inline    : false

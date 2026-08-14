@@ -658,7 +658,7 @@ module.exports = function createLocalCasDriver(name, conf, metaStore) {
      */
     var capabilities = {
         offload   : false,
-        ranges    : false,
+        ranges    : true,
         dedup     : true,
         resumable : false,
         inline    : ( inlineThreshold > 0 )
@@ -936,6 +936,73 @@ module.exports = function createLocalCasDriver(name, conf, metaStore) {
                     return fn(new Error('[storage:' + name + '] no object for key `' + key + '`'));
                 }
                 var rs = fs.createReadStream(r.path);
+                var handed = false;
+                rs.on('error', function(err) {
+                    if (handed) return;
+                    handed = true;
+                    fn(err);
+                });
+                rs.on('open', function() {
+                    if (handed) return;
+                    handed = true;
+                    fn(null, rs);
+                });
+            });
+        },
+
+        /**
+         * Byte-range read — the driver half of HTTP Range serving.
+         *
+         * Contract is identical to the `sharded` twin (`end` INCLUSIVE, an
+         * over-long `end` clamped, only an unsatisfiable `start` refused), with
+         * one cas-specific addition: a zero-ref row reads as ABSENT here exactly
+         * as it does through `get()`/`stat()`/`resolve()`, so a released blob
+         * awaiting the sweep can never be range-read back into existence.
+         *
+         * Blobs are immutable, which makes them the ideal Range subject — the
+         * bytes behind a key can never change, so a client's partial download
+         * stays valid indefinitely and the digest doubles as a strong ETag.
+         *
+         * @param {string}   key   - The opaque storage key.
+         * @param {number}   start - First byte offset, inclusive; integer >= 0.
+         * @param {number}   end   - Last byte offset, INCLUSIVE; integer >= start.
+         * @param {function} fn    - `fn(err, stream)`.
+         * @returns {void}
+         *
+         * @example
+         * driver.getRange(key, 0, 1023, function (err, stream) {
+         *     if (err) { return self.throwError(416); }
+         *     stream.pipe(res);
+         * });
+         */
+        getRange: function(key, start, end, fn) {
+            if ( typeof fn !== 'function' ) {
+                throw new Error('[storage:' + name + '] getRange() requires a callback');
+            }
+            if ( !Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end < start ) {
+                return fn(new Error('[storage:' + name + '] getRange(): invalid range [' + start + ', ' + end + '] — both bounds must be integers with 0 <= start <= end'));
+            }
+            var r = resolvePath(key);
+            if ( r.error ) { return fn(r.error); }
+            metaStore.get(key, function(metaErr, m) {
+                if (metaErr) { return fn(metaErr); }
+                if ( !m || ( typeof m.refs === 'number' && m.refs < 1 ) ) {
+                    return fn(new Error('[storage:' + name + '] no object for key `' + key + '`'));
+                }
+                if ( m.data != null ) {
+                    if ( start >= m.data.length ) {
+                        return fn(new Error('[storage:' + name + '] getRange(): start ' + start + ' is beyond the object size (' + m.data.length + ') for key `' + key + '`'));
+                    }
+                    return fn(null, Readable.from([ m.data.subarray(start, Math.min(end, m.data.length - 1) + 1) ]));
+                }
+                if ( !fs.existsSync(r.path) ) {
+                    return fn(new Error('[storage:' + name + '] no object for key `' + key + '`'));
+                }
+                var size = fs.statSync(r.path).size;
+                if ( start >= size ) {
+                    return fn(new Error('[storage:' + name + '] getRange(): start ' + start + ' is beyond the object size (' + size + ') for key `' + key + '`'));
+                }
+                var rs = fs.createReadStream(r.path, { start: start, end: Math.min(end, size - 1) });
                 var handed = false;
                 rs.on('error', function(err) {
                     if (handed) return;

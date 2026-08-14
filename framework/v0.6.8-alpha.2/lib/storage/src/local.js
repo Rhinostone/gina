@@ -72,14 +72,21 @@ var TMP_DIR = '.tmp';
  * seam in the tree (job-store, session-store, the upload mover) rather than
  * introducing a promise style the surrounding code does not use.
  *
- * Verbs arrive WITH the strategy that needs them: `getRange` (Range serving),
- * the resumable trio (`createUpload` / `writeSegment` / `finalize`) and
- * `findByDigest` (content-addressed dedup) are deliberately absent from v0 and
- * will be capability-gated when they land.
+ * Verbs arrive WITH the strategy that needs them. `getRange` (Range serving)
+ * has LANDED on every local strategy — it is contract, not strategy detail, and
+ * a Range verb that existed only on `stream` would serve nobody, since `sharded`
+ * is the zero-config default. The resumable trio (`createUpload` /
+ * `writeSegment` / `finalize`) remains `stream`-only and `findByDigest`
+ * (content-addressed dedup) `cas`-only; both stay capability-gated.
+ *
+ * NB `capabilities.ranges` is now true here, but the ENGINES still emit no
+ * `Accept-Ranges`/`Content-Range`/206 — HTTP Range serving is its own arc. The
+ * flag describes what the DRIVER can do, never what the server currently does.
  *
  * @typedef  {Object} StorageDriver
  * @property {function(object, object, function): void} put          - Store a readable stream; `fn(err, {@link StoragePutResult})`.
  * @property {function(string, function): void}         get          - Open a readable stream for `key`; `fn(err, stream)`. Errors on an unknown key — see `stat` for the existence question.
+ * @property {function(string, number, number, function): void} getRange - Open a readable stream over an INCLUSIVE byte range; `fn(err, stream)`. An over-long `end` is clamped; an unsatisfiable `start` errors (the caller's 416).
  * @property {function(string, function): void}         stat         - Metadata for `key`; `fn(err, meta|null)`. `null` (not an error) when unknown.
  * @property {function(string, function=): void}        release      - Delete object and metadata; `fn(err, existed)`.
  * @property {function(string, function): void}         resolve      - How to serve `key`; `fn(err, {kind:'path', path})`.
@@ -143,7 +150,7 @@ module.exports = function createLocalDriver(name, conf, metaStore) {
      */
     var capabilities = {
         offload   : false,
-        ranges    : false,
+        ranges    : true,
         dedup     : false,
         resumable : false,
         inline    : ( inlineThreshold > 0 )
@@ -409,6 +416,83 @@ module.exports = function createLocalDriver(name, conf, metaStore) {
                 var rs = fs.createReadStream(r.path);
                 // Armed before the caller can touch it (#B143) — an fs error after
                 // handoff is the caller's, but one raised during open is ours.
+                var handed = false;
+                rs.on('error', function(err) {
+                    if (handed) return;
+                    handed = true;
+                    fn(err);
+                });
+                rs.on('open', function() {
+                    if (handed) return;
+                    handed = true;
+                    fn(null, rs);
+                });
+            });
+        },
+
+        /**
+         * Byte-range read — the driver half of HTTP Range serving.
+         *
+         * `end` is INCLUSIVE, matching both the HTTP `Range` header and
+         * `fs.createReadStream({start, end})`, so no arithmetic happens at the
+         * boundary between them. An `end` past the last byte is CLAMPED rather
+         * than refused (RFC 9110: a range whose start is satisfiable is
+         * satisfiable); only a `start` at or beyond the object's size is
+         * unsatisfiable, and that is the caller's 416.
+         *
+         * Both tiers answer: an inline row slices its buffer, a file-backed row
+         * gets a positioned read stream. The discriminator is `m.data != null`,
+         * exactly as `get()`/`resolve()` use — never the configured threshold,
+         * so a threshold change stays retroactively safe here too.
+         *
+         * @param {string}   key   - The opaque storage key.
+         * @param {number}   start - First byte offset, inclusive; integer >= 0.
+         * @param {number}   end   - Last byte offset, INCLUSIVE; integer >= start.
+         * @param {function} fn    - `fn(err, stream)`.
+         * @returns {void}
+         *
+         * @example
+         * // Serving `Range: bytes=0-1023`
+         * driver.getRange(key, 0, 1023, function (err, stream) {
+         *     if (err) { return self.throwError(416); }
+         *     stream.pipe(res);
+         * });
+         */
+        getRange: function(key, start, end, fn) {
+            if ( typeof fn !== 'function' ) {
+                throw new Error('[storage:' + name + '] getRange() requires a callback');
+            }
+            if ( !Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end < start ) {
+                return fn(new Error('[storage:' + name + '] getRange(): invalid range [' + start + ', ' + end + '] — both bounds must be integers with 0 <= start <= end'));
+            }
+            var r = resolvePath(key);
+            if ( r.error ) { return fn(r.error); }
+            metaStore.get(key, function(metaErr, m) {
+                if (metaErr) { return fn(metaErr); }
+                if ( m && m.data != null ) {
+                    if ( start >= m.data.length ) {
+                        return fn(new Error('[storage:' + name + '] getRange(): start ' + start + ' is beyond the object size (' + m.data.length + ') for key `' + key + '`'));
+                    }
+                    // subarray() is a VIEW, no copy; the array wrap is the same
+                    // load-bearing detail as in get() — Readable.from(buffer)
+                    // would iterate the bytes as INTEGERS.
+                    return fn(null, Readable.from([ m.data.subarray(start, Math.min(end, m.data.length - 1) + 1) ]));
+                }
+                if ( !fs.existsSync(r.path) ) {
+                    return fn(new Error('[storage:' + name + '] no object for key `' + key + '`'));
+                }
+                var size = fs.statSync(r.path).size;
+                if ( start >= size ) {
+                    return fn(new Error('[storage:' + name + '] getRange(): start ' + start + ' is beyond the object size (' + size + ') for key `' + key + '`'));
+                }
+                // The clamp is EXPLICITNESS, not necessity: measured, both
+                // `createReadStream({end})` and `Buffer.subarray()` already stop
+                // at the last byte, so the suite's clamp test passes with or
+                // without it. Stated here so the contract does not rest on two
+                // different APIs each happening to do the right thing.
+                var rs = fs.createReadStream(r.path, { start: start, end: Math.min(end, size - 1) });
+                // Armed before the caller can touch it (#B143) — identical
+                // handoff discipline to get().
                 var handed = false;
                 rs.on('error', function(err) {
                     if (handed) return;

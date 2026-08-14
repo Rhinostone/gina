@@ -409,7 +409,7 @@ describe('07 - capabilities tell the truth about tiering', function () {
 
     it('leaves the other capabilities untouched', function () {
         var caps = freshTier(1024).driver.capabilities;
-        assert.deepEqual(caps, { offload: false, ranges: false, dedup: false, resumable: false, inline: true });
+        assert.deepEqual(caps, { offload: false, ranges: true, dedup: false, resumable: false, inline: true });
     });
 });
 
