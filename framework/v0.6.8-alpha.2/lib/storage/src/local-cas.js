@@ -1113,7 +1113,11 @@ module.exports = function createLocalCasDriver(name, conf, metaStore) {
          * @param {function} fn  - `fn(err, {kind: 'path', path: string} | {kind: 'inline'})`.
          * @returns {void}
          */
-        resolve: function(key, fn) {
+        resolve: function(key, opts, fn) {
+            // optional middle `opts` — offload response overrides, consumed
+            // by offload-capable adapters (`s3`); accepted and IGNORED here
+            // so one facade call site serves every driver.
+            if ( typeof opts === 'function' ) { fn = opts; }
             if ( typeof fn !== 'function' ) {
                 throw new Error('[storage:' + name + '] resolve() requires a callback');
             }

@@ -1322,7 +1322,11 @@ module.exports = function createLocalStreamDriver(name, conf, metaStore) {
          *     if (r.kind === 'path') { return res.sendFile(r.path); }
          * });
          */
-        resolve: function(key, fn) {
+        resolve: function(key, opts, fn) {
+            // optional middle `opts` — offload response overrides, consumed
+            // by offload-capable adapters (`s3`); accepted and IGNORED here
+            // so one facade call site serves every driver.
+            if ( typeof opts === 'function' ) { fn = opts; }
             if ( typeof fn !== 'function' ) {
                 throw new Error('[storage:' + name + '] resolve() requires a callback');
             }

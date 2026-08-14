@@ -140,6 +140,35 @@ var FACTORIES = {
 };
 
 /**
+ * `s3` adapter factory — object storage on any S3-compatible provider,
+ * storeless (the provider owns metadata). The SDK stays the consuming
+ * project's dependency, resolved through `start()`'s injected
+ * `requireProjectModule` (lib/storage is framework-independent, so the
+ * resolver is built by the caller where the path globals are legal).
+ *
+ * @inner
+ * @type {function(string, object, ?object, object): StorageDriver}
+ */
+var createS3Driver = require('./s3');
+
+/**
+ * Adapter × strategy — THE two-axis dispatch the strategy map above always
+ * said would arrive with a second adapter. Expressed as COMPOSITION rather
+ * than a rekey: `FACTORIES` keeps its flat strategy-keyed shape because the
+ * `storage:*` CLI's offline path dispatches through it directly (and its
+ * source is pinned by the maintenance suite) — offline builds are local-only
+ * by construction, so the flat map IS the local adapter's row here.
+ *
+ * @inner
+ * @constant
+ * @type {Object.<string, Object.<string, function>>}
+ */
+var ADAPTER_FACTORIES = {
+    local : FACTORIES,
+    s3    : { sharded: createS3Driver }
+};
+
+/**
  * Embedded SQLite metadata store factory — the default backend when a driver
  * names no connector `store`.
  *
@@ -158,7 +187,7 @@ var createEmbeddedMetaStore = require('./meta-store');
  * @constant
  * @type {string[]}
  */
-var ADAPTERS = ['local'];
+var ADAPTERS = ['local', 's3'];
 
 /**
  * Strategies implemented today.
@@ -176,11 +205,11 @@ var STRATEGIES = ['sharded', 'cas', 'stream'];
  * not a spelling one.
  *
  * **Currently EMPTY**: `cas` left this list when the cas slice shipped, and
- * `stream` when the stream slice did. The list and its boot branch stay —
- * cheap, and the next designed-before-implemented strategy (`s3` arrives as an
- * ADAPTER, so it will be the adapter list's turn) inherits a working message
- * instead of re-deriving one. Until then the branch is exercised by nothing,
- * which is recorded rather than hidden.
+ * `stream` when the stream slice did (`s3` arrived as an ADAPTER — the
+ * two-axis dispatch below — so it never passed through here). The list and
+ * its boot branch stay — cheap, and the next designed-before-implemented
+ * strategy inherits a working message instead of re-deriving one. Until then
+ * the branch is exercised by nothing, which is recorded rather than hidden.
  *
  * @inner
  * @constant
@@ -217,6 +246,21 @@ var STRATEGY_KEYS = {
 };
 
 /**
+ * Per-driver keys for the `s3` ADAPTER (one list — s3 runs a single
+ * strategy, so the per-strategy split above does not apply). NB what is
+ * deliberately ABSENT: `root` (no filesystem), `store`/`inlineThreshold`
+ * (storeless — no metadata rows to inline into), `hash`/`fsync` (the
+ * provider owns integrity and durability). Each warns as ignored — the
+ * same "configured behaviour that never happens" honesty as the strategy
+ * lists.
+ *
+ * @inner
+ * @constant
+ * @type {string[]}
+ */
+var S3_KEYS = ['adapter', 'strategy', 'bucket', 'region', 'endpoint', 'prefix', 'accessKeyId', 'secretAccessKey', 'sessionToken', 'forcePathStyle', 'presignExpiry', 'maxObjectSize', 'sweepGrace'];
+
+/**
  * Default per-object byte ceiling when a driver sets no `maxObjectSize`.
  * Defense in depth only: no per-file cap exists anywhere upstream today (the
  * multipart layer caps the whole REQUEST, not an individual part).
@@ -246,6 +290,20 @@ var DEFAULT_MAX_OBJECT_SIZE = 100 * 1024 * 1024;
  * @type {number}
  */
 var DEFAULT_INLINE_THRESHOLD = 64 * 1024;
+
+/**
+ * Default presigned-URL lifetime for `s3` drivers when `presignExpiry` is
+ * unset. 15 minutes: long enough for a redirect chain and a slow download to
+ * START (a transfer in flight survives expiry — S3 validates the signature
+ * at request time), short enough that a leaked URL goes stale fast. The
+ * serving facade re-presigns per request, so the lifetime is not a caching
+ * knob.
+ *
+ * @inner
+ * @constant
+ * @type {number}
+ */
+var DEFAULT_PRESIGN_EXPIRY = 15 * 60 * 1000;
 
 /**
  * Default digest algorithm for `cas` drivers. SHA-256: hardware-accelerated
@@ -520,6 +578,105 @@ function validateConfig(storageBlock, context) {
             return out;
         }
 
+        // ─── `s3` — a SELF-CONTAINED branch, so the local checks below stay
+        // byte-identical. On external object storage the layout algorithm
+        // collapses to key naming, the filesystem keys (`root`, `store`,
+        // tiering, fsync) have no meaning, and the identity keys are the
+        // provider coordinates instead.
+        if ( d.adapter === 's3' ) {
+            if ( typeof(d.strategy) != 'undefined' && d.strategy !== null && d.strategy !== 'sharded' ) {
+                if ( d.strategy === 'cas' || d.strategy === 'stream' ) {
+                    out.fatal = 'driver `' + name + '`: the `' + d.strategy + '` strategy does not run on the `s3` adapter — the provider owns placement: S3 ETags are not content digests (no cas dedup), and multipart is the provider\'s own resumable (no stream sessions). Use `sharded` (or omit `strategy`, it is the s3 default), or move the driver to the `local` adapter.';
+                    return out;
+                }
+                out.fatal = 'driver `' + name + '`: unknown strategy ' + JSON.stringify(d.strategy) + ' — the `s3` adapter supports `sharded` only, and defaults to it when `strategy` is omitted';
+                return out;
+            }
+
+            if ( typeof(d.bucket) != 'string' || d.bucket.length === 0 ) {
+                out.fatal = 'driver `' + name + '`: `bucket` must be a non-empty bucket name for the `s3` adapter';
+                return out;
+            }
+            if ( /\$\{/.test(d.bucket) ) {
+                out.fatal = 'driver `' + name + '`: `bucket` carries an unresolved `${...}` placeholder (' + d.bucket + ') — only the anchored `${secret:KEY}` form is substituted at config load';
+                return out;
+            }
+
+            if ( typeof(d.prefix) != 'undefined' && d.prefix !== null && d.prefix !== '' ) {
+                if ( typeof(d.prefix) != 'string' ) {
+                    out.fatal = 'driver `' + name + '`: `prefix` must be a string key prefix';
+                    return out;
+                }
+                if ( /\$\{/.test(d.prefix) ) {
+                    out.fatal = 'driver `' + name + '`: `prefix` carries an unresolved `${...}` placeholder (' + d.prefix + ') — only the anchored `${secret:KEY}` form is substituted at config load';
+                    return out;
+                }
+                if ( d.prefix.charAt(0) === '/' || d.prefix.indexOf('\\') > -1 || d.prefix.indexOf('..') > -1 ) {
+                    out.fatal = 'driver `' + name + '`: `prefix` must be a relative key prefix (no leading `/`, no `\\`, no `..`) — got `' + d.prefix + '`';
+                    return out;
+                }
+            }
+
+            if ( typeof(d.endpoint) != 'undefined' && d.endpoint !== null && ( typeof(d.endpoint) != 'string' || d.endpoint.length === 0 ) ) {
+                out.fatal = 'driver `' + name + '`: `endpoint` must be a non-empty S3-compatible endpoint (e.g. "s3.fr-par.scw.cloud")';
+                return out;
+            }
+            if ( typeof(d.region) != 'undefined' && d.region !== null && ( typeof(d.region) != 'string' || d.region.length === 0 ) ) {
+                out.fatal = 'driver `' + name + '`: `region` must be a non-empty region name';
+                return out;
+            }
+
+            // static credentials are BOTH-OR-NEITHER: a half pair is almost
+            // certainly a mistake, but the SDK default provider chain
+            // (env/IMDS/IRSA) is a legitimate fallback, so this warns rather
+            // than refusing the boot.
+            var hasAk = ( typeof(d.accessKeyId) == 'string' && d.accessKeyId.length > 0 );
+            var hasSk = ( typeof(d.secretAccessKey) == 'string' && d.secretAccessKey.length > 0 );
+            if ( hasAk !== hasSk ) {
+                out.warnings.push('driver `' + name + '`: only one of `accessKeyId`/`secretAccessKey` is set — static credentials need BOTH; falling back to the SDK default provider chain (env / shared config / IMDS / IRSA)');
+            } else if ( !hasAk && typeof(d.sessionToken) == 'string' && d.sessionToken.length > 0 ) {
+                out.warnings.push('driver `' + name + '`: `sessionToken` is set without `accessKeyId`/`secretAccessKey` — it is ignored; the SDK default provider chain supplies its own session credentials');
+            }
+
+            if ( typeof(d.forcePathStyle) != 'undefined' && d.forcePathStyle !== null && typeof(d.forcePathStyle) != 'boolean' ) {
+                out.warnings.push('driver `' + name + '`: `forcePathStyle` must be a boolean — got ' + JSON.stringify(d.forcePathStyle) + '; using the default (false)');
+            }
+
+            if ( typeof(d.presignExpiry) != 'undefined' && d.presignExpiry !== null ) {
+                if ( isNaN(util.parseDuration(d.presignExpiry)) ) {
+                    out.warnings.push('driver `' + name + '`: `presignExpiry` must carry a unit (ms/s/m/h/d, e.g. "15m") — got ' + JSON.stringify(d.presignExpiry) + '; using the default (' + DEFAULT_PRESIGN_EXPIRY + ' ms)');
+                } else if ( util.parseDuration(d.presignExpiry) <= 0 ) {
+                    out.warnings.push('driver `' + name + '`: `presignExpiry` must be greater than zero — got ' + JSON.stringify(d.presignExpiry) + '; using the default (' + DEFAULT_PRESIGN_EXPIRY + ' ms)');
+                }
+            }
+
+            // same key, same default as the local strategies' temp-orphan
+            // gate — here it ages the multipart-orphan sweep (an incomplete
+            // multipart upload bills until aborted).
+            if ( typeof(d.sweepGrace) != 'undefined' && d.sweepGrace !== null ) {
+                if ( isNaN(util.parseDuration(d.sweepGrace)) ) {
+                    out.warnings.push('driver `' + name + '`: `sweepGrace` must carry a unit (ms/s/m/h/d, e.g. "1h") — got ' + JSON.stringify(d.sweepGrace) + '; using the default (' + DEFAULT_SWEEP_GRACE + ' ms)');
+                } else if ( util.parseDuration(d.sweepGrace) <= 0 ) {
+                    out.warnings.push('driver `' + name + '`: `sweepGrace` must be greater than zero — got ' + JSON.stringify(d.sweepGrace) + '; using the default (' + DEFAULT_SWEEP_GRACE + ' ms)');
+                }
+            }
+
+            if ( typeof(d.maxObjectSize) != 'undefined' && d.maxObjectSize !== null ) {
+                if ( isNaN(util.parseSize(d.maxObjectSize)) ) {
+                    out.warnings.push('driver `' + name + '`: `maxObjectSize` must carry a unit (B/KB/MB/GB, e.g. "50MB") — got ' + JSON.stringify(d.maxObjectSize) + '; using the default (' + DEFAULT_MAX_OBJECT_SIZE + ' bytes)');
+                } else if ( util.parseSize(d.maxObjectSize) <= 0 ) {
+                    out.warnings.push('driver `' + name + '`: `maxObjectSize` must be greater than zero — got ' + JSON.stringify(d.maxObjectSize) + '; using the default (' + DEFAULT_MAX_OBJECT_SIZE + ' bytes)');
+                }
+            }
+
+            var s3extra = Object.keys(d).filter(function (k) { return S3_KEYS.indexOf(k) < 0; });
+            if ( s3extra.length > 0 ) {
+                out.warnings.push('driver `' + name + '`: key(s) ' + s3extra.join(', ') + ' are not used by the `s3` adapter and are ignored');
+            }
+
+            continue;
+        }
+
         if ( DEFERRED_STRATEGIES.indexOf(d.strategy) > -1 ) {
             out.fatal = 'driver `' + name + '`: the `' + d.strategy + '` strategy is designed but not implemented yet — use `' + STRATEGIES.join('|') + '` for now';
             return out;
@@ -737,6 +894,41 @@ function resolveDriverConf(conf) {
         inlineThreshold : inline
     };
 
+    // s3 resolves here and RETURNS EARLY — none of the local strategy blocks
+    // below apply. `strategy` collapses to key naming (`sharded`, the only
+    // value and the default); `prefix`/`endpoint` are normalised so the
+    // factory stays dumb; `region` falls back to the S3-compat convention
+    // (`us-east-1`) ONLY when a custom endpoint is configured — real AWS
+    // keeps the SDK's own resolution chain, whose "missing region" message
+    // beats a silently mis-signed default.
+    if ( conf.adapter === 's3' ) {
+        resolved.strategy = 'sharded';
+        resolved.bucket   = conf.bucket;
+        var pfx = ( typeof conf.prefix === 'string' ) ? conf.prefix : '';
+        if ( pfx.length && pfx.charAt(pfx.length - 1) !== '/' ) { pfx += '/'; }
+        resolved.prefix = pfx;
+        if ( typeof conf.endpoint === 'string' && conf.endpoint.length ) {
+            resolved.endpoint = /^https?:\/\//i.test(conf.endpoint) ? conf.endpoint : ('https://' + conf.endpoint);
+        }
+        resolved.region = ( typeof conf.region === 'string' && conf.region.length )
+            ? conf.region
+            : ( resolved.endpoint ? 'us-east-1' : undefined );
+        if ( conf.forcePathStyle === true ) { resolved.forcePathStyle = true; }
+        if ( typeof conf.accessKeyId === 'string' && conf.accessKeyId.length
+            && typeof conf.secretAccessKey === 'string' && conf.secretAccessKey.length ) {
+            resolved.accessKeyId     = conf.accessKeyId;
+            resolved.secretAccessKey = conf.secretAccessKey;
+            if ( typeof conf.sessionToken === 'string' && conf.sessionToken.length ) {
+                resolved.sessionToken = conf.sessionToken;
+            }
+        }
+        var pe = util.parseDuration(conf.presignExpiry);
+        resolved.presignExpiry = ( isNaN(pe) || pe <= 0 ) ? DEFAULT_PRESIGN_EXPIRY : pe;
+        var s3g = util.parseDuration(conf.sweepGrace);
+        resolved.sweepGrace = ( isNaN(s3g) || s3g <= 0 ) ? DEFAULT_SWEEP_GRACE : s3g;
+        return resolved;
+    }
+
     // sharded takes `sweepGrace` alone — the age gate on its build-time
     // temp-orphan sweep (#B349). Same key, same default and same meaning as
     // cas's ("how long before an unfinished temp is presumed abandoned"), but
@@ -791,7 +983,15 @@ function resolveDriverConf(conf) {
  * @param {object}   [opt.stores]      - Pre-built connector metadata stores keyed by driver
  *                                       name (the caller resolves them through
  *                                       `lib/storage-store`). A driver absent from this map
- *                                       gets the embedded SQLite store inside its own root.
+ *                                       gets the embedded SQLite store inside its own root
+ *                                       (`s3` drivers get neither — storeless).
+ * @param {function} [opt.requireProjectModule] - Project-module resolver for adapters whose
+ *                                       SDK is the consuming project's dependency (`s3`).
+ *                                       Built by the CALLER (gna.js, from
+ *                                       `getPath('project')`) because this module is
+ *                                       framework-independent and cannot reach the path
+ *                                       globals itself; tests inject a fake SDK loader.
+ *                                       Omitted: building an `s3` driver throws (fatal).
  * @param {function} [opt.warn]        - Boot-warning sink for the per-root strategy-stamp
  *                                       checks (§4: a strategy flip on populated storage is
  *                                       unrecoverable by config, so it warns every boot; a
@@ -836,31 +1036,43 @@ function start(opt) {
         // A connector store when one was built for this driver, else the
         // embedded SQLite file inside the driver's own root — self-contained,
         // so moving the root moves its metadata with it, and never web-served
-        // because validateConfig refuses a served root.
-        var store = ( opt.stores && opt.stores[name] )
-            ? opt.stores[name]
-            : createEmbeddedMetaStore(nodePath.join(conf.root, '.meta.db'));
+        // because validateConfig refuses a served root. `s3` is STORELESS:
+        // the provider carries the metadata ON the object (immutable after
+        // upload, like the key), so there is no embedded file to create.
+        var isRemote = ( conf.adapter === 's3' );
+        var store = isRemote
+            ? null
+            : ( ( opt.stores && opt.stores[name] )
+                ? opt.stores[name]
+                : createEmbeddedMetaStore(nodePath.join(conf.root, '.meta.db')) );
 
         // Defaults, size/duration parsing and the cas hash canonicalisation —
         // ONE shared resolver, also driven by the `storage:*` CLI's offline
         // path (see resolveDriverConf).
         var resolved = resolveDriverConf(conf);
 
-        // THE strategy dispatch — validateConfig has already refused unknown
-        // and deferred names, so this lookup cannot miss on a validated boot;
-        // a direct caller bypassing validation gets a loud TypeError, which
-        // is the fail-fast it asked for. A factory throw (e.g. cas over a
-        // store lacking the refcount verbs) propagates to the caller, whose
-        // documented contract treats it as fatal.
-        built[name] = FACTORIES[conf.strategy](name, resolved, store);
+        // THE dispatch — adapter × strategy via the composition map (an
+        // adapter-less conf is a direct caller's, and behaves exactly as
+        // before: the local row). validateConfig has already refused unknown
+        // names, so a miss here is a programming error and gets its loud
+        // TypeError. A factory throw (a store lacking the refcount verbs, a
+        // missing s3 SDK) propagates to the caller, whose documented contract
+        // treats it as fatal. The 4th argument carries the injected
+        // dependencies the s3 factory needs; local factories ignore it.
+        built[name] = ADAPTER_FACTORIES[conf.adapter || 'local'][resolved.strategy](
+            name, resolved, store, { requireModule: opt.requireProjectModule }
+        );
 
         // §4 — keys are strategy-specific, so a strategy flip on populated
         // storage is unrecoverable by config edit; persist the strategy on
         // the root's own metadata and warn on mismatch, every boot, until it
         // is resolved. Fire-and-forget: with the embedded store it completes
         // synchronously, with a connector store the warning simply lands
-        // when it lands — it gates nothing.
-        checkDriverStamp(name, conf.strategy, resolved.hash || null, store, warn);
+        // when it lands — it gates nothing. NOT for s3: no store to stamp,
+        // and only one strategy to flip to.
+        if ( !isRemote ) {
+            checkDriverStamp(name, conf.strategy, resolved.hash || null, store, warn);
+        }
     }
 
     _drivers = built;
@@ -1034,6 +1246,8 @@ module.exports = {
     // and factories a boot uses — in-tree consumers, versioned together.
     _resolveDriverConf       : resolveDriverConf,
     _FACTORIES                : FACTORIES,
+    _ADAPTER_FACTORIES        : ADAPTER_FACTORIES,
+    _S3_KEYS                  : S3_KEYS,
     _createEmbeddedMetaStore  : createEmbeddedMetaStore,
     _ulid                    : util.ulid,
     _parseSize               : util.parseSize,

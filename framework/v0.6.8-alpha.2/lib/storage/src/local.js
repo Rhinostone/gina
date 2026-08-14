@@ -91,7 +91,7 @@ var TMP_DIR = '.tmp';
  * @property {function(string, number, number, function): void} getRange - Open a readable stream over an INCLUSIVE byte range; `fn(err, stream)`. An over-long `end` is clamped; an unsatisfiable `start` errors (the caller's 416).
  * @property {function(string, function): void}         stat         - Metadata for `key`; `fn(err, meta|null)`. `null` (not an error) when unknown.
  * @property {function(string, function=): void}        release      - Delete object and metadata; `fn(err, existed)`.
- * @property {function(string, function): void}         resolve      - How to serve `key`; `fn(err, {kind:'path', path})`.
+ * @property {function(string, ?object, function): void} resolve     - How to serve `key` — `resolve(key[, opts], fn)`; `fn(err, {kind:'path', path} | {kind:'inline'} | {kind:'url', url, expiresAt})`. `opts` carries offload response overrides (`contentType`/`download`/`filename`/`cacheControl` → the provider's signed `response-*` params); local strategies accept and IGNORE it, so one facade call site serves every driver.
  * @property {function(): void}                         close        - Release the metadata handle. Teardown/tests only.
  * @property {object}                                   capabilities - What this driver can do; every consumer must branch on it rather than assume.
  * @property {function(function): void}                 [stats]      - Driver statistics for the operator surface (`storage:stats`); `fn(err, {name, strategy, root, capabilities, store})` — `store` is the metadata store's aggregate counts, or `null` when the store reports no stats. Present on both local strategies.
@@ -657,8 +657,11 @@ module.exports = function createLocalDriver(name, conf, metaStore) {
          * arrives with the s3 adapter. Callers must branch on `kind` rather
          * than assume a path is always available.
          *
-         * @param {string}   key - The opaque storage key.
-         * @param {function} fn  - `fn(err, {kind: 'path', path: string} | {kind: 'inline'})`.
+         * @param {string}   key    - The opaque storage key.
+         * @param {?object}  [opts] - Offload response overrides — consumed by
+         *                            offload-capable adapters (`s3`); accepted
+         *                            and IGNORED here.
+         * @param {function} fn     - `fn(err, {kind: 'path', path: string} | {kind: 'inline'})`.
          * @returns {void}
          *
          * @example
@@ -669,7 +672,8 @@ module.exports = function createLocalDriver(name, conf, metaStore) {
          *     driver.get(key, function (err, stream) { stream.pipe(res); });
          * });
          */
-        resolve: function(key, fn) {
+        resolve: function(key, opts, fn) {
+            if ( typeof opts === 'function' ) { fn = opts; }
             if ( typeof fn !== 'function' ) {
                 throw new Error('[storage:' + name + '] resolve() requires a callback');
             }

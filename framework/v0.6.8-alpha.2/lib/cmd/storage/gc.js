@@ -246,6 +246,12 @@ function Gc(opt, cmd) {
             if ( i >= names.length ) { return done(out); }
             var name = names[i];
             var d    = block.drivers[name];
+            // s3 first — before the `store` check, so a warn-ignored `store`
+            // key on a remote driver cannot produce a misleading skip reason.
+            if ( d.adapter === 's3' ) {
+                out.drivers.push({ name: name, skipped: true, reason: 'remote adapter (`s3`) — no sweep to run (only `cas` collects garbage)' });
+                return nextDriver(i + 1);
+            }
             if ( d.store ) {
                 out.drivers.push({ name: name, skipped: true, reason: 'connector-backed store (`' + d.store + '`) — nothing local to open; start the bundle and re-run' });
                 return nextDriver(i + 1);

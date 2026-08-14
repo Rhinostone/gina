@@ -3604,6 +3604,16 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
      *    shared caches out of the application's authorization), overridable
      *    verbatim via `opts.cacheControl`.
      *  - HEAD answers headers-only (full-size accounting, no driver read).
+     *  - OFFLOAD (`capabilities.offload`, the `s3` adapter): GET/HEAD answer
+     *    **307** to a short-lived presigned URL instead of proxying the bytes
+     *    — after the 304 check, with the facade's decisions riding the URL as
+     *    signed `response-*` overrides (the DOWNGRADED content type included,
+     *    so the stored-XSS guard holds when the provider serves). Range goes
+     *    with the client to the provider, which answers 206/416 natively. The
+     *    redirect itself is `no-store` (it outlives no signature); the
+     *    payload's caching policy rides `response-cache-control`.
+     *    `opts.offload: false` forces the proxy path (`get`/`getRange`) —
+     *    private buckets, IP-gated egress, or byte-level control.
      *
      * Works identically on both engines: headers/status ride `local.res`, and
      * the byte emission is `renderStream`'s two arms.
@@ -3615,6 +3625,9 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
      * @param {string}  [opts.cacheControl]   - Explicit Cache-Control; replaces the immutable default.
      * @param {boolean} [opts.download]       - `true` → `Content-Disposition: attachment`.
      * @param {string}  [opts.filename]       - Download filename (implies attachment); defaults to the stored originalName.
+     * @param {boolean} [opts.offload]        - `false` → proxy the bytes even on an offload-capable
+     *                                          driver (no redirect). Default: offload when the
+     *                                          driver can.
      * @returns {void}
      *
      * @example
@@ -3707,6 +3720,53 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                 response.statusCode = 304;
                 local.req = null; local.res = null; local.next = null;
                 return response.end();
+            }
+
+            // #STO1 s3 — OFFLOAD: an offload-capable driver hands the byte
+            // transfer to its provider through a short-lived presigned URL.
+            // Runs AFTER the 304 check (the key ETag needs no presign) and
+            // carries this facade's decisions into the PROVIDER's response as
+            // signed response-* overrides — the DOWNGRADED content type
+            // included, which is what keeps the stored-XSS guard intact when
+            // the provider serves the bytes. Range is deliberately NOT
+            // evaluated here: the client re-issues it against the redirect
+            // target and the provider answers 206/416 natively. 307 preserves
+            // the method (HEAD stays HEAD). The redirect itself is `no-store`
+            // — a cached redirect would outlive its signature — while the
+            // payload's caching policy rides response-cache-control.
+            var offloadOn = !!( driver.capabilities && driver.capabilities.offload ) && ( opts.offload !== false );
+            if ( offloadOn && ( method === 'GET' || method === 'HEAD' ) ) {
+                var wantsAttachment = ( opts.download === true || typeof(opts.filename) == 'string' );
+                driver.resolve(key, {
+                    contentType  : contentType,
+                    download     : wantsAttachment,
+                    filename     : wantsAttachment
+                        ? String(opts.filename || meta.originalName || 'download').replace(/[\x00-\x1f\x7f]/g, '')
+                        : undefined,
+                    cacheControl : ( typeof(opts.cacheControl) == 'string' && opts.cacheControl !== '' )
+                        ? opts.cacheControl
+                        : 'private, max-age=31536000, immutable'
+                }, function onServeResolve(resolveErr, resolved) {
+                    if ( local.res == null ) {
+                        return;
+                    }
+                    if ( resolveErr ) {
+                        return self.throwError(response, ( resolveErr.code === 'STORAGE_NO_OBJECT' ) ? 404 : 500, resolveErr);
+                    }
+                    if ( !resolved || resolved.kind !== 'url' || typeof(resolved.url) != 'string' ) {
+                        // capability said offload, resolve() answered something
+                        // else — a driver contract violation, surfaced loudly
+                        // rather than silently degraded to the proxy path.
+                        return self.throwError(response, 500, new Error('serveFromStorage(): driver `' + driverName + '` declares capabilities.offload but resolve() returned no `{kind:\'url\'}` — driver contract violation'));
+                    }
+                    response.setHeader('x-content-type-options', 'nosniff');
+                    response.setHeader('cache-control', 'private, no-store');
+                    response.setHeader('location', resolved.url);
+                    response.statusCode = 307;
+                    local.req = null; local.res = null; local.next = null;
+                    return response.end();
+                });
+                return;
             }
 
             // HEAD — full-size accounting, headers only, no driver read; the

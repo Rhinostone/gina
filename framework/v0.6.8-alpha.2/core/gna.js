@@ -1705,7 +1705,13 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
                                                 // (§4 — a strategy flip on populated storage warns
                                                 // every boot; a hash change warns once). Same sink as
                                                 // the validateConfig warnings above.
-                                                if ( lib.storage.start({ drivers: _stoDrivers, default: _stoSettings.default, stores: _stoStores, warn: function(stoWarnMsg) { console.warn('[storage] ' + stoWarnMsg); } }) ) {
+                                                if ( lib.storage.start({ drivers: _stoDrivers, default: _stoSettings.default, stores: _stoStores, requireProjectModule: function(stoPkgName) {
+                                                    // s3-adapter SDK resolution — built HERE because
+                                                    // lib/storage is framework-independent (no `_`/
+                                                    // `getPath` globals inside it, test-enforced);
+                                                    // same project-path idiom as every connector.
+                                                    return require( _(getPath('project') + '/node_modules/' + stoPkgName, true) );
+                                                }, warn: function(stoWarnMsg) { console.warn('[storage] ' + stoWarnMsg); } }) ) {
                                                     // console.info, NOT debug — the shipped
                                                     // default log level filters debug, and an
                                                     // operator needs to see which roots went live.

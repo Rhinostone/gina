@@ -253,9 +253,9 @@ describe('03 - serveFromStorage: source structure', function() {
         assert.ok(statIdx > -1 && nullIdx > statIdx && getIdx > nullIdx);
     });
 
-    it('maps STORAGE_NO_OBJECT to 404 on BOTH driver read callbacks', function() {
+    it('maps STORAGE_NO_OBJECT to 404 on every driver callback', function() {
         var hits = blk.match(/\.code === 'STORAGE_NO_OBJECT' \) \? 404 : 500/g);
-        assert.ok(hits && hits.length === 2, 'getRange + get error mappings (got ' + (hits ? hits.length : 0) + ')');
+        assert.ok(hits && hits.length === 3, 'getRange + get + offload resolve error mappings (got ' + (hits ? hits.length : 0) + ')');
     });
 
     it('gates Range evaluation on capabilities.ranges and GET', function() {

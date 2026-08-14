@@ -473,14 +473,28 @@
               "type": "object",
               "description": "One storage driver. Unknown keys are ignored with a boot warning naming them, because a silently-dropped key reads as configured behaviour that never happens.",
               "additionalProperties": false,
-              "required": ["adapter", "strategy", "root"],
+              "required": ["adapter"],
+              "allOf": [
+                {
+                  "if": { "properties": { "adapter": { "const": "local" } } },
+                  "then": { "required": ["strategy", "root"] }
+                },
+                {
+                  "if": { "properties": { "adapter": { "const": "s3" } } },
+                  "then": {
+                    "required": ["bucket"],
+                    "properties": { "strategy": { "const": "sharded" } }
+                  }
+                }
+              ],
               "properties": {
                 "adapter": {
                   "type": "string",
                   "enum": [
-                    "local"
+                    "local",
+                    "s3"
                   ],
-                  "description": "Where the bytes live. `local` = the local filesystem under `root`. An s3 adapter would carry its client as a PROJECT-side dependency, never a framework one — the same policy every database connector follows."
+                  "description": "Where the bytes live. `local` = the local filesystem under `root`. `s3` = any S3-compatible provider (AWS S3, Scaleway, MinIO, R2…), STORELESS: the provider carries each object's metadata on the object itself (immutable after upload, like the key), so there is no `root`, no `store` and no tiering — and the SDK (@aws-sdk/client-s3 + @aws-sdk/lib-storage + @aws-sdk/s3-request-presigner) is the PROJECT's dependency, never the framework's — the same policy every database connector follows. A configured s3 driver whose SDK is not installed refuses the boot with the npm install hint."
                 },
                 "strategy": {
                   "type": "string",
@@ -489,12 +503,56 @@
                     "cas",
                     "stream"
                   ],
-                  "description": "How keys are laid out. `sharded` = YYYY/MM/DD/<ulid><ext>, which keeps directories small enough to list and — because a ULID sorts by creation time — keeps entries within a day ordered. `cas` = content-addressed (blobs/<algo>/<aa>/<bb>/<hex>, extension-less): identical bytes stored twice yield the SAME key with a reference count of 2, release() drops a reference, and a periodic sweep collects blobs that have sat at zero past a grace window — built for immutable content (in-place mutation is impossible by construction; editing mints a new blob and key). `stream` = one directory per asset (assets/<ulid>/original<ext>), built for large sequential media: it adds RESUMABLE uploads (createUpload / writeSegment / statUpload / finalize / abortUpload, capabilities.resumable true), segments may arrive out of order and are written positionally so no assembly pass runs at finalise, and finalise verifies coverage as an interval UNION before publishing — a hole in a sparse file reads back as zeros, so an unverified publish would be silently corrupt. It neither tiers nor hashes, so inlineThreshold and hash are ignored (with a warning) there. Keys are OPAQUE under every strategy — changing a driver's strategy on populated storage is a re-key migration, not a config edit, and the boot warns when the configured strategy stops matching the one stamped on the root."
+                  "description": "How keys are laid out. `sharded` = YYYY/MM/DD/<ulid><ext>, which keeps directories small enough to list and — because a ULID sorts by creation time — keeps entries within a day ordered. `cas` = content-addressed (blobs/<algo>/<aa>/<bb>/<hex>, extension-less): identical bytes stored twice yield the SAME key with a reference count of 2, release() drops a reference, and a periodic sweep collects blobs that have sat at zero past a grace window — built for immutable content (in-place mutation is impossible by construction; editing mints a new blob and key). `stream` = one directory per asset (assets/<ulid>/original<ext>), built for large sequential media: it adds RESUMABLE uploads (createUpload / writeSegment / statUpload / finalize / abortUpload, capabilities.resumable true), segments may arrive out of order and are written positionally so no assembly pass runs at finalise, and finalise verifies coverage as an interval UNION before publishing — a hole in a sparse file reads back as zeros, so an unverified publish would be silently corrupt. It neither tiers nor hashes, so inlineThreshold and hash are ignored (with a warning) there. Keys are OPAQUE under every strategy — changing a driver's strategy on populated storage is a re-key migration, not a config edit, and the boot warns when the configured strategy stops matching the one stamped on the root. Under the `s3` adapter only `sharded` runs — the provider owns placement, so the layout algorithm collapses to key naming — and it is the default there: omit `strategy` entirely on an s3 driver."
                 },
                 "root": {
                   "type": "string",
                   "minLength": 1,
                   "description": "Absolute directory holding this driver's objects. MUST be absolute — a relative root would resolve against the process cwd, which depends on how the bundle was launched. MUST NOT sit inside any bundle's web-served tree (its publicPath, or any content.statics target): objects there would be directly fetchable without passing any authorization, and so would the driver's own metadata database, which lives at <root>/.meta.db. Both conditions refuse the boot."
+                },
+                "bucket": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "s3 only, REQUIRED there: the bucket name. The opaque keys this layer mints live under `prefix` inside it — the bucket is provider identity, exactly as `root` is filesystem identity for `local`."
+                },
+                "region": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "s3 only: the signing region. Omit it on real AWS to let the SDK's own chain (env vars / shared config) resolve it; when a custom `endpoint` is configured and no region is set, the S3-compat convention `us-east-1` is used — most compatible providers accept any region string."
+                },
+                "endpoint": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "s3 only: an S3-compatible endpoint for non-AWS providers (e.g. \"s3.fr-par.scw.cloud\", a MinIO host). `https://` is prepended when no scheme is given. Omit for AWS itself."
+                },
+                "prefix": {
+                  "type": "string",
+                  "description": "s3 only: key prefix inside the bucket (a trailing `/` is added when missing), namespacing this driver in a shared bucket. Relative only — no leading `/`, no `..`. The OPAQUE key excludes it: re-pointing `prefix` orphans previously stored objects exactly as re-pointing a local `root` does."
+                },
+                "accessKeyId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "s3 only: static credential id — set BOTH accessKeyId and secretAccessKey or NEITHER. Omit both (recommended on AWS/k8s) and the SDK default provider chain runs: env vars, shared config, IMDS, IRSA. The anchored ${secret:KEY} form is substituted at config load, so credentials need not live in the file."
+                },
+                "secretAccessKey": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "s3 only: static credential secret — see accessKeyId; ${secret:KEY} recommended over a literal."
+                },
+                "sessionToken": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "s3 only: session token for temporary static credentials; meaningful only beside the accessKeyId/secretAccessKey pair (ignored with a boot warning otherwise — the SDK chain supplies its own session credentials)."
+                },
+                "forcePathStyle": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "s3 only: path-style addressing (https://endpoint/bucket/key rather than virtual-hosted) — required by MinIO and some self-hosted providers."
+                },
+                "presignExpiry": {
+                  "type": "string",
+                  "default": "15m",
+                  "description": "s3 only: presigned-URL lifetime as a UNIT-SUFFIXED duration (\"15m\", \"1h\"). resolve() and serveFromStorage()'s offload redirect mint URLs with this lifetime; a transfer already in flight survives expiry (the signature is validated at request time). Not a caching knob — the serving facade re-presigns per request."
                 },
                 "maxObjectSize": {
                   "type": "string",
@@ -529,7 +587,7 @@
                 },
                 "sweepGrace": {
                   "type": "string",
-                  "description": "cas only — how long a blob must have sat at ZERO references before the sweep may collect it, as a UNIT-SUFFIXED duration string (e.g. \"1h\"). The grace window is a correctness margin, not a convenience: it is what keeps the sweep from racing an in-flight identical upload (re-uploading just-released content within the window is free — the blob is resurrected, no bytes transferred twice). Must be greater than zero; zero or unit-less values warn at boot and the default applies. Reasoned default: comfortably longer than any plausible in-flight upload.",
+                  "description": "Age gate for reclaiming abandoned write residue, as a UNIT-SUFFIXED duration string (e.g. \"1h\") — what it ages depends on the driver. `cas`: BOTH how long a blob must have sat at ZERO references before the sweep may collect it AND how old a crashed-put temp must be before build-time reclamation. `sharded`: the crashed-put temp cutoff alone (it sweeps at build, never on a tick). `s3`: how old an incomplete multipart upload must be before the build-time sweep aborts it (an incomplete upload bills storage until aborted). The grace window is a correctness margin, not a convenience: it keeps every sweep from racing in-flight work (under cas, re-uploading just-released content within the window is free — the blob is resurrected, no bytes transferred twice). Must be greater than zero; zero or unit-less values warn at boot and the default applies. Reasoned default: comfortably longer than any plausible in-flight upload.",
                   "default": "1h"
                 },
                 "chunkSize": {

@@ -250,6 +250,13 @@ function Stats(opt, cmd) {
             if ( i >= names.length ) { return done(out); }
             var name = names[i];
             var d    = block.drivers[name];
+            // s3 first — a remote adapter has neither a root nor a local
+            // store, and its SDK is resolvable only in a bundle's project
+            // scope; the RUNNING path serves its stats.
+            if ( d.adapter === 's3' ) {
+                out.drivers.push({ name: name, adapter: 's3', strategy: d.strategy || 'sharded', skipped: true, reason: 'remote adapter (`s3`) — nothing local to open; start the bundle and re-run' });
+                return nextDriver(i + 1);
+            }
             if ( d.store ) {
                 out.drivers.push({ name: name, strategy: d.strategy, skipped: true, reason: 'connector-backed store (`' + d.store + '`) — nothing local to open; start the bundle and re-run' });
                 return nextDriver(i + 1);
