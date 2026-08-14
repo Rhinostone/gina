@@ -80,9 +80,10 @@ var TMP_DIR = '.tmp';
  * and `findByDigest` (content-addressed dedup) `cas`-only; both stay
  * capability-gated (`capabilities.resumable`, `capabilities.dedup`).
  *
- * NB `capabilities.ranges` is now true here, but the ENGINES still emit no
- * `Accept-Ranges`/`Content-Range`/206 — HTTP Range serving is its own arc. The
- * flag describes what the DRIVER can do, never what the server currently does.
+ * `capabilities.ranges` is consumed by the framework itself: the controller's
+ * `serveFromStorage()` facade answers 206/416/304 with `Accept-Ranges`/
+ * `Content-Range` on both engines, gated on this flag — an adapter that
+ * cannot serve ranges is transparently answered with the full 200.
  *
  * @typedef  {Object} StorageDriver
  * @property {function(object, object, function): void} put          - Store a readable stream; `fn(err, {@link StoragePutResult})`.

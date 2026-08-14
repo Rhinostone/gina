@@ -327,6 +327,99 @@ function formatAttachmentDisposition(filename) {
 }
 
 /**
+ * Parse an HTTP `Range` request header against a known representation size.
+ *
+ * Honours a SINGLE `bytes=` range in its three RFC 9110 shapes — `a-b`,
+ * `a-` (open-ended) and `-n` (suffix: the last `n` bytes). Everything else —
+ * an absent/non-string header, another unit, a multi-range list, syntactic
+ * garbage, or `a-b` with `a > b` — returns `null`, which the caller treats as
+ * "ignore the header, serve the full 200" (RFC-sanctioned: a server MAY
+ * ignore Range). A syntactically valid range that matches no byte of the
+ * representation — `start >= size`, a `-0` suffix, or any range against a
+ * zero-length object — returns `{unsatisfiable: true}`, the caller's 416.
+ * A satisfiable range comes back `{start, end}` with `end` INCLUSIVE and
+ * clamped to `size - 1`, matching both the header semantics and the storage
+ * drivers' `getRange` contract, so no arithmetic sits between them.
+ *
+ * @function _parseRangeHeader
+ * @private
+ * @param {string} header - The raw `Range` header value.
+ * @param {number} size   - The representation size in bytes.
+ * @returns {object|null} `{start, end}` inclusive · `{unsatisfiable: true}` · `null` (ignore).
+ *
+ * @example
+ *  _parseRangeHeader('bytes=0-499', 1000);   // -> { start: 0, end: 499 }
+ *  _parseRangeHeader('bytes=-500', 1000);    // -> { start: 500, end: 999 }
+ *  _parseRangeHeader('bytes=0-1,5-9', 1000); // -> null (multi-range: full 200)
+ *  _parseRangeHeader('bytes=1000-', 1000);   // -> { unsatisfiable: true } (416)
+ */
+function _parseRangeHeader(header, size) {
+    if ( typeof(header) != 'string' ) {
+        return null;
+    }
+    var m = header.match(/^\s*bytes\s*=\s*(\d*)\s*-\s*(\d*)\s*$/);
+    if ( !m ) {
+        return null;
+    }
+    var startStr = m[1], endStr = m[2];
+    if ( startStr === '' && endStr === '' ) {
+        return null; // "bytes=-" is garbage
+    }
+    if ( startStr === '' ) {
+        // suffix form `-n`: the last n bytes
+        var n = parseInt(endStr, 10);
+        if ( n === 0 || size === 0 ) {
+            return { unsatisfiable: true }; // a -0 suffix matches no byte; empty matches none
+        }
+        var s = size - n;
+        return { start: (s > 0) ? s : 0, end: size - 1 };
+    }
+    var start = parseInt(startStr, 10);
+    if ( size === 0 || start >= size ) {
+        return { unsatisfiable: true };
+    }
+    var end = ( endStr === '' ) ? size - 1 : parseInt(endStr, 10);
+    if ( end < start ) {
+        return null; // last-byte-pos < first-byte-pos: invalid spec, ignore (RFC 9110)
+    }
+    return { start: start, end: Math.min(end, size - 1) };
+}
+
+/**
+ * Resolve the Content-Type a stored object is served with.
+ *
+ * The stored contentType is UPLOADER-supplied and stored verbatim (untrusted
+ * at the seam), so serving it back on the app's own origin is a stored-XSS
+ * vector: a declared `text/html`/`image/svg+xml` renders as active content
+ * and `nosniff` does not stop a DECLARED type. Fail-closed: active-content
+ * types downgrade to `application/octet-stream` unless the app passes an
+ * explicit `opts.contentType` — the app's informed choice is served verbatim.
+ *
+ * @function _resolveServedContentType
+ * @private
+ * @param {string} [optsContentType] - The caller's explicit choice; wins verbatim.
+ * @param {string} [metaContentType] - The stored, uploader-supplied MIME type.
+ * @returns {string} The Content-Type to serve.
+ *
+ * @example
+ *  _resolveServedContentType(null, 'image/png');       // -> 'image/png'
+ *  _resolveServedContentType(null, 'text/html');       // -> 'application/octet-stream'
+ *  _resolveServedContentType('image/svg+xml', 'x/y');  // -> 'image/svg+xml' (explicit)
+ */
+function _resolveServedContentType(optsContentType, metaContentType) {
+    if ( typeof(optsContentType) == 'string' && optsContentType !== '' ) {
+        return optsContentType;
+    }
+    if ( typeof(metaContentType) == 'string' && metaContentType !== '' ) {
+        if ( /(html|xml|svg|javascript|ecmascript)/i.test(metaContentType) ) {
+            return 'application/octet-stream';
+        }
+        return metaContentType;
+    }
+    return 'application/octet-stream';
+}
+
+/**
  * @class SuperController
  * @constructor
  * @this {SuperController}
@@ -3475,6 +3568,230 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
             self.throwError(local.res, 500, new Error('[ '+ ext +' ] Extension not supported. Ref.: gina/core mime.types'));
             return;
         }
+    }
+
+
+    /**
+     * Serve a stored object over HTTP with full Range support — the read-side
+     * companion of `store()`'s driver-routed upload path (#STO1).
+     *
+     * Terminal: renders the bytes (via `renderStream`) or ends the response
+     * itself (304/416), or routes through `throwError` (404/500). The whole
+     * HTTP protocol dance is owned here so applications never re-implement it:
+     *
+     *  - `stat()`-gated: an unknown/released key answers 404; on the `stream`
+     *    strategy a finalize-heal residue (row write failed, bytes readable)
+     *    also 404s until the idempotent finalize heals the row.
+     *  - Strong validators: `ETag: "<key>"` (storage keys are immutable — every
+     *    strategy publishes via temp+rename and no in-place mutation API
+     *    exists) + `Last-Modified` from the publish time.
+     *  - Conditional GET: `If-None-Match` matching the key ETag → 304, no
+     *    driver read.
+     *  - Range (GET only, gated on `driver.capabilities.ranges`): a single
+     *    `bytes=` range → 206 with `Content-Range`/exact `Content-Length`;
+     *    unsatisfiable → 416 + `Content-Range: bytes *\/<size>`; multi-range /
+     *    other units / garbage → the full 200 (RFC-sanctioned ignore).
+     *    `If-Range` honours the Range only on an exact validator match —
+     *    anything unevaluable degrades to the full 200, fail-safe.
+     *  - `Accept-Ranges: bytes` advertised whenever the driver can serve them.
+     *  - Content-Type: `opts.contentType` verbatim (the app's informed choice),
+     *    else the STORED type with active-content downgrade — it is
+     *    uploader-supplied, so `text\/html`/`svg`/`xml`/`javascript` fall back
+     *    to `application\/octet-stream` (stored-XSS fail-closed). Every
+     *    response carries `X-Content-Type-Options: nosniff`.
+     *  - Caching: `Cache-Control: private, max-age=31536000, immutable` by
+     *    default (correct for immutable-per-key objects; `private` keeps
+     *    shared caches out of the application's authorization), overridable
+     *    verbatim via `opts.cacheControl`.
+     *  - HEAD answers headers-only (full-size accounting, no driver read).
+     *
+     * Works identically on both engines: headers/status ride `local.res`, and
+     * the byte emission is `renderStream`'s two arms.
+     *
+     * @param {string}  driverName            - The `settings.storage` driver name (as `store()` routed it).
+     * @param {string}  key                   - The opaque storage key (from the `store()` result slot).
+     * @param {object}  [opts]                - Serving options.
+     * @param {string}  [opts.contentType]    - Explicit Content-Type; served verbatim, bypasses the downgrade.
+     * @param {string}  [opts.cacheControl]   - Explicit Cache-Control; replaces the immutable default.
+     * @param {boolean} [opts.download]       - `true` → `Content-Disposition: attachment`.
+     * @param {string}  [opts.filename]       - Download filename (implies attachment); defaults to the stored originalName.
+     * @returns {void}
+     *
+     * @example
+     * // a document route: GET /files/:id — Range, 304 and HEAD handled for free
+     * this.download = function(req, res) {
+     *     var self = this;
+     *     var doc  = getDocFromDb(req.params.id);   // { storageKey, mime, name }
+     *     self.serveFromStorage('media', doc.storageKey, { contentType: doc.mime });
+     * };
+     *
+     * @example
+     * // force a download dialog with a safe filename
+     * self.serveFromStorage('media', record.storageKey, { download: true, filename: 'report-2026.pdf' });
+     */
+    this.serveFromStorage = function(driverName, key, opts) {
+        // #B31/#B38 family — released-response guard: a prior terminal exit
+        // nulled the per-request refs; a live request is unaffected.
+        if ( local.res == null ) {
+            return;
+        }
+        opts = opts || {};
+
+        var request  = local.req;
+        var response = local.res;
+        var method   = ( request && request.method ) ? request.method.toUpperCase() : 'GET';
+
+        var driver = null;
+        try {
+            driver = lib.storage.get(driverName);
+        } catch (acquireErr) {
+            // not configured / unknown driver — an app config error, never a 404
+            return self.throwError(response, 500, acquireErr);
+        }
+
+        driver.stat(key, function onServeStat(statErr, meta) {
+            // re-guard after the async hop (the #M1/#B37 discipline)
+            if ( local.res == null ) {
+                return;
+            }
+            if ( statErr ) {
+                return self.throwError(response, 500, statErr);
+            }
+            if ( !meta ) {
+                return self.throwError(response, 404, new Error('serveFromStorage(): no object for key `' + key + '` on driver `' + driverName + '`'));
+            }
+
+            var size         = meta.size;
+            var contentType  = _resolveServedContentType(opts.contentType, meta.contentType);
+            var etag         = '"' + key + '"';
+            var lastModified = ( typeof(meta.createdAt) == 'number' ) ? new Date(meta.createdAt).toUTCString() : null;
+            var rangesOn     = !!( driver.capabilities && driver.capabilities.ranges );
+
+            /**
+             * Headers every serve outcome shares (200/206/304/416/HEAD).
+             * Applied only once an outcome is decided, so a driver error can
+             * still route through `throwError` with no Range headers leaked.
+             *
+             * @inner
+             * @returns {void}
+             */
+            var setCommonHeaders = function() {
+                response.setHeader('x-content-type-options', 'nosniff');
+                response.setHeader('etag', etag);
+                if ( lastModified ) {
+                    response.setHeader('last-modified', lastModified);
+                }
+                if ( rangesOn ) {
+                    response.setHeader('accept-ranges', 'bytes');
+                }
+                response.setHeader('cache-control',
+                    ( typeof(opts.cacheControl) == 'string' && opts.cacheControl !== '' )
+                        ? opts.cacheControl
+                        : 'private, max-age=31536000, immutable'
+                );
+                if ( opts.download === true || typeof(opts.filename) == 'string' ) {
+                    // the stored originalName is uploader-supplied: strip control
+                    // chars so setHeader cannot throw on CR/LF (header injection)
+                    var _fname = String(opts.filename || meta.originalName || 'download').replace(/[\x00-\x1f\x7f]/g, '');
+                    response.setHeader('content-disposition', formatAttachmentDisposition(_fname));
+                }
+            };
+
+            // Conditional GET — If-None-Match vs the strong key ETag (weak
+            // comparison per RFC 9110, hence indexOf: a W/-prefixed echo matches).
+            var inm = ( request && request.headers ) ? request.headers['if-none-match'] : null;
+            if ( inm && ( method === 'GET' || method === 'HEAD' )
+                && ( inm === '*' || String(inm).indexOf(etag) > -1 )
+            ) {
+                setCommonHeaders();
+                response.statusCode = 304;
+                local.req = null; local.res = null; local.next = null;
+                return response.end();
+            }
+
+            // HEAD — full-size accounting, headers only, no driver read; the
+            // renderStream HEAD branch ends the response without a body.
+            if ( method === 'HEAD' ) {
+                setCommonHeaders();
+                response.setHeader('content-length', String(size));
+                response.statusCode = response.statusCode || 200;
+                return self.renderStream(null, contentType);
+            }
+
+            // Range evaluation — GET only, and only when the driver can serve
+            // ranges (capability-gated: an offloading adapter that cannot is
+            // transparently answered with the full 200).
+            var range = null;
+            if ( method === 'GET' && rangesOn && request && request.headers && request.headers.range ) {
+                var ifRange   = request.headers['if-range'];
+                var ifRangeOk = true;
+                if ( typeof(ifRange) == 'string' && ifRange !== '' ) {
+                    // exact validator match only; anything unevaluable → full 200
+                    ifRangeOk = ( ifRange === etag ) || ( lastModified != null && ifRange === lastModified );
+                }
+                if ( ifRangeOk ) {
+                    range = _parseRangeHeader(request.headers.range, size);
+                }
+            }
+
+            if ( range && range.unsatisfiable ) {
+                setCommonHeaders();
+                response.setHeader('content-range', 'bytes */' + size);
+                response.statusCode = 416;
+                local.req = null; local.res = null; local.next = null;
+                return response.end();
+            }
+
+            /**
+             * Apply the decided outcome's headers and stream the bytes.
+             * Runs only in a driver-success callback (headers-on-success).
+             *
+             * @inner
+             * @param {number} status       - 200 or 206.
+             * @param {object} extraHeaders - Outcome-specific headers.
+             * @param {object} readable     - The driver's byte stream.
+             * @returns {void}
+             */
+            var sendStream = function(status, extraHeaders, readable) {
+                if ( local.res == null ) {
+                    return;
+                }
+                setCommonHeaders();
+                for (var h in extraHeaders) {
+                    response.setHeader(h, extraHeaders[h]);
+                }
+                response.statusCode = status;
+                return self.renderStream(readable, contentType);
+            };
+
+            if ( range ) {
+                driver.getRange(key, range.start, range.end, function onServeRange(rErr, readable) {
+                    if ( local.res == null ) {
+                        return;
+                    }
+                    if ( rErr ) {
+                        // post-stat race (cas grace expiry, vanished file) → 404;
+                        // anything else is an I/O anomaly → 500
+                        return self.throwError(response, ( rErr.code === 'STORAGE_NO_OBJECT' ) ? 404 : 500, rErr);
+                    }
+                    sendStream(206, {
+                        'content-range'  : 'bytes ' + range.start + '-' + range.end + '/' + size,
+                        'content-length' : String(range.end - range.start + 1)
+                    }, readable);
+                });
+                return;
+            }
+
+            driver.get(key, function onServeGet(gErr, readable) {
+                if ( local.res == null ) {
+                    return;
+                }
+                if ( gErr ) {
+                    return self.throwError(response, ( gErr.code === 'STORAGE_NO_OBJECT' ) ? 404 : 500, gErr);
+                }
+                sendStream(200, { 'content-length': String(size) }, readable);
+            });
+        });
     }
 
 

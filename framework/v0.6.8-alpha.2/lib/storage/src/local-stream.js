@@ -1159,9 +1159,10 @@ module.exports = function createLocalStreamDriver(name, conf, metaStore) {
          * satisfiable); only a `start` at or beyond the object's size is
          * unsatisfiable, and that is the caller's 416.
          *
-         * NB the ENGINES still emit no `Accept-Ranges`/`Content-Range`/206 —
-         * HTTP Range serving is its own arc. This flag and this verb describe
-         * what the DRIVER can do, never what the server currently answers.
+         * The framework consumes this verb through the controller's
+         * `serveFromStorage()` facade, which answers 206/416 with
+         * `Accept-Ranges`/`Content-Range` on both engines, gated on
+         * `capabilities.ranges`.
          *
          * @param {string}   key   - The opaque storage key.
          * @param {number}   start - First byte offset, inclusive; integer >= 0.
