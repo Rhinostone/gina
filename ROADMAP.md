@@ -504,7 +504,7 @@ Gina's built-in per-bundle inspector. Phases 1–2 ship as an embedded SPA at `/
 | ✅ | **Beginner — Notes API** — Your first REST API: scaffold a project, define 3 routes in `routing.json`, write synchronous controller actions, read `req.post` / `req.params`, return JSON with `renderJSON()`, handle errors with `throwError()`. In-memory store — no database needed. | ~15 min | `0.3.0` | 2026-04-01 |
 | ✅ | **Tutorial locale detection** — `LocaleSettings` React component detects the reader's locale and timezone via `navigator.language` + `Intl` APIs and pre-fills the `settings.json` scaffold example. Inserted after the scaffold step in both tutorials. Falls back to `en_US`. | — | `0.3.0` | 2026-04-06 |
 | ✅ | **Intermediate — Link Shortener** — SQLite ORM connector, async controller actions, `render()` + `renderJSON()` in same bundle, HTTP 302 redirect, route `requirements` guard. Includes downloadable project ZIP. | ~30 min | `0.3.0` | 2026-04-01 |
-| 📋 | **Advanced** — Full production project: authentication, scoped data isolation, async/await, HTTP/2, structured logging, Docker/K8s deployment. Starts from the intermediate tutorial's finished state. | ~60 min | `0.6.x` | Q4 2026 |
+| ✅ | **Advanced — Going to Production** — Full production project: authentication, per-user data isolation, deny-by-default authorization, sessions, HTTP/2, structured logging, Docker/K8s deployment with `gina-container`. Continues the intermediate tutorial's finished state (downloadable). | ~60 min | `0.6.8` | 2026-08-14 |
 
 ---
 
