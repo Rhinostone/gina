@@ -20,7 +20,8 @@
  *
  * Background: the failure mode hit `gina@0.3.7` and `gina@0.3.9` stable
  * publishes (the second occurrence proved it was a recurring deterministic
- * ordering bug, not transient registry lag — see `llms.txt §87`).
+ * ordering bug, not transient registry lag — see `llms.txt #126`, the release-pipeline
+ * failure-modes entry that absorbed the former §87).
  *
  * Helpers exported via `module.exports` for unit testing with injected
  * `execDriver` / `sleepDriver` / `logger` — no real-repo or registry

@@ -238,7 +238,8 @@ function PostPublish() {
             //
             // The `npm install --package-lock-only` line is retried with backoff to
             // absorb the npm registry's eventual-consistency window after publish.
-            // Background in `llms.txt §87`: the lockfile-sync failed on `gina@0.3.7`
+            // Background in `llms.txt #126` (the release-pipeline entry that absorbed
+            // the former §87): the lockfile-sync failed on `gina@0.3.7`
             // and `gina@0.3.9` stable publishes (registry hadn't propagated the
             // just-published version yet), shipped a mismatched `package.json` /
             // `package-lock.json` pair, and broke the next Vercel `npm ci`. The retry
