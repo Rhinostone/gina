@@ -639,13 +639,42 @@ module.exports = function createLocalStreamDriver(name, conf, metaStore) {
 
             var ws = fs.createWriteStream(tmp, { highWaterMark: chunkSize || undefined });
 
+            /**
+             * Abandon the put: tear both streams down, remove the temp, report.
+             *
+             * #B358 — the unlink WAITS for the write stream to close, and the
+             * callback waits with it. `createWriteStream()` opens
+             * asynchronously, so a refusal raised from the 'data' handler
+             * (`maxObjectSize`) or an immediately failing source reaches here
+             * while the open is still in the threadpool: the temp does not
+             * exist YET at this instant but lands a tick later, on the worker
+             * thread, with no event-loop turn in between for a synchronous
+             * check to see. The previous `existsSync`-gated unlink therefore
+             * read false, skipped, and orphaned the temp — measured at ~30% on
+             * a 4096-byte refusal. Deferring to 'close' also fixes the contract
+             * it broke: a caller told the put failed must not be able to
+             * observe residue afterwards. `force` absorbs the open that never
+             * happened at all, so the no-temp case costs nothing.
+             *
+             * @inner
+             * @param {*} err - The failure to report; wrapped if not an Error.
+             * @returns {void}
+             */
             var onError = function(err) {
                 if (settled) return;
                 settled = true;
                 try { stream.destroy(); } catch (_e) {}
-                try { ws.destroy(); } catch (_e) {}
-                try { if ( fs.existsSync(tmp) ) fs.unlinkSync(tmp); } catch (_e) {}
-                fn(( err instanceof Error ) ? err : new Error(String(err)));
+
+                var finish = function() {
+                    try { fs.rmSync(tmp, { force: true }); } catch (_e) {}
+                    fn(( err instanceof Error ) ? err : new Error(String(err)));
+                };
+
+                // Already closed (an autoDestroyed ws that errored) would never
+                // emit 'close' again — that arm must not wait for it.
+                if ( ws.closed || ws.destroyed ) { return finish(); }
+                ws.once('close', finish);
+                try { ws.destroy(); } catch (_e) { finish(); }
             };
 
             // #B143 — armed at creation, never in a later handler: Node does not
