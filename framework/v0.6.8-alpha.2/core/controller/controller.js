@@ -1806,7 +1806,10 @@ function SuperController(options) {
      * HTTP/1.1: response.write() with automatic chunked transfer-encoding
      *
      * The iterable should yield strings or Buffers. Objects are coerced via String().
-     * Upstream response headers (CORS, etc.) are preserved in the initial headers frame.
+     * Buffers pass through byte-exact on non-SSE content-types (SSE decodes them as
+     * UTF-8 text). HEAD requests answer headers-only — the iterable is never consumed.
+     * Upstream response headers (CORS, Content-Range, etc.) are preserved in the initial
+     * headers frame, and the delegate's own defaults yield to pre-set values.
      *
      * @param {AsyncIterable} asyncIterable - Source of chunks; typically an AI SDK stream
      * @param {string}        [contentType] - Response Content-Type (default: text/event-stream)

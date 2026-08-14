@@ -772,3 +772,276 @@ describe('10 - renderStream: status-code preservation (#B351)', function() {
         assert.strictEqual(h.res.statusCode, 200);
     });
 });
+
+
+// ─── 13 — binary passthrough on the raw (non-SSE) path (#STO1 Range) ─────────
+
+describe('13 - renderStream: Buffers pass through byte-exact on non-SSE content-types', function() {
+
+    // PNG magic + JPEG marker + NUL + a high byte — deliberately invalid UTF-8,
+    // so the historical unconditional toString('utf8') corrupts it (U+FFFD).
+    var BIN = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0xff, 0xd8, 0x00, 0xfe]);
+
+    it('HTTP/1.1 raw path writes the SAME Buffer, byte-exact', async function() {
+        var written = [];
+        var deps = makeDeps();
+        deps.local.res.write = function(d) { written.push(d); };
+        deps.local.res.end   = function() {};
+
+        renderStream(from([BIN]), 'application/octet-stream', deps);
+        await sleep(50);
+
+        assert.strictEqual(written.length, 1);
+        assert.ok(Buffer.isBuffer(written[0]), 'chunk must remain a Buffer, not a decoded string');
+        assert.ok(BIN.equals(written[0]), 'bytes must survive verbatim (no U+FFFD substitution)');
+    });
+
+    it('HTTP/2 raw path writes the SAME Buffer, byte-exact', async function() {
+        var written = [];
+        var stream2 = {
+            headersSent: false, destroyed: false, closed: false,
+            respond: function() { stream2.headersSent = true; },
+            write:   function(d) { written.push(d); },
+            end:     function() {}
+        };
+        var deps = makeDeps();
+        deps.local.res.stream = stream2;
+        deps.local.res.headersSent = false;
+
+        renderStream(from([BIN]), 'application/octet-stream', deps);
+        await sleep(50);
+
+        assert.strictEqual(written.length, 1);
+        assert.ok(Buffer.isBuffer(written[0]));
+        assert.ok(BIN.equals(written[0]));
+    });
+
+    it('multi-chunk binary reassembles to the original byte sequence', async function() {
+        var half = BIN.length >> 1;
+        var written = [];
+        var deps = makeDeps();
+        deps.local.res.write = function(d) { written.push(d); };
+        deps.local.res.end   = function() {};
+
+        renderStream(from([BIN.subarray(0, half), BIN.subarray(half)]), 'application/octet-stream', deps);
+        await sleep(50);
+
+        assert.ok(BIN.equals(Buffer.concat(written)));
+    });
+
+    it('control: string chunks on the raw path stay strings', async function() {
+        var written = [];
+        var deps = makeDeps();
+        deps.local.res.write = function(d) { written.push(d); };
+        deps.local.res.end   = function() {};
+
+        renderStream(from(['plain']), 'application/octet-stream', deps);
+        await sleep(50);
+
+        assert.strictEqual(written[0], 'plain');
+        assert.ok(!Buffer.isBuffer(written[0]));
+    });
+
+    it('control: SSE still decodes Buffers to UTF-8 text framing', async function() {
+        var written = [];
+        var deps = makeDeps();
+        deps.local.res.write = function(d) { written.push(d); };
+        deps.local.res.end   = function() {};
+
+        renderStream(from([Buffer.from('sse-bytes')]), 'text/event-stream', deps);
+        await sleep(50);
+
+        assert.strictEqual(written[0], 'data: sse-bytes\n\n');
+    });
+});
+
+
+// ─── 14 — HEAD parity: headers-only, iterable never consumed ─────────────────
+
+describe('14 - renderStream: HEAD requests answer headers-only', function() {
+
+    it('HTTP/1.1 HEAD: end() without write(), pre-set status preserved', async function() {
+        var written = [], ended = false, headers = {};
+        var deps = makeDeps({ req: { method: 'HEAD' } });
+        var res  = deps.local.res;   // capture BEFORE — HEAD exit nulls local.res
+        res.statusCode = 206;
+        res.setHeader  = function(k, v) { headers[k.toLowerCase()] = v; };
+        res.write      = function(d) { written.push(d); };
+        res.end        = function() { ended = true; };
+
+        renderStream(from(['never-sent']), 'application/octet-stream', deps);
+        await sleep(30);
+
+        assert.strictEqual(ended, true, 'HEAD must end the response');
+        assert.strictEqual(written.length, 0, 'HEAD must never write a body');
+        assert.strictEqual(res.statusCode, 206, 'pre-set status must survive');
+        assert.strictEqual(headers['content-type'], 'application/octet-stream');
+        assert.strictEqual(deps.local.res, null, 'locals nulled at the HEAD exit');
+    });
+
+    it('HTTP/2 HEAD: respond() with pending headers merged, end(), no write()', async function() {
+        var written = [], responded = null, ended = false;
+        var stream2 = {
+            headersSent: false, destroyed: false, closed: false,
+            respond: function(h) { responded = h; stream2.headersSent = true; },
+            write:   function(d) { written.push(d); },
+            end:     function() { ended = true; }
+        };
+        var deps = makeDeps({ req: { method: 'HEAD' } });
+        deps.local.res.stream      = stream2;
+        deps.local.res.headersSent = false;
+        deps.local.res.statusCode  = 206;
+        deps.local.res.getHeaders  = function() { return { 'content-range': 'bytes 0-4/10' }; };
+
+        renderStream(from(['never-sent']), 'application/octet-stream', deps);
+        await sleep(30);
+
+        assert.ok(responded, 'stream.respond must have been called');
+        assert.strictEqual(responded[':status'], 206);
+        assert.strictEqual(responded['content-range'], 'bytes 0-4/10', 'pending headers ride the HEAD frame');
+        assert.strictEqual(ended, true);
+        assert.strictEqual(written.length, 0);
+    });
+
+    it('a destroyable source is destroy()ed instead of leaking its handle', async function() {
+        var destroyed = false;
+        var src = { destroy: function() { destroyed = true; } };
+        src[Symbol.asyncIterator] = function() { return { next: function() { return Promise.resolve({ done: true }); } }; };
+        var deps = makeDeps({ req: { method: 'HEAD' } });
+        deps.local.res.end = function() {};
+
+        renderStream(src, 'application/octet-stream', deps);
+        await sleep(30);
+
+        assert.strictEqual(destroyed, true);
+    });
+
+    it('control: a GET request still streams the body', async function() {
+        var written = [];
+        var deps = makeDeps({ req: { method: 'GET' } });
+        deps.local.res.write = function(d) { written.push(d); };
+        deps.local.res.end   = function() {};
+
+        renderStream(from(['body']), 'application/octet-stream', deps);
+        await sleep(30);
+
+        assert.strictEqual(written.length, 1);
+    });
+});
+
+
+// ─── 15 — #B357: getter-only headersSent must not throw ──────────────────────
+
+describe('15 - renderStream: getter-only headersSent (#B357 — real response classes)', function() {
+
+    // Real ServerResponse / Http2ServerResponse expose `headersSent` as a
+    // getter-only accessor, so the delegate's post-end assignment THROWS under
+    // strict mode. The default mock hides this (writable data property) — this
+    // section reproduces the real accessor shape the mock cannot.
+    function makeGetterOnlyRes() {
+        var sent = false;
+        var res = {
+            getHeaders: function() { return {}; }, statusCode: 200,
+            setHeader: function() {}, write: function() {},
+            end: function() { sent = true; },
+            writableEnded: false, destroyed: false
+        };
+        Object.defineProperty(res, 'headersSent', {
+            get: function() { return sent; }, enumerable: true
+        });
+        return res;
+    }
+
+    it('streams to completion without routing through throwError, and the #FI timeline survives', async function() {
+        var throwErrorCalls = [];
+        var deps = makeDeps(
+            { res: makeGetterOnlyRes() },
+            { throwError: function() { throwErrorCalls.push([].slice.call(arguments)); } }
+        );
+        deps.local._timeline = { entries: [], requestStart: Date.now() };
+        var timeline = deps.local._timeline;   // capture — finally nulls only req/res/next
+
+        renderStream(from(['a', 'b']), 'application/octet-stream', deps);
+        await sleep(50);
+
+        assert.strictEqual(throwErrorCalls.length, 0,
+            'the guarded assignment must not detour through the catch');
+        var labels = timeline.entries.map(function(e) { return e.label; });
+        assert.ok(labels.indexOf('stream-write') > -1, '#FI stream-write entry must be pushed');
+        assert.ok(labels.indexOf('total') > -1, '#FI total entry must be pushed');
+    });
+
+    it('control: a writable mock still gets headersSent = true (the §05 contract)', async function() {
+        var deps = makeDeps();
+        var res = deps.local.res;
+        res.write = function() {};
+        res.end   = function() {};
+
+        renderStream(from(['x']), 'application/octet-stream', deps);
+        await sleep(30);
+
+        assert.strictEqual(res.headersSent, true);
+    });
+});
+
+
+// ─── 16 — delegate defaults yield to caller-set headers (#STO1 Range) ────────
+
+describe('16 - renderStream: pre-set headers survive the delegate defaults', function() {
+
+    it('HTTP/1.1: a pre-set Cache-Control is not clobbered; unset defaults still apply', async function() {
+        var setCalls = {};
+        var deps = makeDeps();
+        deps.local.res.getHeaders = function() {
+            return { 'cache-control': 'private, max-age=31536000, immutable' };
+        };
+        deps.local.res.setHeader = function(k, v) { setCalls[k.toLowerCase()] = v; };
+        deps.local.res.write = function() {};
+        deps.local.res.end   = function() {};
+
+        renderStream(from(['x']), 'application/octet-stream', deps);
+        await sleep(30);
+
+        assert.strictEqual(typeof setCalls['cache-control'], 'undefined',
+            'the no-cache default must yield to the caller value');
+        assert.strictEqual(setCalls['connection'], 'keep-alive',
+        'defaults the caller did not pre-set still apply');
+    });
+
+    it('HTTP/2: pending cache-control and content-range ride the frame over the defaults', async function() {
+        var responded = null;
+        var stream2 = {
+            headersSent: false, destroyed: false, closed: false,
+            respond: function(h) { responded = h; stream2.headersSent = true; },
+            write:   function() {},
+            end:     function() {}
+        };
+        var deps = makeDeps();
+        deps.local.res.stream      = stream2;
+        deps.local.res.headersSent = false;
+        deps.local.res.getHeaders  = function() {
+            return { 'cache-control': 'public, max-age=60', 'content-range': 'bytes 0-1/2' };
+        };
+
+        renderStream(from(['x']), 'application/octet-stream', deps);
+        await sleep(30);
+
+        assert.strictEqual(responded['cache-control'], 'public, max-age=60');
+        assert.strictEqual(responded['content-range'], 'bytes 0-1/2');
+        assert.strictEqual(responded['x-accel-buffering'], 'no',
+            'defaults the caller did not pre-set still apply on h2');
+    });
+
+    it('control: with nothing pre-set, the no-cache default fires (the §05 contract)', async function() {
+        var setCalls = {};
+        var deps = makeDeps();
+        deps.local.res.setHeader = function(k, v) { setCalls[k.toLowerCase()] = v; };
+        deps.local.res.write = function() {};
+        deps.local.res.end   = function() {};
+
+        renderStream(from(['x']), 'application/octet-stream', deps);
+        await sleep(30);
+
+        assert.strictEqual(setCalls['cache-control'], 'no-cache');
+    });
+});

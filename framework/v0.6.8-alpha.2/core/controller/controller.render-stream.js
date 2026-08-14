@@ -16,14 +16,22 @@
  *                        (HTTP/1.1 uses chunked transfer-encoding automatically)
  *
  * The caller (controller action) is responsible for yielding plain strings or
- * Buffers. Object chunks are coerced via String(); Buffer chunks are decoded
- * as UTF-8.
+ * Buffers. Object chunks are coerced via String(). Buffer chunks are decoded
+ * as UTF-8 on the SSE path only — on any other content-type they pass through
+ * VERBATIM, byte-exact, which is what makes this delegate usable for binary
+ * serving (#STO1 Range: 206 bodies must not be re-encoded).
+ *
+ * HEAD requests answer headers-only (no body, the iterable is never consumed —
+ * a destroyable source is destroy()ed) — the same render-layer body
+ * suppression every other delegate applies.
  *
  * HTTP/2: uses stream.respond() + stream.write() + stream.end()
  * HTTP/1.1: uses response.setHeader() + response.write() + response.end()
  *
- * In both cases all pending response headers set upstream (CORS, etc.) are
- * preserved and merged into the initial headers frame.
+ * In both cases all pending response headers set upstream (CORS, Content-Range,
+ * etc.) are preserved and merged into the initial headers frame, and the
+ * delegate's own defaults (cache-control, connection, x-accel-buffering) apply
+ * only where the caller has not already chosen a value.
  *
  * @param {AsyncIterable} asyncIterable  Source of string/Buffer chunks
  * @param {string}        contentType    Response Content-Type (default: text/event-stream)
@@ -69,9 +77,65 @@ module.exports = function renderStream(asyncIterable, contentType, deps) {
     contentType = contentType || 'text/event-stream';
     var isSSE   = /text\/event-stream/i.test(contentType);
 
+    /**
+     * Frame one chunk for the wire.
+     *
+     * SSE is a TEXT protocol, so Buffers are decoded as UTF-8 before framing.
+     * On the raw (non-SSE) path a Buffer passes through VERBATIM: the
+     * historical unconditional `chunk.toString('utf8')` replaced every
+     * non-UTF-8 byte with U+FFFD (measured: a 12-byte PNG header round-tripped
+     * to 20 bytes), which made this delegate unusable for byte serving. A
+     * valid-UTF-8 Buffer re-encodes byte-identically on write, so text
+     * consumers see no change.
+     *
+     * @inner
+     * @param {Buffer|string|*} chunk - One yielded chunk.
+     * @returns {Buffer|string} The bytes/string to write.
+     */
     function formatChunk(chunk) {
-        var s = (chunk instanceof Buffer) ? chunk.toString('utf8') : String(chunk);
-        return isSSE ? 'data: ' + s + '\n\n' : s;
+        if (isSSE) {
+            var s = (chunk instanceof Buffer) ? chunk.toString('utf8') : String(chunk);
+            return 'data: ' + s + '\n\n';
+        }
+        return (chunk instanceof Buffer) ? chunk : String(chunk);
+    }
+
+    // HEAD parity — headers-only, no body, the iterable is never consumed.
+    // Every other delegate suppresses the body for HEAD in the render layer
+    // (render-json.js is the canonical pattern); this delegate was the lone
+    // exception, so a HEAD to a streaming route used to stream a full body.
+    // Runs synchronously before the IIFE: no #FI timeline entry is pushed
+    // (no stream occurred) and #H10 trailers are skipped (no body to trail).
+    if ( local.req && local.req.method && /^HEAD$/i.test(local.req.method) ) {
+        if (stream) {
+            if ( !stream.destroyed && !stream.closed && !stream.headersSent ) {
+                var _headHeaders = {
+                    ':status'      : response.statusCode || 200,
+                    'content-type' : contentType
+                };
+                var _headPending = response.getHeaders ? response.getHeaders() : {};
+                for (var hk in _headPending) {
+                    if ( !(hk in _headHeaders) ) _headHeaders[hk] = _headPending[hk];
+                }
+                stream.respond(_headHeaders);
+            }
+            if ( !stream.destroyed && !stream.closed ) stream.end();
+        } else {
+            if ( !headersSent(response) ) {
+                response.setHeader('content-type', contentType);
+                response.statusCode = response.statusCode || 200;
+            }
+            response.end();
+        }
+        // A stream-like source the caller opened would otherwise leak its
+        // handle — it is never iterated on the HEAD path.
+        if ( asyncIterable && typeof asyncIterable.destroy === 'function' ) {
+            try { asyncIterable.destroy(); } catch (_dErr) { /* best-effort */ }
+        }
+        // #B357 — see the note at the h2 arm's assignment below.
+        try { response.headersSent = true; } catch (_hsErr) { /* getter-only — already true */ }
+        local.req = null; local.res = null; local.next = null;
+        return;
     }
 
     // #FI — stream start time for Inspector Flow tab
@@ -95,14 +159,22 @@ module.exports = function renderStream(asyncIterable, contentType, deps) {
                         // can only ever answer 200 — so 206/416 (Range) and 404 are
                         // unreachable on the h2 engine. Same class as #B172 (render-json).
                         ':status'          : response.statusCode || 200,
-                        'content-type'     : contentType,
-                        'cache-control'    : 'no-cache',
-                        'x-accel-buffering': 'no'
+                        'content-type'     : contentType
                     };
-                    // Merge pending response headers set upstream (CORS, cookies, etc.)
+                    // Merge pending response headers set upstream (CORS, cookies,
+                    // Content-Range, etc.)
                     var _pending = response.getHeaders ? response.getHeaders() : {};
                     for (var k in _pending) {
                         if (!(k in _headers)) _headers[k] = _pending[k];
+                    }
+                    // Delegate defaults apply only where the caller has not chosen
+                    // a value — a byte-serving caller (#STO1 Range) sets its own
+                    // Cache-Control, which the old frame literal silently beat.
+                    if ( !('cache-control' in _headers) ) {
+                        _headers['cache-control'] = 'no-cache';
+                    }
+                    if ( !('x-accel-buffering' in _headers) ) {
+                        _headers['x-accel-buffering'] = 'no';
                     }
                     // #H10 — when trailers were registered, defer the stream close so the
                     // wantTrailers event can flush them after the final DATA frame.
@@ -124,15 +196,34 @@ module.exports = function renderStream(asyncIterable, contentType, deps) {
                 }
 
                 if (!stream.destroyed && !stream.closed) stream.end();
-                response.headersSent = true;
+                // #B357 — `headersSent` is a getter-only accessor on real
+                // ServerResponse / Http2ServerResponse objects, so a bare
+                // assignment THROWS under this file's strict mode. The wire was
+                // already complete (end() above), but the throw detoured every
+                // streaming request through the catch → a swallowed late
+                // throwError — and killed the #FI timeline entries below. Real
+                // responses already read true here (the getter tracks
+                // respond()/end()); the assignment only matters for
+                // plain-object test doubles, which stay writable.
+                try { response.headersSent = true; } catch (_hs2Err) { /* getter-only — already true */ }
 
             } else {
                 // ── HTTP/1.1 ─────────────────────────────────────────────────────
                 if (!headersSent(response)) {
                     response.setHeader('content-type', contentType);
-                    response.setHeader('cache-control', 'no-cache');
-                    response.setHeader('connection', 'keep-alive');
-                    if (isSSE) response.setHeader('x-accel-buffering', 'no');
+                    // Delegate defaults apply only where the caller has not
+                    // already chosen a value (#STO1 Range) — setHeader would
+                    // silently clobber a pre-set Cache-Control.
+                    var _h1Pending = response.getHeaders ? response.getHeaders() : {};
+                    if ( !('cache-control' in _h1Pending) ) {
+                        response.setHeader('cache-control', 'no-cache');
+                    }
+                    if ( !('connection' in _h1Pending) ) {
+                        response.setHeader('connection', 'keep-alive');
+                    }
+                    if ( isSSE && !('x-accel-buffering' in _h1Pending) ) {
+                        response.setHeader('x-accel-buffering', 'no');
+                    }
                     // #B351 — preserve a status the caller pre-set. The bare assignment
                     // clobbered it, which is worse than the h2 arm's literal: a controller
                     // that had already chosen 206/404 was silently answered 200.
@@ -145,7 +236,9 @@ module.exports = function renderStream(asyncIterable, contentType, deps) {
                 }
 
                 if (!response.writableEnded) response.end();
-                response.headersSent = true;
+                // #B357 — see the h2 arm's note: guarded, real responses
+                // already read true post-end.
+                try { response.headersSent = true; } catch (_hs1Err) { /* getter-only — already true */ }
             }
 
             // #FI — stream response + total timing
