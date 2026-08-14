@@ -715,13 +715,22 @@ module.exports = function CouchbaseStorageStore(connConf, bundle, driverName, in
      * makes an EMPTY driver report zeroes rather than nulls (SUM over no rows
      * is NULL) — the embedded store's `COALESCE`.
      *
+     * `inline` is BACKTICKED because it is a N1QL reserved word (#B356) — the
+     * server refuses the whole statement with `at: inline (reserved word)`, so
+     * `stats` was the one maintenance verb that could not parse against a real
+     * cluster. Escaping it changes nothing else: a quoted alias still yields
+     * the bare key `inline` in the result row, which `stats()` below reads.
+     * The other four aliases are NOT reserved (checked against Couchbase's
+     * reserved-word list, which is why they are left bare) and `§07` pins that
+     * none of them silently becomes one.
+     *
      * @inner
      * @type {string}
      */
     var statsStatement = 'SELECT COUNT(1) AS objects,'
         + ' IFMISSINGORNULL(SUM(CASE WHEN refs IS VALUED THEN 1 ELSE 0 END), 0) AS refcounted,'
         + ' IFMISSINGORNULL(SUM(CASE WHEN refs = 0 THEN 1 ELSE 0 END), 0) AS zeroRefPending,'
-        + ' IFMISSINGORNULL(SUM(CASE WHEN data IS VALUED THEN 1 ELSE 0 END), 0) AS inline,'
+        + ' IFMISSINGORNULL(SUM(CASE WHEN data IS VALUED THEN 1 ELSE 0 END), 0) AS `inline`,'
         + ' IFMISSINGORNULL(SUM(size), 0) AS bytes'
         + ' FROM ' + keyspace
         + ' WHERE d = $1 AND k NOT LIKE ".%"';

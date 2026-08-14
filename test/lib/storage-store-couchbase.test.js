@@ -653,6 +653,82 @@ describe('07 - composed N1QL (the captured statements)', function () {
         await pStats(b.store);
         assert.match(b.backend.queries[0].statement, /FROM `gina_storage`\.`_default`\.`_default`/);
     });
+
+    /**
+     * #B356 — no composed statement may alias to a BARE N1QL reserved word.
+     *
+     * This exists because the defect it guards is structurally invisible to
+     * every other test in this file: the fake SDK pattern-matches statement
+     * SHAPES and never parses N1QL, so a reserved word sails through the whole
+     * suite and only fails against a real server. `stats` shipped aliasing
+     * `AS inline` and the cluster refused the statement outright with
+     * `at: inline (reserved word)` — on 7.x as well as 8.x.
+     *
+     * The check is a lexical one over the captured statements, so it needs a
+     * control that can FAIL: `isBareReserved` is therefore run against a
+     * synthetic statement carrying the original defect, and must flag it.
+     * Without that arm, a broken extractor would pass by finding nothing.
+     */
+    it('#B356 - no composed statement aliases to a bare reserved word', async function () {
+        // Couchbase SQL++ reserved words. `OBJECT` is reserved while `objects`
+        // is not, which is exactly why the check compares whole tokens.
+        var RESERVED = ('ADVISE ALL ALTER ANALYZE AND ANY ARRAY AS ASC AT BEGIN BETWEEN BINARY BOOLEAN BREAK '
+            + 'BUCKET BUILD BY CALL CASE CAST CLUSTER COLLATE COLLECTION COMMIT COMMITTED CONNECT CONTINUE '
+            + 'CORRELATED COVER CREATE CURRENT DATABASE DATASET DATASTORE DECLARE DECREMENT DELETE DERIVED '
+            + 'DESC DESCRIBE DISTINCT DO DROP EACH ELEMENT ELSE END EVERY EXCEPT EXCLUDE EXECUTE EXISTS '
+            + 'EXPLAIN FALSE FETCH FILTER FIRST FLATTEN FLUSH FOLLOWING FOR FORCE FROM FTS FUNCTION GOLANG '
+            + 'GRANT GROUP GROUPS GSI HASH HAVING IF IGNORE ILIKE IN INCLUDE INCREMENT INDEX INFER INLINE '
+            + 'INNER INSERT INTERSECT INTO IS ISOLATION JAVASCRIPT JOIN KEY KEYS KEYSPACE KNOWN LANGUAGE '
+            + 'LAST LEFT LET LETTING LEVEL LIKE LIMIT LSM MAP MAPPING MATCHED MATERIALIZED MERGE MINUS '
+            + 'MISSING NAMESPACE NEST NEXT NL NO NOT NULL NULLS NUMBER OBJECT OFFSET ON OPTION OPTIONS OR '
+            + 'ORDER OTHERS OUTER OVER PARSE PARTITION PASSWORD PATH POOL PRECEDING PREPARE PRIMARY PRIVATE '
+            + 'PRIVILEGE PROBE PROCEDURE PUBLIC RANGE RAW REALM REDUCE RENAME REPLACE RESPECT RETURN '
+            + 'RETURNING REVOKE RIGHT ROLE ROLLBACK ROW ROWS SATISFIES SAVEPOINT SCHEMA SCOPE SELECT SELF '
+            + 'SEMI SET SHOW SOME START STATISTICS STRING SYSTEM THEN TIES TO TRAN TRANSACTION TRIGGER TRUE '
+            + 'TRUNCATE UNBOUNDED UNDER UNION UNIQUE UNKNOWN UNNEST UNSET UPDATE UPSERT USE USER USERS USING '
+            + 'VALIDATE VALUE VALUED VALUES VIA VIEW WHEN WHERE WHILE WINDOW WITH WITHIN WORK XOR').split(' ');
+
+        // Returns the bare aliases that are reserved. A backticked alias is
+        // escaped and therefore always legal.
+        var isBareReserved = function (statement) {
+            var bad = [], m, re = /\bAS\s+(`[^`]+`|[A-Za-z_][A-Za-z0-9_]*)/g;
+            while ((m = re.exec(statement)) !== null) {
+                if (m[1].charAt(0) === '`') { continue; }
+                if (RESERVED.indexOf(m[1].toUpperCase()) > -1) { bad.push(m[1]); }
+            }
+            return bad;
+        };
+
+        // CONTROL — the checker must flag the ORIGINAL defect. If this arm
+        // stops failing, the extractor is broken and every clean read below is
+        // worthless.
+        assert.deepStrictEqual(
+            isBareReserved('SELECT COUNT(1) AS objects, IFMISSINGORNULL(SUM(1), 0) AS inline FROM x'),
+            ['inline'],
+            'control: the pre-#B356 statement must be flagged');
+        assert.deepStrictEqual(
+            isBareReserved('SELECT COUNT(1) AS objects, IFMISSINGORNULL(SUM(1), 0) AS `inline` FROM x'),
+            [],
+            'control: backticking the same alias must clear it');
+
+        var b = build();
+        await settle();   // capture the index bootstrap statements too
+        await pZero(b.store, 1, 10);
+        await pKeys(b.store, '', 10);
+        await pStats(b.store);
+
+        // ANTI-VACUITY — a run that captured no aliases would pass silently.
+        var aliases = 0;
+        b.backend.queries.forEach(function (q) {
+            aliases += (q.statement.match(/\bAS\s+(`[^`]+`|[A-Za-z_][A-Za-z0-9_]*)/g) || []).length;
+        });
+        assert.ok(aliases >= 5, 'expected the stats aliases to be captured, saw ' + aliases);
+
+        b.backend.queries.forEach(function (q) {
+            assert.deepStrictEqual(isBareReserved(q.statement), [],
+                'bare reserved alias in: ' + q.statement);
+        });
+    });
 });
 
 
