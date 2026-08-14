@@ -484,9 +484,10 @@ module.exports = function createLocalStreamDriver(name, conf, metaStore) {
      * it is reclaimable too.
      *
      * The temp half is the same age gate applied to `<root>/.tmp`: a crashed
-     * `put()` leaves its temp behind and nothing else ever removes it. Sharded
-     * has the same gap and does NOT have this sweep (#B349, open) — this is
-     * the stream root only.
+     * `put()` leaves its temp behind and no verb ever looks at it again. Every
+     * strategy now clears its own — `cas` and `sharded` at build (#B349 closed
+     * the sharded gap), `stream` here at build AND on the interval, because
+     * this pass has sessions to walk anyway. Each sweeps only its OWN root.
      *
      * Never throws: an unreadable directory is the next verb's problem to
      * report properly, and a sweep that took the build down would be a worse
