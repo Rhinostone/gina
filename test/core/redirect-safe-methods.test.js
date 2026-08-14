@@ -19,10 +19,17 @@
  * Admitting HEAD converges it on GET. Measured on a booted bundle over real HTTP,
  * before -> after, with unsafe methods as the control that the gate still fires:
  *
- *   HEAD /<webroot>?t=V   303 /<webroot>/?inheritedData=%7B…%7D  ->  302 /<webroot>/?t=V
- *   GET  /<webroot>?t=V   302 /<webroot>/?t=V                    ->  unchanged
- *   POST /<webroot>?t=V   303 …&inheritedData=%7B…%7D            ->  unchanged (303)
- *   PUT  /<webroot>?t=V   303 …&inheritedData=%7B…%7D            ->  unchanged (303)
+ *   HEAD /<webroot>?t=V   303 /<webroot>/[+copy]  ->  302 /<webroot>/?t=V
+ *   GET  /<webroot>?t=V   302 /<webroot>/?t=V     ->  unchanged
+ *   POST /<webroot>?t=V   303 /<webroot>/[+copy]  ->  unchanged (303)
+ *   PUT  /<webroot>?t=V   303 /<webroot>/[+copy]  ->  unchanged (303)
+ *
+ * `[+copy]` is deliberately not written as a literal Location: the parameter copy rides
+ * the SESSION where one is mounted (clean Location) and only appends to the URL as
+ * `?inheritedData=<JSON>` in a session-less bundle. The scaffold these numbers come from
+ * has no session plugin, so it takes the fallback and shows the appended form; a real
+ * session-bearing tier shows a clean slashed path for the same behaviour. Reading a
+ * literal Location as the general case is what makes those two look contradictory.
  *
  * The POST/PUT arms are the load-bearing ones: a gate that stopped firing for
  * everything would satisfy the HEAD assertion just as well, so "HEAD is 302" only
