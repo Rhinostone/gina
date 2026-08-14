@@ -2875,11 +2875,29 @@ function SuperController(options) {
                     return;
                 }
 
+                // #B353 — HEAD is a SAFE method: it is GET without a response body, so a
+                // redirect must treat it exactly as it treats GET. This gate exists to stop
+                // an UNSAFE method being replayed against the target — its own warning says
+                // "A redirection is not permitted in this scenario", which is a
+                // POST/PUT/DELETE concern — but it tested `!== 'GET'`, so HEAD was swept in
+                // with them. Every consequence was wrong for a safe method: a warning on a
+                // route that explicitly lists HEAD in its own `method` list (the framework's
+                // auto-generated `webroot@<bundle>` route does), a 303 telling the client to
+                // re-issue as GET and fetch a body it deliberately did not ask for, and —
+                // because switching the method made `originalMethod !== req.method` — an
+                // `inheritedData` copy appended to the target that the same request as a GET
+                // never receives. Admitting HEAD converges it on GET: same status, same
+                // Location, no warning.
+                //
+                // Kept as string comparisons rather than a regex, per #P13 below, which
+                // deliberately moved this condition off `/GET/i.test()`.
+                var _reqMethod  = req.method.toUpperCase();
+                var _origMethod = originalMethod ? originalMethod.toUpperCase() : null;
                 // replaced: !/GET/i.test() (#P13)
                 if (
-                    req.method.toUpperCase() !== 'GET'
+                    ( _reqMethod !== 'GET' && _reqMethod !== 'HEAD' )
                     ||
-                    originalMethod && originalMethod.toUpperCase() !== 'GET'
+                    ( _origMethod && _origMethod !== 'GET' && _origMethod !== 'HEAD' )
                 ) { // trying to redirect using the wrong method ?
 
                     console.warn(new Error('Your are trying to redirect using the wrong method: `'+ req.method+'`.\nThis can often occur while redirecting from a controller to another controller or from a bundle to another.\nA redirection is not permitted in this scenario.\nDon\'t panic :)\nSwitching request method to `GET` method instead.\n').message);
