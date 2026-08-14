@@ -86,7 +86,7 @@ var TMP_DIR = '.tmp';
  *
  * @typedef  {Object} StorageDriver
  * @property {function(object, object, function): void} put          - Store a readable stream; `fn(err, {@link StoragePutResult})`.
- * @property {function(string, function): void}         get          - Open a readable stream for `key`; `fn(err, stream)`. Errors on an unknown key — see `stat` for the existence question.
+ * @property {function(string, function): void}         get          - Open a readable stream for `key`; `fn(err, stream)`. Errors on an unknown key — see `stat` for the existence question. Read-verb errors carry a machine `code` (`STORAGE_NO_OBJECT` / `STORAGE_RANGE_UNSATISFIABLE` / `STORAGE_INVALID_RANGE` — see `util.codedError`) so an HTTP serving layer maps 404/416/400 without parsing message text.
  * @property {function(string, number, number, function): void} getRange - Open a readable stream over an INCLUSIVE byte range; `fn(err, stream)`. An over-long `end` is clamped; an unsatisfiable `start` errors (the caller's 416).
  * @property {function(string, function): void}         stat         - Metadata for `key`; `fn(err, meta|null)`. `null` (not an error) when unknown.
  * @property {function(string, function=): void}        release      - Delete object and metadata; `fn(err, existed)`.
@@ -417,7 +417,7 @@ module.exports = function createLocalDriver(name, conf, metaStore) {
                     return fn(null, Readable.from([m.data]));
                 }
                 if ( !fs.existsSync(r.path) ) {
-                    return fn(new Error('[storage:' + name + '] no object for key `' + key + '`'));
+                    return fn(util.codedError('STORAGE_NO_OBJECT', '[storage:' + name + '] no object for key `' + key + '`'));
                 }
                 var rs = fs.createReadStream(r.path);
                 // Armed before the caller can touch it (#B143) — an fs error after
@@ -469,7 +469,7 @@ module.exports = function createLocalDriver(name, conf, metaStore) {
                 throw new Error('[storage:' + name + '] getRange() requires a callback');
             }
             if ( !Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end < start ) {
-                return fn(new Error('[storage:' + name + '] getRange(): invalid range [' + start + ', ' + end + '] — both bounds must be integers with 0 <= start <= end'));
+                return fn(util.codedError('STORAGE_INVALID_RANGE', '[storage:' + name + '] getRange(): invalid range [' + start + ', ' + end + '] — both bounds must be integers with 0 <= start <= end'));
             }
             var r = resolvePath(key);
             if ( r.error ) { return fn(r.error); }
@@ -477,7 +477,7 @@ module.exports = function createLocalDriver(name, conf, metaStore) {
                 if (metaErr) { return fn(metaErr); }
                 if ( m && m.data != null ) {
                     if ( start >= m.data.length ) {
-                        return fn(new Error('[storage:' + name + '] getRange(): start ' + start + ' is beyond the object size (' + m.data.length + ') for key `' + key + '`'));
+                        return fn(util.codedError('STORAGE_RANGE_UNSATISFIABLE', '[storage:' + name + '] getRange(): start ' + start + ' is beyond the object size (' + m.data.length + ') for key `' + key + '`'));
                     }
                     // subarray() is a VIEW, no copy; the array wrap is the same
                     // load-bearing detail as in get() — Readable.from(buffer)
@@ -485,11 +485,11 @@ module.exports = function createLocalDriver(name, conf, metaStore) {
                     return fn(null, Readable.from([ m.data.subarray(start, Math.min(end, m.data.length - 1) + 1) ]));
                 }
                 if ( !fs.existsSync(r.path) ) {
-                    return fn(new Error('[storage:' + name + '] no object for key `' + key + '`'));
+                    return fn(util.codedError('STORAGE_NO_OBJECT', '[storage:' + name + '] no object for key `' + key + '`'));
                 }
                 var size = fs.statSync(r.path).size;
                 if ( start >= size ) {
-                    return fn(new Error('[storage:' + name + '] getRange(): start ' + start + ' is beyond the object size (' + size + ') for key `' + key + '`'));
+                    return fn(util.codedError('STORAGE_RANGE_UNSATISFIABLE', '[storage:' + name + '] getRange(): start ' + start + ' is beyond the object size (' + size + ') for key `' + key + '`'));
                 }
                 // The clamp is EXPLICITNESS, not necessity: measured, both
                 // `createReadStream({end})` and `Buffer.subarray()` already stop
@@ -614,7 +614,7 @@ module.exports = function createLocalDriver(name, conf, metaStore) {
                     return fn(null, { kind: 'inline' });
                 }
                 if ( !fs.existsSync(r.path) ) {
-                    return fn(new Error('[storage:' + name + '] no object for key `' + key + '`'));
+                    return fn(util.codedError('STORAGE_NO_OBJECT', '[storage:' + name + '] no object for key `' + key + '`'));
                 }
                 fn(null, { kind: 'path', path: r.path });
             });

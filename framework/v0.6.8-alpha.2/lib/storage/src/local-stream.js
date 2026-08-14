@@ -1130,7 +1130,7 @@ module.exports = function createLocalStreamDriver(name, conf, metaStore) {
             var r = resolvePath(key);
             if ( r.error ) { return fn(r.error); }
             if ( !fs.existsSync(r.path) ) {
-                return fn(new Error('[storage:' + name + '] no object for key `' + key + '`'));
+                return fn(util.codedError('STORAGE_NO_OBJECT', '[storage:' + name + '] no object for key `' + key + '`'));
             }
             var rs = fs.createReadStream(r.path, { highWaterMark: chunkSize || undefined });
             // Armed before the caller can touch it (#B143) — an fs error after
@@ -1181,16 +1181,16 @@ module.exports = function createLocalStreamDriver(name, conf, metaStore) {
                 throw new Error('[storage:' + name + '] getRange() requires a callback');
             }
             if ( !Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end < start ) {
-                return fn(new Error('[storage:' + name + '] getRange(): invalid range [' + start + ', ' + end + '] — both bounds must be integers with 0 <= start <= end'));
+                return fn(util.codedError('STORAGE_INVALID_RANGE', '[storage:' + name + '] getRange(): invalid range [' + start + ', ' + end + '] — both bounds must be integers with 0 <= start <= end'));
             }
             var r = resolvePath(key);
             if ( r.error ) { return fn(r.error); }
             if ( !fs.existsSync(r.path) ) {
-                return fn(new Error('[storage:' + name + '] no object for key `' + key + '`'));
+                return fn(util.codedError('STORAGE_NO_OBJECT', '[storage:' + name + '] no object for key `' + key + '`'));
             }
             var size = fs.statSync(r.path).size;
             if ( start >= size ) {
-                return fn(new Error('[storage:' + name + '] getRange(): start ' + start + ' is beyond the object size (' + size + ') for key `' + key + '`'));
+                return fn(util.codedError('STORAGE_RANGE_UNSATISFIABLE', '[storage:' + name + '] getRange(): start ' + start + ' is beyond the object size (' + size + ') for key `' + key + '`'));
             }
             var rs = fs.createReadStream(r.path, { start: start, end: Math.min(end, size - 1) });
             var handed = false;
@@ -1298,7 +1298,7 @@ module.exports = function createLocalStreamDriver(name, conf, metaStore) {
             var r = resolvePath(key);
             if ( r.error ) { return fn(r.error); }
             if ( !fs.existsSync(r.path) ) {
-                return fn(new Error('[storage:' + name + '] no object for key `' + key + '`'));
+                return fn(util.codedError('STORAGE_NO_OBJECT', '[storage:' + name + '] no object for key `' + key + '`'));
             }
             fn(null, { kind: 'path', path: r.path });
         },

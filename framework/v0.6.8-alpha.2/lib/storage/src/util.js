@@ -326,11 +326,36 @@ function sanitiseExtension(originalName) {
     return '.' + ext.toLowerCase();
 }
 
+/**
+ * Build an `Error` carrying a machine-readable `code`.
+ *
+ * The read verbs (`get`/`getRange`/`resolve`) mint their errors through this
+ * so an HTTP serving layer can discriminate 404 vs 416 vs 400 without parsing
+ * message text — the message stays the human diagnostic and is byte-identical
+ * to the pre-code era. Codes in use (UPPER_SNAKE, the GinaHttp2Error house
+ * convention): `STORAGE_NO_OBJECT` (unknown / released / vanished key),
+ * `STORAGE_RANGE_UNSATISFIABLE` (start at or beyond the object size — the
+ * caller's 416), `STORAGE_INVALID_RANGE` (malformed bounds — a caller bug).
+ *
+ * @param {string} code    - UPPER_SNAKE machine code, stamped on `err.code`.
+ * @param {string} message - Human-readable diagnostic, unchanged wording.
+ * @returns {Error} The coded error.
+ *
+ * @example
+ * return fn(util.codedError('STORAGE_NO_OBJECT', '[storage:main] no object for key `k`'));
+ */
+function codedError(code, message) {
+    var err  = new Error(message);
+    err.code = code;
+    return err;
+}
+
 module.exports = {
     ulid              : ulid,
     confineToBase     : confineToBase,
     parseSize         : parseSize,
     parseDuration     : parseDuration,
     makeResolvePath   : makeResolvePath,
-    sanitiseExtension : sanitiseExtension
+    sanitiseExtension : sanitiseExtension,
+    codedError        : codedError
 };
