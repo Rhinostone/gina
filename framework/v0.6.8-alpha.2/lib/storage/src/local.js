@@ -75,9 +75,10 @@ var TMP_DIR = '.tmp';
  * Verbs arrive WITH the strategy that needs them. `getRange` (Range serving)
  * has LANDED on every local strategy — it is contract, not strategy detail, and
  * a Range verb that existed only on `stream` would serve nobody, since `sharded`
- * is the zero-config default. The resumable trio (`createUpload` /
- * `writeSegment` / `finalize`) remains `stream`-only and `findByDigest`
- * (content-addressed dedup) `cas`-only; both stay capability-gated.
+ * is the zero-config default. The five resumable verbs (`createUpload` /
+ * `writeSegment` / `statUpload` / `finalize` / `abortUpload`) are `stream`-only
+ * and `findByDigest` (content-addressed dedup) `cas`-only; both stay
+ * capability-gated (`capabilities.resumable`, `capabilities.dedup`).
  *
  * NB `capabilities.ranges` is now true here, but the ENGINES still emit no
  * `Accept-Ranges`/`Content-Range`/206 — HTTP Range serving is its own arc. The
@@ -93,8 +94,13 @@ var TMP_DIR = '.tmp';
  * @property {function(): void}                         close        - Release the metadata handle. Teardown/tests only.
  * @property {object}                                   capabilities - What this driver can do; every consumer must branch on it rather than assume.
  * @property {function(function): void}                 [stats]      - Driver statistics for the operator surface (`storage:stats`); `fn(err, {name, strategy, root, capabilities, store})` — `store` is the metadata store's aggregate counts, or `null` when the store reports no stats. Present on both local strategies.
- * @property {function((object|function)=, function=): void} [sweepNow] - cas-only: run one GC pass now; `{dryRun: true}` lists collectable keys without touching anything. `fn(err, {collected, drained}|{collectable, drained})`. A strategy without a sweep simply lacks the verb — callers branch, never assume.
+ * @property {function((object|function)=, function=): void} [sweepNow] - cas-only: run one GC pass now; `{dryRun: true}` lists collectable keys without touching anything. `fn(err, {collected, drained}|{collectable, drained})`. A strategy without a sweep simply lacks the verb — callers branch, never assume. NB `stream` reclaims abandoned upload sessions on its own schedule but exposes no operator door in v1, so it correctly lacks this verb.
  * @property {function(object, function): void}         [verify]     - cas-only: files↔rows consistency scan (age-gated); see `src/local-cas`.
+ * @property {function(object, function): void}         [createUpload] - stream-only: open a resumable upload session; `fn(err, {uploadId, chunkSize, expectedSize})`. `expectedSize` is REQUIRED — see `src/local-stream`.
+ * @property {function(string, number, object, function): void} [writeSegment] - stream-only: write one segment at a byte offset, out of order and idempotently; `fn(err, {offset, length, received})`.
+ * @property {function(string, function): void}         [statUpload]   - stream-only: what landed and what is missing; `fn(err, {expectedSize, received, missing, complete, …})`. The resumable twin of `stat()`.
+ * @property {function(string, function): void}         [finalize]     - stream-only: verify coverage as an interval union, publish, index; `fn(err, {key, size, contentType})`. Idempotent, with a heal path.
+ * @property {function(string, function=): void}        [abortUpload]  - stream-only: discard a session; `fn(err, {aborted})`. Idempotent.
  */
 
 /**

@@ -15,8 +15,10 @@
  * strategy; the tiering slice adds size tiering (sub-threshold objects live
  * inline in the metadata store — see `inlineThreshold`); the cas slice adds
  * the `cas` strategy (content-addressed, refcounted, GC-swept — see
- * `src/local-cas`); `stream` and `s3` arrive with the demand that needs them,
- * each capability-gated.
+ * `src/local-cas`); the stream slice adds the `stream` strategy (large
+ * sequential media with resumable, out-of-order segment uploads — see
+ * `src/local-stream`); `s3` arrives with the demand that needs it, each
+ * capability-gated.
  *
  * **Keys are opaque.** A caller stores a stream and receives a key; it must
  * never parse, compose or assume anything about that key's shape. That is what
@@ -113,6 +115,15 @@ var createLocalDriver = require('./local');
 var createLocalCasDriver = require('./local-cas');
 
 /**
+ * The `local` adapter / `stream` strategy pair — large sequential media with
+ * resumable, out-of-order segment uploads.
+ *
+ * @inner
+ * @type {function(string, object, object): StorageDriver}
+ */
+var createLocalStreamDriver = require('./local-stream');
+
+/**
  * Strategy name → driver factory. THE dispatch seam: `start()` builds each
  * driver through this map (strategy names are validated before `start()`
  * runs, so a miss here is a programming error, not a config one). Adapters
@@ -124,7 +135,8 @@ var createLocalCasDriver = require('./local-cas');
  */
 var FACTORIES = {
     sharded : createLocalDriver,
-    cas     : createLocalCasDriver
+    cas     : createLocalCasDriver,
+    stream  : createLocalStreamDriver
 };
 
 /**
@@ -155,18 +167,26 @@ var ADAPTERS = ['local'];
  * @constant
  * @type {string[]}
  */
-var STRATEGIES = ['sharded', 'cas'];
+var STRATEGIES = ['sharded', 'cas', 'stream'];
 
 /**
  * Strategies named in the design but not yet implemented. Kept distinct from
  * "unknown" so the boot message can say *deferred* instead of *typo* — an
- * operator who wrote `stream` made a scheduling mistake, not a spelling one.
+ * operator who wrote a designed-but-unshipped name made a scheduling mistake,
+ * not a spelling one.
+ *
+ * **Currently EMPTY**: `cas` left this list when the cas slice shipped, and
+ * `stream` when the stream slice did. The list and its boot branch stay —
+ * cheap, and the next designed-before-implemented strategy (`s3` arrives as an
+ * ADAPTER, so it will be the adapter list's turn) inherits a working message
+ * instead of re-deriving one. Until then the branch is exercised by nothing,
+ * which is recorded rather than hidden.
  *
  * @inner
  * @constant
  * @type {string[]}
  */
-var DEFERRED_STRATEGIES = ['stream'];
+var DEFERRED_STRATEGIES = [];
 
 /**
  * Per-driver keys, BY STRATEGY. Anything else in a driver block is reported
@@ -183,7 +203,13 @@ var DEFERRED_STRATEGIES = ['stream'];
  */
 var STRATEGY_KEYS = {
     sharded : ['adapter', 'strategy', 'root', 'maxObjectSize', 'store', 'inlineThreshold'],
-    cas     : ['adapter', 'strategy', 'root', 'maxObjectSize', 'store', 'inlineThreshold', 'hash', 'fsync', 'sweepInterval', 'sweepGrace']
+    cas     : ['adapter', 'strategy', 'root', 'maxObjectSize', 'store', 'inlineThreshold', 'hash', 'fsync', 'sweepInterval', 'sweepGrace'],
+    // NB `stream` carries NEITHER `inlineThreshold` NOR `hash`, deliberately:
+    // a multi-gigabyte strategy has no business inlining its payload into a
+    // metadata row, and its write path does not hash. Accepting either key
+    // would be exactly the "configured behaviour that never happens" lie this
+    // whole warning exists to prevent, so both warn as ignored instead.
+    stream  : ['adapter', 'strategy', 'root', 'maxObjectSize', 'store', 'chunkSize', 'fsync', 'sessionTtl', 'sessionSweepInterval']
 };
 
 /**
@@ -270,6 +296,64 @@ var DEFAULT_SWEEP_INTERVAL = 15 * 60 * 1000;
 var DEFAULT_SWEEP_GRACE = 60 * 60 * 1000;
 
 /**
+ * Default segment size for `stream` drivers, in bytes. It becomes the write
+ * stream's `highWaterMark` — the same syscall size with no hand-rolled buffer
+ * and no extra copy, so memory stays bounded by the stream machinery rather
+ * than by us — and is echoed to clients as the size the write path is tuned
+ * for. 8MB: large enough that per-segment overheads (an fsync, a marker
+ * create) disappear against the transfer, small enough that re-sending one
+ * after a broken connection is cheap.
+ *
+ * REASONED against a measured mechanism, NOT tuned to a workload: no consumer
+ * with a large-sequential-media workload exists yet, so re-measure when one
+ * appears.
+ *
+ * @inner
+ * @constant
+ * @type {number}
+ */
+var DEFAULT_CHUNK_SIZE = 8 * 1024 * 1024;
+
+/**
+ * Whether `stream` publishes and segment writes fsync by default. `true` —
+ * the durability contract of a RESUMABLE upload is that a range the client
+ * was told is durable actually is, and the cost is ~2% of network-paced
+ * ingest at 100 Mbps (measured; ~19% at 1 Gbps, fsync-dominant at 10 Gbps).
+ * A LAN-ingest consumer sets `fsync: false` and accepts the documented
+ * power-loss window.
+ *
+ * @inner
+ * @constant
+ * @type {boolean}
+ */
+var DEFAULT_STREAM_FSYNC = true;
+
+/**
+ * Default lifetime of an untouched resumable upload session for `stream`
+ * drivers, in ms. REASONED, not benchmarked: it must comfortably exceed a
+ * paused-then-resumed upload over a bad link, and a session holds real disk,
+ * so 24 hours. A zero TTL would eat in-flight sessions and snaps back to this
+ * default (the `sweepGrace` reasoning).
+ *
+ * @inner
+ * @constant
+ * @type {number}
+ */
+var DEFAULT_SESSION_TTL = 24 * 60 * 60 * 1000;
+
+/**
+ * Default period of the abandoned-session sweep for `stream` drivers, in ms.
+ * REASONED, not benchmarked: the sweep gates reclaim latency only — no hot
+ * path — so the default just bounds how long an abandoned session's disk
+ * lingers past its TTL. 1 hour.
+ *
+ * @inner
+ * @constant
+ * @type {number}
+ */
+var DEFAULT_SESSION_SWEEP_INTERVAL = 60 * 60 * 1000;
+
+/**
  * Built drivers, keyed by name. `null` until {@link start} runs — deliberately
  * NOT built at require time, because `test/lib/types-runtime-parity.test.js`
  * requires the whole `lib` registry in-process and any require-time I/O here
@@ -326,6 +410,12 @@ var _default = null;
  *     (which would re-open the sweep-vs-put race) — each falls back to its
  *     default; `'0s'` is legal and silent for `sweepInterval` only (periodic
  *     sweep off);
+ *   - a stream `chunkSize` that is not a unit-suffixed size (or is zero), a
+ *     `fsync` that is not a boolean, a `sessionTtl`/`sessionSweepInterval`
+ *     that is not a unit-suffixed duration, or a zero `sessionTtl` (which
+ *     would reclaim in-flight uploads) — each falls back to its default;
+ *     `'0s'` is legal and silent for `sessionSweepInterval` only (periodic
+ *     session sweep off, the build-time pass still runs);
  *   - driver keys the selected strategy does not consume — they are ignored,
  *     and a silently-ignored key reads as configured behaviour that never
  *     happens (the list is per-strategy: `fsync` is consumed by `cas` and
@@ -525,6 +615,43 @@ function validateConfig(storageBlock, context) {
             }
         }
 
+        if ( d.strategy === 'stream' ) {
+            // `chunkSize` is a size key and takes the size parser's strictness
+            // (a unit is required); it only tunes the write stream's
+            // highWaterMark, so an unusable value degrades to the default
+            // rather than refusing the boot.
+            if ( typeof(d.chunkSize) != 'undefined' && d.chunkSize !== null ) {
+                if ( isNaN(util.parseSize(d.chunkSize)) ) {
+                    out.warnings.push('driver `' + name + '`: `chunkSize` must carry a unit (B/KB/MB/GB, e.g. "8MB") — got ' + JSON.stringify(d.chunkSize) + '; using the default (' + DEFAULT_CHUNK_SIZE + ' bytes)');
+                } else if ( util.parseSize(d.chunkSize) <= 0 ) {
+                    out.warnings.push('driver `' + name + '`: `chunkSize` must be greater than zero — got ' + JSON.stringify(d.chunkSize) + '; using the default (' + DEFAULT_CHUNK_SIZE + ' bytes)');
+                }
+            }
+
+            if ( typeof(d.fsync) != 'undefined' && d.fsync !== null && typeof(d.fsync) != 'boolean' ) {
+                out.warnings.push('driver `' + name + '`: `fsync` must be a boolean — got ' + JSON.stringify(d.fsync) + '; using the default (' + DEFAULT_STREAM_FSYNC + ')');
+            }
+
+            // duration keys, same strictness as the cas pair: a unit is
+            // required, because `'15m'` means minutes here and megabytes in a
+            // size key and neither parser guesses.
+            if ( typeof(d.sessionTtl) != 'undefined' && d.sessionTtl !== null ) {
+                if ( isNaN(util.parseDuration(d.sessionTtl)) ) {
+                    out.warnings.push('driver `' + name + '`: `sessionTtl` must carry a unit (ms/s/m/h/d, e.g. "24h") — got ' + JSON.stringify(d.sessionTtl) + '; using the default (' + DEFAULT_SESSION_TTL + ' ms)');
+                } else if ( util.parseDuration(d.sessionTtl) <= 0 ) {
+                    // a zero TTL would reclaim sessions that are still being
+                    // written to — the same class of foot-gun as a zero
+                    // sweepGrace, so it never means "off"
+                    out.warnings.push('driver `' + name + '`: `sessionTtl` must be greater than zero — a zero TTL would reclaim in-flight uploads; got ' + JSON.stringify(d.sessionTtl) + '; using the default (' + DEFAULT_SESSION_TTL + ' ms)');
+                }
+            }
+            if ( typeof(d.sessionSweepInterval) != 'undefined' && d.sessionSweepInterval !== null ) {
+                if ( isNaN(util.parseDuration(d.sessionSweepInterval)) ) {
+                    out.warnings.push('driver `' + name + '`: `sessionSweepInterval` must carry a unit (ms/s/m/h/d, e.g. "1h"), or be "0s" to disable the periodic sweep — got ' + JSON.stringify(d.sessionSweepInterval) + '; using the default (' + DEFAULT_SESSION_SWEEP_INTERVAL + ' ms)');
+                }
+            }
+        }
+
         var consumed = STRATEGY_KEYS[d.strategy];
         var extra = Object.keys(d).filter(function (k) { return consumed.indexOf(k) < 0; });
         if ( extra.length > 0 ) {
@@ -609,6 +736,20 @@ function resolveDriverConf(conf) {
         resolved.sweepInterval = ( isNaN(si) || si < 0 ) ? DEFAULT_SWEEP_INTERVAL : si; // '0s' is legal: periodic sweep off
         var sg = util.parseDuration(conf.sweepGrace);
         resolved.sweepGrace = ( isNaN(sg) || sg <= 0 ) ? DEFAULT_SWEEP_GRACE : sg;      // 0 grace would re-open the sweep race
+    }
+
+    // stream defaults, same pattern. NB `inlineThreshold` is resolved above
+    // for every strategy but the stream factory ignores it — the key is not in
+    // STRATEGY_KEYS.stream, so setting it warns as ignored, and
+    // capabilities.inline stays false.
+    if ( conf.strategy === 'stream' ) {
+        var cs = util.parseSize(conf.chunkSize);
+        resolved.chunkSize = ( isNaN(cs) || cs <= 0 ) ? DEFAULT_CHUNK_SIZE : cs;
+        resolved.fsync = ( typeof conf.fsync === 'boolean' ) ? conf.fsync : DEFAULT_STREAM_FSYNC;
+        var st = util.parseDuration(conf.sessionTtl);
+        resolved.sessionTtl = ( isNaN(st) || st <= 0 ) ? DEFAULT_SESSION_TTL : st;      // 0 would reclaim in-flight uploads
+        var ssi = util.parseDuration(conf.sessionSweepInterval);
+        resolved.sessionSweepInterval = ( isNaN(ssi) || ssi < 0 ) ? DEFAULT_SESSION_SWEEP_INTERVAL : ssi; // '0s' is legal: periodic sweep off
     }
 
     return resolved;
@@ -886,5 +1027,9 @@ module.exports = {
     _DEFAULT_CAS_FSYNC        : DEFAULT_CAS_FSYNC,
     _DEFAULT_SWEEP_INTERVAL   : DEFAULT_SWEEP_INTERVAL,
     _DEFAULT_SWEEP_GRACE      : DEFAULT_SWEEP_GRACE,
+    _DEFAULT_CHUNK_SIZE       : DEFAULT_CHUNK_SIZE,
+    _DEFAULT_STREAM_FSYNC     : DEFAULT_STREAM_FSYNC,
+    _DEFAULT_SESSION_TTL      : DEFAULT_SESSION_TTL,
+    _DEFAULT_SESSION_SWEEP_INTERVAL : DEFAULT_SESSION_SWEEP_INTERVAL,
     _parseDuration            : util.parseDuration
 };
