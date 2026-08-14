@@ -727,14 +727,41 @@ module.exports = function createLocalCasDriver(name, conf, metaStore) {
             var ws      = null;
             var head    = [];
 
+            /**
+             * Abandon the put: tear both streams down, remove the temp, report.
+             *
+             * #B358 — the unlink WAITS for the write stream to close, and the
+             * callback waits with it, for the reason spelled out in `local.js`:
+             * `createWriteStream()` opens asynchronously, so an error arriving
+             * right after `spill()` reaches here while the `open(2)` is still
+             * in the threadpool, and an `existsSync`-gated unlink reads false,
+             * skips, and orphans the temp the worker thread creates a tick
+             * later. cas is vulnerable in its own right, not merely by shape:
+             * fault-injecting that one false `existsSync` answer orphaned a
+             * real temp here exactly as it did in `local.js`. It had simply
+             * never been SEEN, because this driver's interrupted-put tests
+             * destroy the source on a `setImmediate`, which hands the open the
+             * extra tick that hides the window. A null `ws` means `spill()`
+             * never ran; `force` makes that a no-op.
+             *
+             * @inner
+             * @param {*} err - The failure to report; wrapped if not an Error.
+             * @returns {void}
+             */
             var onError = function(err) {
                 if (settled) return;
                 settled = true;
                 head = null;
                 try { stream.destroy(); } catch (_e) {}
-                if (ws) { try { ws.destroy(); } catch (_e) {} }
-                try { if ( fs.existsSync(tmp) ) fs.unlinkSync(tmp); } catch (_e) {}
-                fn(( err instanceof Error ) ? err : new Error(String(err)));
+
+                var finish = function() {
+                    try { fs.rmSync(tmp, { force: true }); } catch (_e) {}
+                    fn(( err instanceof Error ) ? err : new Error(String(err)));
+                };
+
+                if ( !ws || ws.closed || ws.destroyed ) { return finish(); }
+                ws.once('close', finish);
+                try { ws.destroy(); } catch (_e) { finish(); }
             };
 
             /**

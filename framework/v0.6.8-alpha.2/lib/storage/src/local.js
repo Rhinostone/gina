@@ -246,14 +246,42 @@ module.exports = function createLocalDriver(name, conf, metaStore) {
                 }
             }
 
+            /**
+             * Abandon the put: tear both streams down, remove the temp, report.
+             *
+             * #B358 — the unlink WAITS for the write stream to close, and the
+             * callback waits with it. `createWriteStream()` opens
+             * asynchronously, so an error arriving right after `spill()` — the
+             * source failing on the chunk that crossed `inlineThreshold` is the
+             * measured case — reaches here while the `open(2)` is still in the
+             * threadpool: the temp does not exist YET at this instant but lands
+             * a tick later, on the worker thread, with no event-loop turn in
+             * between for a synchronous check to see. The previous
+             * `existsSync`-gated unlink therefore read false, skipped, and
+             * orphaned the temp. A null `ws` means `spill()` never ran and no
+             * temp was ever created, so that arm finishes immediately; `force`
+             * makes the unlink a no-op there rather than a special case.
+             *
+             * @inner
+             * @param {*} err - The failure to report; wrapped if not an Error.
+             * @returns {void}
+             */
             var onError = function(err) {
                 if (settled) return;
                 settled = true;
                 head = null;
                 try { stream.destroy(); } catch (_e) {}
-                if (ws) { try { ws.destroy(); } catch (_e) {} }
-                try { if ( fs.existsSync(tmp) ) fs.unlinkSync(tmp); } catch (_e) {}
-                fn(( err instanceof Error ) ? err : new Error(String(err)));
+
+                var finish = function() {
+                    try { fs.rmSync(tmp, { force: true }); } catch (_e) {}
+                    fn(( err instanceof Error ) ? err : new Error(String(err)));
+                };
+
+                // No ws (never spilled), or one that already emitted 'close' —
+                // neither will emit it again, so those arms must not wait.
+                if ( !ws || ws.closed || ws.destroyed ) { return finish(); }
+                ws.once('close', finish);
+                try { ws.destroy(); } catch (_e) { finish(); }
             };
 
             /**
