@@ -36,12 +36,14 @@ var console = require('./logger');
  * entry name, and let `gna.js` wire it at boot (before the first `put()`, since
  * store adoption is once-only).
  *
- * NOTE: no connector ships a storage-store implementation yet — connector
- * backends are demand-gated (the `lib/audit-store` shipping order). Configuring
- * a driver's `store` today therefore refuses the boot with a clear message; the
- * embedded SQLite backend (no `store` key) is the v1 path. That embedded
- * default is documented single-process-per-driver-root: two bundles sharing one
- * root need a connector-backed store, which is exactly what this seam is for.
+ * NOTE: `couchbase` is the first connector to ship an implementation
+ * (`core/connectors/couchbase/lib/storage-store.js`); the others remain
+ * demand-gated (the `lib/audit-store` shipping order), and naming one of them
+ * as a driver's `store` refuses the boot with a clear message. The embedded
+ * SQLite backend (no `store` key) stays the zero-config path, and is
+ * documented single-process-per-driver-root: two bundles — or two replicas —
+ * sharing one root need a connector-backed store, which is exactly what this
+ * seam is for.
  */
 
 /**
@@ -51,25 +53,33 @@ var console = require('./logger');
  * @class StorageStore
  * @constructor
  *
- * @param {string} connName - `connectors.json` entry name (referenced by `settings.json`'s
- *                            `storage.drivers.<name>.store`). The entry's `.connector` field
- *                            selects the implementation (a connector without a
- *                            `lib/storage-store.js` is rejected).
- * @returns {object}        - A `StorageMetaStore` instance (`set/get/remove/close`; rows may
- *                            carry an inline payload — see the typedef in
- *                            `lib/storage/src/meta-store.js` for the binary-safety contract).
- * @throws {Error}          - When the entry is missing, has no `connector` field, or the
- *                            connector has no storage-store implementation. `gna.js`
- *                            treats a throw as fatal — an explicitly configured store must
- *                            build, never degrade silently to the embedded backend, which
- *                            would put the metadata somewhere the operator did not ask for.
+ * @param {string} connName   - `connectors.json` entry name (referenced by `settings.json`'s
+ *                              `storage.drivers.<name>.store`). The entry's `.connector` field
+ *                              selects the implementation (a connector without a
+ *                              `lib/storage-store.js` is rejected).
+ * @param {string} driverName - Storage driver this store will back. Passed through to the
+ *                              implementation, which uses it to NAMESPACE its rows: without
+ *                              it, two drivers pointing at one connectors entry would share
+ *                              a key space and silently collide (cas blob keys are
+ *                              content-derived and therefore identical across drivers, and
+ *                              each driver writes its own `.driver` strategy stamp). With it,
+ *                              sharing one entry across drivers is fully supported.
+ * @returns {object}          - A `StorageMetaStore` instance (`set/get/remove/close`; rows may
+ *                              carry an inline payload — see the typedef in
+ *                              `lib/storage/src/meta-store.js` for the binary-safety contract).
+ * @throws {Error}            - When the entry is missing, has no `connector` field, or the
+ *                              connector has no storage-store implementation. `gna.js`
+ *                              treats a throw as fatal — an explicitly configured store must
+ *                              build, never degrade silently to the embedded backend, which
+ *                              would put the metadata somewhere the operator did not ask for.
  *
  * @example
  *   // settings.json:    { "storage": { "drivers": { "assets": { "store": "assetsDb" } } } }
- *   // connectors.json:  { "assetsDb": { "connector": "sqlite", "file": "/data/assets-meta.db" } }
- *   var store = new StorageStore('assetsDb'); // done by gna.js at boot
+ *   // connectors.json:  { "assetsDb": { "connector": "couchbase", "host": "127.0.0.1",
+ *   //                                   "database": "gina_storage" } }
+ *   var store = new StorageStore('assetsDb', 'assets'); // done by gna.js at boot
  */
-function StorageStore(connName) {
+function StorageStore(connName, driverName) {
 
     if (typeof connName !== 'string' || connName.length === 0) {
         throw new Error('[StorageStore] a connectors.json entry name is required (got: ' + JSON.stringify(connName) + ')');
@@ -102,8 +112,8 @@ function StorageStore(connName) {
         throw new Error('[StorageStore] connector `' + connector + '` has no storage-store implementation (`' + filename + '` is missing)');
     }
 
-    var store = require(filename)(connConf, bundle);
-    console.debug('[storage-store] loaded connector=' + connector + ' bundle=' + bundle + ' (entry: ' + connName + ')');
+    var store = require(filename)(connConf, bundle, driverName);
+    console.debug('[storage-store] loaded connector=' + connector + ' bundle=' + bundle + ' driver=' + driverName + ' (entry: ' + connName + ')');
     return store;
 };
 

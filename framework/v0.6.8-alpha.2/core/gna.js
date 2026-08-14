@@ -1689,7 +1689,9 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
                                             for (var _stoN in _stoDrivers) {
                                                 if ( typeof(_stoDrivers[_stoN].store) == 'string' && _stoDrivers[_stoN].store.length > 0 ) {
                                                     try {
-                                                        _stoStores[_stoN] = lib.StorageStore(_stoDrivers[_stoN].store);
+                                                        // the driver name namespaces the store's rows, so two
+                                                        // drivers may share one connectors.json entry
+                                                        _stoStores[_stoN] = lib.StorageStore(_stoDrivers[_stoN].store, _stoN);
                                                     } catch (stoStoreErr) {
                                                         var _stoStoreMsg = '[storage] driver `' + _stoN + '` names store `' + _stoDrivers[_stoN].store + '`, which could not be built — aborting boot: ' + (stoStoreErr.message || stoStoreErr);
                                                         console.emerg(_stoStoreMsg + '\n' + (stoStoreErr.stack || ''));

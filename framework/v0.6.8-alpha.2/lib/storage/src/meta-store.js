@@ -112,8 +112,19 @@ function noop() {}
  * primitive is) and inherits the documented residual: across PROCESSES, the
  * sweep's unlink can in principle race a same-content publish in the
  * nanoseconds between claim and unlink — which is why the sweep only collects
- * blobs at zero for longer than the grace window, and why multi-process sweep
- * coordination arrives WITH the first connector implementation, not before.
+ * blobs at zero for longer than the grace window.
+ *
+ * Multi-process sweep COORDINATION was expected to arrive with the first
+ * connector store; measured against that store (couchbase, 2026-08-14), it
+ * turned out to need no election layer, because `removeIfZero`'s atomicity IS
+ * the coordination: several processes may sweep one root concurrently and
+ * exactly one claim per blob wins, every loser reading a compare-and-set
+ * failure and skipping. An election would also have made `storage:gc` report
+ * `collected: 0` on whichever process did not hold the lease. The residual
+ * above is UNCHANGED by that finding — it is put-vs-sweep, not
+ * sweeper-vs-sweeper, so no coordination between sweepers could have closed
+ * it; the grace window, the put-side heal and `storage:verify` remain its
+ * mitigations.
  *
  * @typedef  {Object} StorageMetaStore
  * @property {function(string, StorageMeta, function=): void} set    - Upsert `meta` under `key`; `fn(err, meta)`. MUST report failure through the callback, never by throwing. NEVER call it on a refcounted row — REPLACE semantics would reset the count; `acquireRef` owns those rows.
