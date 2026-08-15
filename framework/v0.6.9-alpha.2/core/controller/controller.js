@@ -6441,12 +6441,19 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
      * Reaching every connected client requires `option.broadcast === true`,
      * supplied by your code rather than inferred from a missing value.
      *
+     * The channel itself is an isaac-engine facility. On the express engine there
+     * is none, so a push sends nothing, warns, and reports
+     * `PUSH_CHANNEL_NOT_CONFIGURED` to a supplied callback rather than failing the
+     * request (#B371) — a structural condition, identical on every call.
+     *
      * @param {object|null}  payload             - Data to push; falls back to `req[method].payload` when `null`
      * @param {object}       [option]            - Push options, also forwarded to the transport (e.g. `{ compress: true }`)
      * @param {string}       [option.sessionID]  - Explicit recipient session id; defaults to the caller's own session
      * @param {boolean}      [option.broadcast]  - `true` (strictly) to reach every connected client
      * @param {string}       [option.section]    - Section stamped onto the payload; falls back to `req[method].section`
-     * @param {function}     [callback]          - `callback(err, result)`
+     * @param {function}     [callback]          - `callback(err, result)`; receives a
+     *                                             `PUSH_CHANNEL_NOT_CONFIGURED` error when this
+     *                                             server instance has no engine.io channel
      * @returns {void}
      *
      * @example
@@ -6473,6 +6480,25 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
 
         var req = local.req, res = local.res;
         var method  = req.method.toLowerCase();
+
+        // #B371 — the push channel is an isaac-engine facility: `serverInstance.eio`
+        // is attached there and nowhere else, so on the express engine the client
+        // lookup further down dereferenced `undefined` and surfaced as an opaque
+        // TypeError-derived 500 that named neither push nor the missing channel.
+        // Refuse by name instead, the way the out-of-request sibling does
+        // (`lib/push` → PUSH_CHANNEL_NOT_CONFIGURED): warn, tell a caller that
+        // passed a callback, and send nothing. This is a structural, process-wide
+        // condition — unlike the per-call no-recipient case below — so it can
+        // never resolve on a later call and is reported the same way every time.
+        if ( self.serverInstance == null || self.serverInstance.eio == null ) {
+            console.warn('[CONTROLLER][ push ] no engine.io channel on this server instance, so nothing was sent. The push channel needs the isaac engine with `settings.json > server.ioServer.integrationMode: "attach"`; the express engine has no `eio`.');
+            if ( typeof(callback) == 'function' ) {
+                var noChannelErr  = new Error('no engine.io channel on this server instance. The push channel needs the isaac engine with `settings.json > server.ioServer.integrationMode: "attach"`; the express engine has no `eio`.');
+                noChannelErr.code = 'PUSH_CHANNEL_NOT_CONFIGURED';
+                callback(noChannelErr);
+            }
+            return;
+        }
 
         // #B364 — the recipient is NEVER read from the request body. It used to be
         // (`req[method].sessionID`), which let a caller aim a push at any session by
@@ -6548,9 +6574,11 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                             && clients[s].sessionId == sessionId
                         )
                     ) {
-                        // #B364 — was `options`, an identifier that exists nowhere in this
-                        // scope: every call threw ReferenceError here before sending, so
-                        // push() had never delivered a packet in any published release.
+                        // #B364 — was `options`: SuperController's own constructor
+                        // parameter, in scope here by closure, where the caller's
+                        // `option` was meant. It resolved, so nothing threw and the
+                        // packet WAS sent — carrying the controller's options in
+                        // place of the caller's, which never reached the transport.
                         clients[s].sendPacket("message", payload, option, callback);
                     }
                 }
