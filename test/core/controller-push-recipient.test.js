@@ -1,25 +1,33 @@
 /**
  * #B364 — SuperController.push() recipient contract.
  *
- * Two defects shipped together in every release up to 0.6.7:
+ * The shipped defect, live in every release up to and including 0.6.7: the
+ * recipient was read from the REQUEST BODY (`req[method].sessionID`), so a
+ * caller could aim a push at any session by sending an id — and an ABSENT id
+ * meant "send to EVERY connected client". The payload defaults to request
+ * input too, so any route reaching push() handed an unprivileged caller a
+ * broadcast primitive. Measured pre-fix with a faithful closure: no id in the
+ * body delivered to every socket; an id in the body delivered to that session.
  *
- *   1. the send site referenced `options` (plural) while the parameter is
- *      `option` (singular) and no `options` exists in scope, so every call
- *      threw ReferenceError BEFORE sending — push() had never delivered a
- *      packet to anyone;
- *   2. the recipient was read from the REQUEST BODY (`req[method].sessionID`)
- *      and an absent id meant "send to EVERY connected client" — so fixing (1)
- *      alone would have activated a broadcast primitive any caller could aim.
- *
+ * ⚠️ INSTRUMENT WARNING — READ BEFORE REUSING THIS HARNESS.
  * controller.js cannot be required standalone (it needs the framework
- * bootstrap), so these tests SLICE THE REAL SHIPPED BODY of push() out of the
- * file and execute it with push()'s closure variables passed as parameters.
- * Every identifier therefore resolves exactly as it does in production — which
- * is the whole point: a retyped replica could not have caught defect (1).
+ * bootstrap), so these tests slice the real shipped body of push() out of the
+ * file and execute it. `new Function` compiles its body in GLOBAL scope and
+ * captures NO lexical closure, so every identifier push() closes over must be
+ * supplied deliberately. `push()` is nested inside `function
+ * SuperController(options)`, and the send site's `options` is THAT CONSTRUCTOR
+ * PARAMETER — not a free variable. A harness that omits it manufactures a
+ * ReferenceError that production never raises, and will report "nothing is
+ * ever delivered" no matter what the code does. That mistake was made during
+ * this triage and produced a confidently wrong "not exploitable" verdict, so:
+ * model the closure, and prove it by checking the harness reproduces the
+ * PRE-fix behaviour you already know to be true.
  *
  * §01 source-pins the fixed shape so the slice cannot silently drift.
  * §07 is the INSTRUMENT VALIDATION: a case that must DELIVER. Without it the
- * zero-delivery assertions below cannot be distinguished from a broken probe.
+ * zero-delivery assertions below cannot be distinguished from a broken probe —
+ * though note that a delivery control alone does NOT catch the scope error
+ * above, which is exactly why it went unnoticed.
  */
 var { describe, it } = require('node:test');
 var assert = require('node:assert/strict');
