@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'renderStream() no longer throws a swallowed TypeError at the end of every streamed response: the post-end headersSent bookkeeping assignment hits a getter-only accessor on real response objects under strict mode, detouring each stream through a late error path and silently dropping the Inspector Flow timeline''s stream-write/total entries. The wire output was always correct — the timeline now survives, and the assignment is guarded on both engine arms.'
-time: 2026-08-14T20:38:36+01:00
