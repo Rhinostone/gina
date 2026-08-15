@@ -130,6 +130,22 @@ function Build(opt, cmd) {
 
         var bundle = self.bundles[b];
 
+        // #B373 — per-scope deployment. This is the BULK verb: it walks every bundle
+        // in the project, so a bundle not deployed in the scope being built is skipped
+        // with a notice rather than refused — refusing would make one parked bundle
+        // block the whole project build. (The single-target `bundle:build` refuses
+        // instead, because there the exclusion is what the operator explicitly asked
+        // for.) A malformed `scopes` is still a hard error: it is a manifest defect,
+        // not an opt-out.
+        var _entry = local.manifest.bundles[bundle];
+        if ( _entry && typeof(_entry.scopes) != 'undefined' && _entry.scopes !== null && !Array.isArray(_entry.scopes) ) {
+            return end( new Error('[ manifest ] `bundles.'+ bundle +'.scopes` must be an array of scope names (got '+ typeof(_entry.scopes) +'). Remove the key to deploy `'+ bundle +'` in every scope, or list the scopes it belongs to.') );
+        }
+        if ( _entry && Array.isArray(_entry.scopes) && _entry.scopes.indexOf(process.env.NODE_SCOPE) < 0 ) {
+            console.info('[ BUILD ] Skipping bundle [ '+ bundle +' ]: not deployed in scope `'+ process.env.NODE_SCOPE +'` (declared scopes: '+ ( _entry.scopes.length ? '`'+ _entry.scopes.join('`, `') +'`' : 'none' ) +').');
+            return buildBundle(b+1);
+        }
+
         local.envs          = self.envs.slice();
         local.scopes        = self.scopes.slice();
         // var releasesPathObj = new _(self.projects[self.projectName].path +'/releases', true);
@@ -137,6 +153,14 @@ function Build(opt, cmd) {
             // per scope
             for (let i = 0, len = local.scopes.length; i < len; i++) {
                 let scope = local.scopes[i]
+                // #B373 — do not seed a scope the bundle opts out of; this loop walks
+                // EVERY project scope, so unfiltered it regrows the opted-out entries.
+                if (
+                    Array.isArray(local.manifest.bundles[bundle].scopes)
+                    && local.manifest.bundles[bundle].scopes.indexOf(scope) < 0
+                ) {
+                    continue;
+                }
                 if ( typeof(local.manifest.bundles[bundle].releases[scope]) == 'undefined' ) {
                     local.manifest.bundles[bundle].releases[scope] = {}
                 }

@@ -2093,12 +2093,59 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
             , path  = null
             , packs = project.bundles
         ;
+
+        /**
+         * Whether a manifest bundle entry is deployed in the given scope (#B373).
+         *
+         * TWIN of `isBundleDeployedInScope` in `core/config.js` — this path runs
+         * BEFORE Config exists and cannot reach that closure, so the predicate is
+         * duplicated deliberately. Keep both in sync: `scopes` absent/null means
+         * every scope (back-compat), `[]` means none, a non-array is invalid.
+         *
+         * @inner
+         * @private
+         * @param {object} bundleEntry - The bundle's manifest entry
+         * @param {string} scopeName - Scope being mounted
+         * @returns {boolean} `true` when deployed in `scopeName`
+         */
+        var isBundleDeployedInScope = function(bundleEntry, scopeName) {
+            if ( !bundleEntry || typeof(bundleEntry.scopes) == 'undefined' || bundleEntry.scopes === null ) {
+                return true;
+            }
+            if ( !Array.isArray(bundleEntry.scopes) ) {
+                return false;
+            }
+            return bundleEntry.scopes.indexOf(scopeName) > -1;
+        };
+
         if (isLoadedThroughCLI) {
             appName = getContext('bundle');
             if (!isPath) {
                 //appName = getContext('bundle');
                 if (typeof (packs[appName].version) == 'undefined' && typeof (packs[appName].tag) != 'undefined') {
                     packs[appName].version = packs[appName].tag
+                }
+                // #B373 — refuse by name BEFORE the release deref below. This deref sits
+                // outside any try, so an opted-out bundle used to die here as an opaque
+                // TypeError before Config (and its named refusal) ever ran. The type
+                // check comes first: a malformed `scopes` is a manifest error, and
+                // reporting it as "not deployed" would send the operator hunting the
+                // wrong thing (the predicate returns false for both).
+                if (
+                    typeof (packs[appName].scopes) != 'undefined' && packs[appName].scopes !== null
+                    && !Array.isArray(packs[appName].scopes)
+                ) {
+                    return abort('[ manifest ] `bundles.' + appName + '.scopes` must be an array of scope names (got '
+                        + typeof (packs[appName].scopes) + '). Remove the key to deploy `' + appName + '` in every scope, '
+                        + 'or list the scopes it belongs to.');
+                }
+                if ( !isBundleDeployedInScope(packs[appName], scope) ) {
+                    return abort('[ scope ] cannot mount `'+ appName +'` in scope `'+ scope +'`: the bundle is not deployed there. '
+                        + '`bundles.'+ appName +'.scopes` in manifest.json declares '
+                        + ( Array.isArray(packs[appName].scopes) && packs[appName].scopes.length
+                                ? '`'+ packs[appName].scopes.join('`, `') +'`'
+                                : 'no scope at all' )
+                        + '. Add `'+ scope +'` to that list, or start the bundle in a scope it belongs to.');
                 }
                 packs[appName].releases[scope][env].target = 'releases/' + appName + '/' + scope + '/' + env + '/' + packs[appName].version;
                 path = (isDev) ? packs[appName].src : packs[appName].releases[scope][env].target
@@ -2127,6 +2174,13 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
                 for (let bundle in packs) {
                     //is bundle ?
                     let tmp = '';
+                    // #B373 — a bundle not deployed in this scope can never be the one
+                    // being mounted here, and its release deref below sits in a try whose
+                    // catch ABORTS the whole mount — so without this skip one opted-out
+                    // sibling would take the process down at any non-dev scope.
+                    if ( !isBundleDeployedInScope(packs[bundle], scope) ) {
+                        continue;
+                    }
                     // For all but dev
                     if (
                         typeof (packs[bundle].releases) != 'undefined'

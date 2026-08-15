@@ -668,6 +668,36 @@ function Config(opt, contextResetNeeded) {
     // }
 
     /**
+     * Whether a manifest bundle entry is deployed in the given scope.
+     *
+     * `bundles[<name>].scopes` is an OPTIONAL allow-list of scope names — the
+     * same semantics as a route's rule-level `scopes`: the key ABSENT (or null)
+     * means every scope (back-compat, the historical behaviour), an empty array
+     * means no scope at all (the bundle is parked), and a non-array is INVALID —
+     * callers fail fast on that shape with a named error before relying on this
+     * predicate, which returns false for it only as a defensive default.
+     *
+     * A twin of this predicate lives in `core/gna.js` (the mount-resolution
+     * path runs before Config and cannot reach this closure) — keep the two
+     * in sync.
+     *
+     * @inner
+     * @private
+     * @param {object} bundleEntry - The bundle's `manifest.json` entry (`bundles[<name>]`)
+     * @param {string} scopeName - Scope being booted/loaded
+     * @returns {boolean} `true` when the bundle is deployed in `scopeName`
+     */
+    var isBundleDeployedInScope = function(bundleEntry, scopeName) {
+        if ( !bundleEntry || typeof(bundleEntry.scopes) == 'undefined' || bundleEntry.scopes === null ) {
+            return true;
+        }
+        if ( !Array.isArray(bundleEntry.scopes) ) {
+            return false;
+        }
+        return bundleEntry.scopes.indexOf(scopeName) > -1;
+    }
+
+    /**
      * Merges the user's project config (`userConf`) against the framework's
      * `env.json` template, resolving port assignments, bundle paths, model
      * paths, and hostname substitutions for every bundle/env/scope combination.
@@ -726,6 +756,27 @@ function Config(opt, contextResetNeeded) {
             return callback(err);
         }
 
+        // #B373 — the STARTING bundle is a special case: skipping it would leave the
+        // boot with no bundle to serve and it would die further down in the #B181(b)
+        // env.json guard, whose message describes the wrong cause entirely. Refuse
+        // here instead, naming the scope and the one-line remedy. Reaches exit(1)
+        // through the same sink #B372 installed on this callback.
+        if (
+            typeof(pkg) != 'undefined' && pkg !== null
+            && typeof(pkg[self.startingApp]) != 'undefined'
+            && !isBundleDeployedInScope(pkg[self.startingApp], scope)
+        ) {
+            let _startingScopeError = new Error(
+                '[ scope ] cannot start `'+ self.startingApp +'` in scope `'+ scope +'`: the bundle is not deployed there. '
+                + '`bundles.'+ self.startingApp +'.scopes` in manifest.json declares '
+                + ( Array.isArray(pkg[self.startingApp].scopes) && pkg[self.startingApp].scopes.length
+                        ? '`'+ pkg[self.startingApp].scopes.join('`, `') +'`'
+                        : 'no scope at all' )
+                + '. Add `'+ scope +'` to that list, or start the bundle in a scope it belongs to.'
+            );
+            return callback(_startingScopeError);
+        }
+
 
         // For each app.
         var isCacheless         = self.isCacheless()
@@ -772,6 +823,22 @@ function Config(opt, contextResetNeeded) {
             console.debug('[CONFIG] Checking if application [ '+ app +' ] is registered ');
             if ( typeof(pkg[app]) == 'undefined' ) {
                 console.debug('[CONFIG] Skipping app [ '+ app +' ]; not registered ...');
+                continue;
+            }
+
+            // #B373 — per-scope deployment. `bundles[<name>].scopes` is an optional
+            // allow-list: absent means every scope (back-compat), so this can only
+            // skip a bundle whose manifest OPTS OUT of the scope being booted. A
+            // non-array is a manifest error, not an opt-out — refuse rather than
+            // silently parking the bundle everywhere.
+            if ( typeof(pkg[app].scopes) != 'undefined' && pkg[app].scopes !== null && !Array.isArray(pkg[app].scopes) ) {
+                let _scopesTypeError = new Error('[ manifest ] `bundles.'+ app +'.scopes` must be an array of scope names (got '+ typeof(pkg[app].scopes) +'). Remove the key to deploy `'+ app +'` in every scope, or list the scopes it belongs to.');
+                return callback(_scopesTypeError);
+            }
+            if ( !isBundleDeployedInScope(pkg[app], scope) ) {
+                // Say so rather than letting the bundle vanish from the boot with
+                // nothing explaining why — the #B183 skipped-sibling lesson.
+                console.warn('[CONFIG] Skipping bundle [ '+ app +' ]: not deployed in scope `'+ scope +'` (declared scopes: '+ (pkg[app].scopes.length ? '`'+ pkg[app].scopes.join('`, `') +'`' : 'none') +'). Add `'+ scope +'` to `bundles.'+ app +'.scopes` in manifest.json to deploy it here.');
                 continue;
             }
 

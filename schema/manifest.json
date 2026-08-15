@@ -75,6 +75,12 @@
           "description": "Path to the bundle symlink under the project bundles directory, relative to the project root.",
           "examples": ["bundles/api", "bundles/frontend"]
         },
+        "scopes": {
+          "type": "array",
+          "description": "Optional allow-list of scopes this bundle is deployed in. ABSENT (or null) means every scope — the default, and the historical behaviour. An empty array parks the bundle: it is built and booted in no scope at all. Same semantics as a route's rule-level `scopes`. A bundle excluded from the scope being booted is skipped with a notice; starting it, or explicitly building it, in an excluded scope is refused by name.",
+          "items": { "type": "string" },
+          "examples": [["local"], ["local", "staging"], []]
+        },
         "releases": {
           "type": "object",
           "description": "Release build paths, keyed by scope then environment.",

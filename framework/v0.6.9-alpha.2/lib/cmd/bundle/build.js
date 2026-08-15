@@ -82,6 +82,33 @@ function Build(opt, cmd) {
         // Getting manifest
         local.manifest = JSON.clone(self.projectData);
 
+        // #B373 — per-scope deployment. `bundles[<name>].scopes` is an optional
+        // allow-list (absent = every scope). This verb targets ONE bundle by name,
+        // so an excluded target is an EXPLICIT ask for something the manifest says
+        // is not deployed here — refuse by name rather than silently producing no
+        // artifact, which on a deploy script would read as success.
+        var _buildTargets = ( self.bundles || [] ).slice();
+        for (let _b = 0, _bLen = _buildTargets.length; _b < _bLen; ++_b) {
+            let _target = _buildTargets[_b]
+                , _entry = local.manifest.bundles[_target]
+            ;
+            if ( !_entry ) {
+                continue;
+            }
+            if (
+                typeof(_entry.scopes) != 'undefined' && _entry.scopes !== null
+                && !Array.isArray(_entry.scopes)
+            ) {
+                return end( new Error('[ manifest ] `bundles.'+ _target +'.scopes` must be an array of scope names (got '+ typeof(_entry.scopes) +'). Remove the key to deploy `'+ _target +'` in every scope, or list the scopes it belongs to.') );
+            }
+            if ( Array.isArray(_entry.scopes) && _entry.scopes.indexOf(process.env.NODE_SCOPE) < 0 ) {
+                return end( new Error('Cannot build `'+ _target +'` for scope `'+ process.env.NODE_SCOPE +'`: the bundle is not deployed there. '
+                    + '`bundles.'+ _target +'.scopes` in manifest.json declares '
+                    + ( _entry.scopes.length ? '`'+ _entry.scopes.join('`, `') +'`' : 'no scope at all' )
+                    + '. Add `'+ process.env.NODE_SCOPE +'` to that list to build it here.') );
+            }
+        }
+
         globalBuildScripts = ( typeof(local.manifest.buildScripts) != 'undefined' ) ? local.manifest.buildScripts : null;
 
         // User Pre build
@@ -164,6 +191,16 @@ function Build(opt, cmd) {
             // per scope
             for (let i = 0, len = local.scopes.length; i < len; i++) {
                 let scope = local.scopes[i]
+                // #B373 — do not seed a scope the bundle opts out of. This loop walks
+                // EVERY project scope (not just --scope), so without the filter it
+                // re-creates the release entries the allow-list exists to remove, and
+                // the opt-out silently regrows on the next build.
+                if (
+                    Array.isArray(local.manifest.bundles[bundle].scopes)
+                    && local.manifest.bundles[bundle].scopes.indexOf(scope) < 0
+                ) {
+                    continue;
+                }
                 if ( typeof(local.manifest.bundles[bundle].releases[scope]) == 'undefined' ) {
                     local.manifest.bundles[bundle].releases[scope] = {}
                 }
