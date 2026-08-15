@@ -28,7 +28,18 @@
  *
  * **Path tracking.** The dotted paths that were substituted are recorded
  * in an internal `WeakMap`; callers can retrieve them via
- * `getResolvedPaths(config)` to support future log-redaction wrappers.
+ * `getResolvedPaths(config)`.
+ *
+ * Scope of that hook, measured (#B274) — it is NOT a general redaction
+ * substrate, and in particular it cannot serve the Inspector. Two reasons,
+ * either sufficient: the paths address the config object itself, while the
+ * Inspector redacts a payload built from the controller's VIEW data
+ * (`{gina, user}`), a different coordinate space in which `db.password`
+ * names nothing; and the lookup is keyed on object IDENTITY, while that
+ * payload is a `JSON.parse(JSON.stringify(...))` clone, so the WeakMap
+ * returns `[]` for it by construction. Redacting a surface that holds
+ * VALUES rather than the config needs a value-based pass — see
+ * `core/connectors/param-redact.js`, built for exactly that reason.
  *
  * **Introspection.** `getRequiredKeys(config)` enumerates the placeholder
  * keys a config requires without resolving them — read-only and
@@ -220,11 +231,16 @@ function resolve(config, backend) {
 
 /**
  * Return the dotted paths that were substituted in `config` during the
- * most recent `resolve(config)` call. Used by future log-redaction
- * wrappers to know which fields originated as secrets.
+ * most recent `resolve(config)` call, so a caller holding that config can
+ * tell which of its fields originated as secrets.
  *
  * Paths use dotted notation for object keys (`'db.password'`) and
  * bracketed indices for array elements (`'items[0]'`).
+ *
+ * The lookup is keyed on the IDENTITY of `config` (#B274), so a caller must
+ * pass the very object `resolve()` mutated — a structural clone returns `[]`.
+ * The paths likewise address that object and no other, which is why this is
+ * not a redaction hook for downstream payloads; see the module note above.
  *
  * @memberof module:lib/secrets
  * @function getResolvedPaths
@@ -331,12 +347,22 @@ function selectBackend(config) {
 
     var paths = Array.isArray(declared) ? declared : [declared];
     if (!paths.length) {
+        // #B271 — `[]` disables the whole file tier exactly like `null`, but it is
+        // not one of the documented shapes, so an operator emptying the array to
+        // drop ONE layer silently drops the tier. Keep accepting it — an empty
+        // list genuinely means "no files", and refusing boot over an undocumented
+        // spelling would be a total outage for a harmless config — but say so once
+        // rather than disabling a security tier without a word.
+        console.warn('[ secrets ] `settings.secrets.file` is an empty array — the file tier is disabled. Use `null` to opt out explicitly, or list at least one path.');
         return defaultBackend;
     }
 
     for (var i = 0; i < paths.length; i++) {
         var p = paths[i];
-        if (typeof p !== 'string' || p === '') {
+        // #B271 — trim before the empty check: the schema's `minLength: 1` counts a
+        // space, so `[" "]` cleared both layers and built a tier that could never
+        // resolve anything, visible only as a suppressed debug line.
+        if (typeof p !== 'string' || p.trim() === '') {
             throw new Error('`settings.secrets.file` must be a non-empty string or an array of them');
         }
         // A secrets file cannot itself be named by a secret — the backend that
@@ -350,6 +376,15 @@ function selectBackend(config) {
         // and every secret would fall through to a confusing fail-closed error.
         if (/\$\{[^}]*\}/.test(p)) {
             throw new Error('`settings.secrets.file` contains an unresolved `${…}` token: ' + p);
+        }
+        // #B272 — a token that resolved to an EMPTY string leaves nothing for the
+        // check above to catch: `${homedir}/${scope}/secrets.env` with an empty
+        // scope collapses to `<home>//secrets.env`, which POSIX reads as
+        // `<home>/secrets.env` — a silent read of the WRONG file, one directory up
+        // from the intended one. The empty segment is the only surviving trace of
+        // the collapse, so refuse on it.
+        if (p.indexOf('//') > -1) {
+            throw new Error('`settings.secrets.file` contains an empty path segment — a `${…}` token resolved to an empty value: ' + p);
         }
     }
 

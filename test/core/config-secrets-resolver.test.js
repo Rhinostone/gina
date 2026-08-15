@@ -720,7 +720,30 @@ describe('14 - env backend framework-environment tier (#B156)', function () {
 
     it('source pin: the backend reads getEnvVar behind a typeof guard, process.env as the fallback', function () {
         var envSrc = fs.readFileSync(path.join(SECRETS_PATH, 'src/backends/env.js'), 'utf8');
-        assert.match(envSrc, /typeof getEnvVar === 'function' && getEnvVar\(key\)/);
+        // #B270 split this from one regex into three. The tiers are no longer joined
+        // by `&&`-inside-`||` — that short-circuit WAS the defect — so pinning the
+        // combined construct would pin the bug in place. The pin's stated intent is
+        // unchanged: a typeof guard, a getEnvVar(key) read, process.env[key] as the
+        // fallback. Only the syntactic form it accepts has widened.
+        assert.match(envSrc, /typeof getEnvVar === 'function'/);
+        assert.match(envSrc, /getEnvVar\(key\)/);
         assert.match(envSrc, /process\.env\[key\]/);
+    });
+
+    it('#B270 negative source pin: the two tiers are NOT joined by `||`', function () {
+        var envSrc = fs.readFileSync(path.join(SECRETS_PATH, 'src/backends/env.js'), 'utf8');
+        // Strip comments FIRST. The fix's own prose names the defect it replaced
+        // ("never joined with `||`"), so an un-stripped assertion would fail on the
+        // comment rather than on the code — a pin that reports the bug is still
+        // present the moment someone documents its absence.
+        var code = envSrc
+            .replace(/\/\*[\s\S]*?\*\//g, '')
+            .replace(/^\s*\/\/.*$/gm, '');
+        // Strip control: a strip that removed everything would make the assertion
+        // below pass vacuously, so prove the code under test survived it.
+        assert.match(code, /getEnvVar\(key\)/,
+            'strip control: the stripped source must still carry the code under test');
+        assert.doesNotMatch(code, /getEnvVar\(key\)\s*\)?\s*\|\|/,
+            'a truthy NON-STRING from the framework tier must not short-circuit process.env');
     });
 });

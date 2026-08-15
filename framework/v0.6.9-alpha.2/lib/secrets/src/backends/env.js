@@ -53,10 +53,21 @@
  * }
  */
 function resolve(key) {
-    // #B156 — framework-environment tier first. Boolean values a sweep may
-    // have coerced ("true"/"false") fail the string check below, keeping the
-    // non-empty-STRING contract identical on both tiers.
-    var value = (typeof getEnvVar === 'function' && getEnvVar(key)) || process.env[key];
+    // #B156 — framework-environment tier first, then process.env.
+    //
+    // #B270 — the two tiers are read INDEPENDENTLY, never joined with `||`.
+    // The sweep does not store the STRINGS "true"/"false" as an earlier comment
+    // here claimed: filterArgs() coerces them to REAL booleans, which
+    // test/integration/helper.test.js pins ("converts \"true\" string to boolean
+    // true"). A truthy boolean therefore satisfied `||` and process.env was
+    // never consulted — so a perfectly good environment string lost to the file
+    // tier, inverting the precedence this backend exists to enforce. Only a
+    // non-empty STRING from the framework tier may win; anything else (a
+    // boolean, a number, undefined, '') falls through to process.env.
+    var value = (typeof getEnvVar === 'function') ? getEnvVar(key) : undefined;
+    if (typeof value !== 'string' || value === '') {
+        value = process.env[key];
+    }
     if (typeof value !== 'string' || value === '') {
         var err = new Error('Secret resolution failed');
         Object.defineProperty(err, '_ginaSecretKey', {
