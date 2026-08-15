@@ -2467,6 +2467,59 @@ gna.storage = function(name) {
     return lib.storage.get(name);
 };
 
+/**
+ * #B366 — push a payload to ONE named session from OUTSIDE a request.
+ *
+ * `self.push()` needs a live request-bound controller, so code that has none —
+ * a `lib/job` handler, a cron tick, a boot hook — had no sanctioned route to a
+ * user's socket. This is that route, and it is deliberately narrow:
+ *
+ *   - `sessionID` is REQUIRED. An absent or empty recipient is an error, never
+ *     a fan-out. There is no broadcast reachable from here at all; the
+ *     deliberate all-clients send stays in-request as
+ *     `self.push(payload, { broadcast: true })`.
+ *   - The recipient must come from server-held state — captured when the work
+ *     was queued, and kept server-side. Never round-trip it (or a token naming
+ *     it) through the browser: that hands the choice back to the caller and
+ *     re-opens #B364 one layer up.
+ *   - Delivery is reported, not assumed: `delivered` is how many sockets were
+ *     written, and `0` is a normal outcome, not an error.
+ *
+ * Requires the isaac engine with `settings.json > server.ioServer` attached;
+ * the express engine has no engine.io channel and gets a named error.
+ *
+ * Assigned UNCONDITIONALLY (same reasoning as `gna.storage` above), so a
+ * misconfigured bundle gets an error naming the fix rather than
+ * `gna.pushToSession is not a function`.
+ *
+ * @param {string}        sessionID          - REQUIRED recipient session id.
+ * @param {object|string} payload            - Object (JSON-stringified) or a pre-serialized string.
+ * @param {object}        [option]           - Forwarded to the transport (e.g. `{ compress: true }`).
+ * @param {string}        [option.section]   - Stamped onto an object payload lacking one.
+ * @param {function}      [callback]         - `callback(err, { delivered })`, called exactly once.
+ * @returns {void}
+ * @example
+ *   // in a job handler — sessionID was captured when the job was created
+ *   gina.pushToSession(job.sessionID, { event: 'export:ready', key: res.key }, function (err, out) {
+ *       if (err) { return console.error(err.code, err.message); }
+ *       if (!out.delivered) { console.debug('nobody listening — the user closed the tab'); }
+ *   });
+ */
+gna.pushToSession = function(sessionID, payload, option, callback) {
+    var instance = ( process.gina ) ? process.gina._serverInstance : null;
+    if ( instance == null ) {
+        var err = new Error(
+            '[ push ] the server instance is not published yet, so there is no socket set to reach. '
+            + 'This is normal before the bundle has served its first request.'
+        );
+        err.code = 'PUSH_CHANNEL_NOT_READY';
+        if ( typeof(option) == 'function' ) { return option(err); }
+        if ( typeof(callback) == 'function' ) { return callback(err); }
+        throw err;
+    }
+    return lib.push.toSession(instance, sessionID, payload, option, callback);
+};
+
 // ── JSON helper (framework/v*/helpers/json/src/main.js) ──────────────────
 
 /**

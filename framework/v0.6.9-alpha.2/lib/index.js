@@ -140,6 +140,14 @@ function Lib() {
         // module, discarding the live registry and orphaning the sweep timer on
         // each request. Plain require = cache hit = the singleton survives.
         job             : require('./job'),
+        // #B366 — out-of-request push primitive, behind the gina.pushToSession()
+        // global. Stateless (the caller hands it the live server instance), but a
+        // PLAIN require (NOT _require) for the authzGate/authn reason: gna.js is
+        // load-once and captures this binding at boot, so a _require'd copy would
+        // be evicted and re-required out from under that gen-0 capture on every
+        // dev-mode request — the #B32-residual leak class. It also keeps the
+        // primitive that chooses a push recipient out of the hot-reload path.
+        push            : require('./push'),
         // #INS10 — toggleable instrumentation window primitive. Owns the
         // time-boxed Inspector capture window (process.gina._inspectorWindowUntil)
         // and its unref'd expiry timer. PLAIN require (like job / State / logger):

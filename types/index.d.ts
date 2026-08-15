@@ -798,6 +798,21 @@ declare namespace gina {
         JobStore: any;
         Model: any;
         Proc: any;
+        /**
+         * Out-of-request push primitive (#B366) — deliver to ONE named session
+         * from code with no live request. The recipient is required and this
+         * API never broadcasts; `self.push(payload, { broadcast: true })` is
+         * the deliberate all-clients path, and it stays in-request.
+         */
+        push: {
+            toSession(
+                instance: any,
+                sessionID: string,
+                payload: object | string,
+                option?: { section?: string; [key: string]: any } | null,
+                callback?: (err: Error | null, result?: { delivered: number }) => void
+            ): void;
+        };
         /** Render/output cache backing `routing.json > cache`. */
         RenderCache: any;
         /** Connector-backed render-cache L2 store dispatcher (`cache.type=redis`). */
@@ -1006,6 +1021,30 @@ declare namespace gina {
 
     /** Get a configured object-storage driver; omit `name` for `storage.default`. Throws when storage is unconfigured or the name is unknown (#STO1). */
     function storage(name?: string): any;
+
+    /**
+     * Push a payload to ONE named session from outside a request (#B366) — for
+     * code with no live controller (job handlers, cron, boot hooks).
+     *
+     * `sessionID` is required: an absent recipient is an error, never a
+     * fan-out. This API cannot broadcast at all — the deliberate all-clients
+     * send stays in-request as `self.push(payload, { broadcast: true })`.
+     * Source the recipient from server-held state, never from client input.
+     *
+     * `delivered` counts the sockets written; `0` is a normal outcome.
+     * Needs the isaac engine with `server.ioServer` attached.
+     */
+    function pushToSession(
+        sessionID: string,
+        payload: object | string,
+        option?: { section?: string; [key: string]: any } | null,
+        callback?: (err: Error | null, result?: { delivered: number }) => void
+    ): void;
+    function pushToSession(
+        sessionID: string,
+        payload: object | string,
+        callback: (err: Error | null, result?: { delivered: number }) => void
+    ): void;
 
     // -- global-helper re-exports (same functions the framework injects on
     //    the global scope; see types/globals.d.ts) --
