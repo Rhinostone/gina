@@ -40,7 +40,8 @@
  *      stable publish from silently shipping with content-level scanning
  *      disabled. Alpha publish, npm pack, and contributor `npm install`
  *      flows continue to no-op silently — path-level scanning still runs.
- *      See llms.txt §92 for the rationale.
+ *      See llms.txt #50 (the leak-scan discipline entry that absorbed the former §92)
+ *      for the rationale.
  *
  * `--ignore-scripts` prevents recursion into the `prepare` script (which
  * would otherwise re-invoke `prepare_version.js` and commit a "Prerelease

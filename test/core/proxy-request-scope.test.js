@@ -206,7 +206,11 @@ describe('04 - server.isaac.js: requireForwardedHeaders term in _thisReqProxied 
     it('the X-Forwarded-Host arm is NOT gated by the opt-in (XFH always classifies)', function() {
         var declIdx = isaacSrc.indexOf('var _thisReqProxied = (');
         var block   = isaacSrc.substring(declIdx, isaacSrc.indexOf('? true : false;', declIdx));
-        var xfhIdx  = block.indexOf("|| request.headers['x-forwarded-host']");
+        // #B367 re-anchor: the gate now classifies on the SANITISED token `_xfh`
+        // (headers are validated at ingest before use). The property pinned here is
+        // unchanged — the opt-in term still lives in the port-less arm only, so an
+        // X-Forwarded-Host remains sufficient on its own.
+        var xfhIdx  = block.indexOf('|| _xfh');
         var termIdx = block.indexOf('process.gina._proxyRequireForwarded !== true');
         assert.ok(xfhIdx > -1 && termIdx > -1 && termIdx < xfhIdx,
             'the disable term must live in the port-less arm only — XFH stays sufficient');

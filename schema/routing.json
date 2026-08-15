@@ -61,6 +61,10 @@
               "type": "boolean",
               "description": "When true, the bundle webroot prefix is not prepended to the URL."
             },
+            "keep-params": {
+              "type": "boolean",
+              "description": "Carry the incoming request's query string onto the redirect target. Used with control: \"redirect\". Default false — the target is used verbatim and the caller's query is dropped. Set it when the redirect is a path normalisation that must stay transparent to request state. Only a LOCAL target inherits the query: an absolute `url` names another origin, so the flag is ignored there rather than disclosing the caller's parameters to a third party. If the target already carries a query, the incoming one is appended with `&`."
+            },
             "title": {
               "type": "string",
               "description": "Page title passed to the template."

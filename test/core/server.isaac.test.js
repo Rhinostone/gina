@@ -646,7 +646,12 @@ describe('X-Forwarded-Prefix capture & normalisation (per-request)', function() 
     it("source assigns the normalised value to request._ginaProxyPrefix (per-request)", function() {
         var anchor = src.indexOf("request.headers['x-forwarded-prefix']");
         assert.ok(anchor > -1, 'x-forwarded-prefix read site not found');
-        var windowEnd = Math.min(src.length, anchor + 600);
+        // #B367 widened 600 -> 1000: the injection charset gate and its rationale
+        // comment now sit between the header read and the assignment. The assignment
+        // itself is unchanged and still per-request; only the distance grew. (This is
+        // the proximity-window brittleness jsdoc.md documents — prefer a structural
+        // anchor over a char-distance window when this next needs touching.)
+        var windowEnd = Math.min(src.length, anchor + 1000);
         var block = src.slice(anchor, windowEnd);
         assert.ok(
             block.indexOf('request._ginaProxyPrefix') > -1,
@@ -2785,13 +2790,16 @@ describe('15 - #B65 reverse-proxy host context: per-request slots + un-gate sour
     it('classifies THIS request as proxied from a port-less Host OR an X-Forwarded-Host', function() {
         var anchor = src.indexOf('var _thisReqProxied');
         assert.ok(anchor > -1, '#B65 _thisReqProxied classification not found');
-        var block = src.slice(anchor, anchor + 260);
+        // #B367 re-anchor + widen: both arms now read SANITISED tokens
+        // (_safeRequestHost / _xfh) because forwarded headers are validated at ingest.
+        // The classification itself is unchanged — port-less Host OR X-Forwarded-Host.
+        var block = src.slice(anchor, anchor + 400);
         assert.ok(
-            block.indexOf('!/\\:[0-9]+$/.test(requestHost)') > -1,
+            block.indexOf('!/\\:[0-9]+$/.test(_safeRequestHost)') > -1,
             'expected the port-less Host test in the classification'
         );
         assert.ok(
-            block.indexOf("request.headers['x-forwarded-host']") > -1,
+            block.indexOf('|| _xfh') > -1,
             'expected the x-forwarded-host clause in the classification'
         );
     });
@@ -2809,7 +2817,9 @@ describe('15 - #B65 reverse-proxy host context: per-request slots + un-gate sour
         var anchor = src.indexOf('if ( _thisReqProxied ) {');
         assert.ok(anchor > -1, '#B65 proxied branch not found');
         var block = src.slice(anchor, anchor + 700);
-        var xfhIdx  = block.indexOf("request.headers['x-forwarded-host']");
+        // #B367 re-anchor: the branch condition is now the sanitised token.
+        // Branch ORDER — the pinned property — is unchanged.
+        var xfhIdx  = block.indexOf('if ( _xfh )');
         var elseIdx = block.indexOf('} else {');
         assert.ok(xfhIdx > -1 && elseIdx > xfhIdx,
             'expected the X-Forwarded-Host branch BEFORE the else (port-less Host) branch');
