@@ -1987,22 +1987,49 @@ function ServerEngineClass(options) {
             // port-less-Host heuristic — only an explicit X-Forwarded-Host
             // classifies as proxied. Keep in sync with the core/router.js twin
             // (proxyReqIsProxied).
+            // #B367 — SECURITY: every value below is attacker-supplied and is spliced
+            // UNESCAPED into the client loader's JS string literals (gina.onload.min.js:
+            // `hostname:'{{ page.environment.hostname }}'`, `window.__ginaWebroot='…'`),
+            // because whisper() (helpers/context.js:798-802) is a raw token replace with
+            // no escaping. A single quote in one of these headers therefore CLOSES the
+            // literal and executes arbitrary script on every rendered page, unauthenticated
+            // (reproduced over real HTTP). SANITISE AT INGEST rather than escape at
+            // emission: a host is `name[:port]` (or a bracketed IPv6 literal) and a prefix
+            // is a path — neither legitimately carries a quote, backslash, angle bracket or
+            // whitespace — so a malformed value is malformed at the source, and rejecting it
+            // here protects EVERY downstream consumer of these slots, not just the loader.
+            // Rejection is fail-safe: the request simply falls back to the bundle's internal
+            // configured values, exactly as if the header had been absent.
+            // Keep in sync with the core/router.js twin.
+            var _isSafeHostToken = function(v) {
+                return ( typeof(v) == 'string' && v.length > 0 && v.length <= 255
+                         && /^[A-Za-z0-9._:\[\]-]+$/.test(v) );
+            };
+            var _xfhRaw = request.headers['x-forwarded-host'];
+            var _xfh    = _isSafeHostToken(_xfhRaw)   ? _xfhRaw   : null;
+            var _safeRequestHost = _isSafeHostToken(requestHost) ? requestHost : null;
+            // Scheme is a two-value whitelist — it is concatenated straight into the
+            // whispered origin, and the pre-#B367 code emitted a literal `undefined://`
+            // when the header was absent.
+            var _xfpr       = request.headers['x-forwarded-proto'];
+            var _safeScheme = ( _xfpr === 'http' || _xfpr === 'https' ) ? _xfpr : null;
+
             var _thisReqProxied = (
-                ( requestHost && !/\:[0-9]+$/.test(requestHost)
+                ( _safeRequestHost && !/\:[0-9]+$/.test(_safeRequestHost)
                     && process.gina._proxyRequireForwarded !== true )
-                || request.headers['x-forwarded-host']
+                || _xfh
             ) ? true : false;
             request._ginaIsProxyHost = _thisReqProxied;
             if ( _thisReqProxied ) {
                 // this request's proxied host/hostname — X-Forwarded-Host wins (multi-hop:
                 // TLS-terminating ingress -> inner proxy -> bundle), else the port-less
                 // Host (single-hop: reverse proxy -> bundle).
-                if ( request.headers['x-forwarded-host'] ) {
-                    request._ginaProxyHostname = request.headers['x-forwarded-proto'] +'://'+ request.headers['x-forwarded-host'];
-                    request._ginaProxyHost     = request.headers['x-forwarded-host'];
+                if ( _xfh ) {
+                    request._ginaProxyHostname = ( _safeScheme || process.gina.PROXY_SCHEME ) +'://'+ _xfh;
+                    request._ginaProxyHost     = _xfh;
                 } else {
-                    request._ginaProxyHostname = process.gina.PROXY_SCHEME +'://'+ requestHost;
-                    request._ginaProxyHost     = requestHost;
+                    request._ginaProxyHostname = process.gina.PROXY_SCHEME +'://'+ _safeRequestHost;
+                    request._ginaProxyHost     = _safeRequestHost;
                 }
                 // Refresh the worker-global on EVERY proxied request (freeze fix) — the
                 // value is always this request's proxied host, so a later internal
@@ -2033,6 +2060,14 @@ function ServerEngineClass(options) {
                 _xfp = _xfp.replace(/\/+$/, '');
                 if (_xfp.length > 0 && _xfp.charAt(0) !== '/') {
                     _xfp = '/' + _xfp;
+                }
+                // #B367 — SECURITY: this value is concatenated into the public webroot and
+                // whispered into `window.__ginaWebroot='…'` in the client loader, so a quote
+                // here closes that literal and executes arbitrary script (reproduced over
+                // real HTTP). A mount path is percent-encoded URL-path characters only;
+                // reject anything else and fall back to the bundle's internal webroot.
+                if ( _xfp.length > 255 || !/^[A-Za-z0-9._~\/%-]*$/.test(_xfp) ) {
+                    _xfp = '';
                 }
                 if (_xfp.length > 0) {
                     request._ginaProxyPrefix = _xfp;

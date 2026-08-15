@@ -266,7 +266,26 @@ function Router(env, scope) {
         // (raw) value (the #B65 freeze-guard). Host-only, public; scheme prefers
         // X-Forwarded-Proto (TLS-terminating proxy) then PROXY_SCHEME then the
         // bundle scheme.
-        var proxyReqHost = request.headers.host || request.headers[':authority'];
+        // #B367 — SECURITY: these header values are attacker-supplied and end up
+        // spliced UNESCAPED into the client loader's JS string literals via
+        // page.environment.hostname / .webroot / .proxyHost / .proxyHostname
+        // (whisper() is a raw token replace — helpers/context.js:798-802), so a
+        // single quote in one of them closes the literal and executes arbitrary
+        // script on every rendered page, unauthenticated. Sanitise at ingest and
+        // fall back to the bundle's internal configured values when a value is
+        // malformed. Note `proxyReqHost` is the caller's own Host/:authority
+        // header and is validated for the same reason.
+        // Keep in sync with the core/server.isaac.js twin.
+        var _isSafeHostToken = function(v) {
+            return ( typeof(v) == 'string' && v.length > 0 && v.length <= 255
+                     && /^[A-Za-z0-9._:\[\]-]+$/.test(v) );
+        };
+        var _rawProxyReqHost = request.headers.host || request.headers[':authority'];
+        var proxyReqHost     = _isSafeHostToken(_rawProxyReqHost) ? _rawProxyReqHost : null;
+        var _rawXfh          = request.headers['x-forwarded-host'];
+        var _xfh             = _isSafeHostToken(_rawXfh) ? _rawXfh : null;
+        var _rawXfProto      = request.headers['x-forwarded-proto'];
+        var _safeXfProto     = ( _rawXfProto === 'http' || _rawXfProto === 'https' ) ? _rawXfProto : null;
         // #B152 — opt-in: server.proxy.requireForwardedHeaders (boot-resolved
         // to process.gina._proxyRequireForwarded by server.js) disables the
         // port-less-Host heuristic — only an explicit X-Forwarded-Host
@@ -274,15 +293,15 @@ function Router(env, scope) {
         var proxyReqIsProxied = (
             ( proxyReqHost && !/\:[0-9]+$/.test(proxyReqHost)
                 && process.gina._proxyRequireForwarded !== true )
-            || request.headers['x-forwarded-host']
+            || _xfh
         ) ? true : false;
         if ( proxyReqIsProxied ) {
-            var proxyReqScheme = request.headers['x-forwarded-proto']
+            var proxyReqScheme = _safeXfProto
                 || process.gina.PROXY_SCHEME
                 || conf.server.scheme;
-            if ( request.headers['x-forwarded-host'] ) {
-                process.gina.PROXY_HOSTNAME = proxyReqScheme +'://'+ request.headers['x-forwarded-host'];
-                process.gina.PROXY_HOST     = request.headers['x-forwarded-host'];
+            if ( _xfh ) {
+                process.gina.PROXY_HOSTNAME = proxyReqScheme +'://'+ _xfh;
+                process.gina.PROXY_HOST     = _xfh;
             } else {
                 process.gina.PROXY_HOSTNAME = proxyReqScheme +'://'+ proxyReqHost;
                 process.gina.PROXY_HOST     = proxyReqHost;
@@ -302,12 +321,13 @@ function Router(env, scope) {
         if ( typeof(request._ginaIsProxyHost) == 'undefined' ) {
             request._ginaIsProxyHost = proxyReqIsProxied;
             if (proxyReqIsProxied) {
-                var _slotScheme = request.headers['x-forwarded-proto']
+                // #B367 — sanitised tokens only (see the block above).
+                var _slotScheme = _safeXfProto
                     || process.gina.PROXY_SCHEME
                     || conf.server.scheme;
-                if ( request.headers['x-forwarded-host'] ) {
-                    request._ginaProxyHostname = _slotScheme +'://'+ request.headers['x-forwarded-host'];
-                    request._ginaProxyHost     = request.headers['x-forwarded-host'];
+                if ( _xfh ) {
+                    request._ginaProxyHostname = _slotScheme +'://'+ _xfh;
+                    request._ginaProxyHost     = _xfh;
                 } else {
                     request._ginaProxyHostname = _slotScheme +'://'+ proxyReqHost;
                     request._ginaProxyHost     = proxyReqHost;

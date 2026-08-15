@@ -986,7 +986,11 @@ describe('12 - #B67 engine-agnostic proxy-host refresh + cross-bundle toUrl reso
         // The refresh lives in core/router.js (this SOURCE), which runs for isaac AND express
         // (server.express.js sets zero proxy state). Placement right after setContext proves it.
         var ctxIdx = src.indexOf("setContext('isProxyHost', isProxyHost);");
-        var b67Idx = src.indexOf('var proxyReqHost = request.headers.host');
+        // #B367 re-anchor: the raw Host/:authority read was split into a raw capture
+        // plus a sanitised binding, so the old `var proxyReqHost = request.headers.host`
+        // literal is gone. Placement is unchanged (measured: setContext @9154, this
+        // anchor @11280), which is what this test actually asserts.
+        var b67Idx = src.indexOf('var _rawProxyReqHost = request.headers.host');
         assert.ok(ctxIdx > -1 && b67Idx > -1, 'both anchors present');
         assert.ok(b67Idx > ctxIdx, 'the #B67 refresh must follow setContext(isProxyHost) at the engine-agnostic router point');
     });
