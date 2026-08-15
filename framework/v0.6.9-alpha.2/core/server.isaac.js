@@ -2610,7 +2610,92 @@ function ServerEngineClass(options) {
 
         server.eio = ioServer;
 
+        /**
+         * #B365 — derive a socket's session SERVER-side, from the upgrade
+         * request's own cookie, and bind it to `socket.sessionId`.
+         *
+         * The socket's identity used to be whatever the client asserted in a
+         * message payload. Rather than re-implement cookie unsigning here —
+         * which would mean handing the framework the session secret that today
+         * lives entirely in bundle code — this replays the bundle's OWN session
+         * middleware over the upgrade request. Same secret, same store, same
+         * cookie name, no configuration, and it works whether or not the bundle
+         * adopted `gina.plugins.Session()`.
+         *
+         * The response passed to it is inert: every header/write method is a
+         * no-op, so a `Set-Cookie` can never be emitted from a socket upgrade.
+         * Combined with never touching the session object, a `saveUninitialized:
+         * false` setup creates and saves nothing.
+         *
+         * Fail CLOSED: no session middleware, no cookie, or a cookie that does
+         * not verify leaves `sessionId` unset, and an unset id matches no
+         * targeted push — such a socket receives only deliberate broadcasts.
+         *
+         * @inner
+         * @private
+         * @param {object}   socket - The engine.io socket (carries `.request`).
+         * @param {function} [cb]   - Called with the bound id (or null) once resolved.
+         * @returns {void}
+         */
+        var bindSocketSession = function(socket, cb) {
+            var done = ( typeof(cb) == 'function' ) ? cb : function() {};
+            var req  = socket.request;
+            if ( req == null || !server._expressMiddlewares || !server._expressMiddlewares.length ) {
+                return done(null);
+            }
+            // express-session's middleware is a NAMED function expression
+            // (`return function session(req, res, next)`), and the gina wrapper's
+            // absolute-timeout variant is `ginaSessionAbsoluteTimeout` — both are
+            // matched here so an adopting and a non-adopting bundle behave alike.
+            var chain = [];
+            for (var i = 0, len = server._expressMiddlewares.length; i < len; ++i) {
+                var fn = server._expressMiddlewares[i];
+                if ( typeof(fn) == 'function' && /^(session|ginaSessionAbsoluteTimeout)$/.test(fn.name) ) {
+                    chain[chain.length] = fn;
+                }
+            }
+            if ( !chain.length ) {
+                return done(null);
+            }
+            var noop     = function() { return inertRes; };
+            var inertRes = {
+                setHeader: noop, getHeader: function() { return undefined; },
+                removeHeader: noop, appendHeader: noop, writeHead: noop,
+                write: function() { return true; }, end: noop,
+                on: noop, once: noop, emit: function() { return false; },
+                headersSent: false, finished: false
+            };
+            var idx = 0;
+            var next = function(err) {
+                if (err) {
+                    console.warn('[IO SERVER ] could not derive a session for socket #'+ socket.id +': '+ (err.message || err));
+                    return done(null);
+                }
+                if ( idx >= chain.length ) {
+                    var sid = ( typeof(req.sessionID) != 'undefined' && req.sessionID ) ? req.sessionID : null;
+                    if (sid) {
+                        socket.sessionId = sid;
+                    }
+                    return done(sid);
+                }
+                var mw = chain[idx++];
+                try {
+                    mw(req, inertRes, next);
+                } catch (mwErr) {
+                    console.warn('[IO SERVER ] session middleware threw while deriving a socket session: '+ (mwErr.message || mwErr));
+                    return done(null);
+                }
+            };
+            next();
+        };
+
         ioServer.on('connection', function (socket) {
+
+            // #B365 — bind identity from the connection's own cookie before any
+            // message can assert one. Asynchronous (the session store is), so a
+            // push racing the handshake simply finds no match yet.
+            bindSocketSession(socket);
+
 
             socket.send(JSON.stringify({
                 id: this.id,//socket.id,
@@ -2638,9 +2723,31 @@ function ServerEngineClass(options) {
                 try {
                     console.debug('[IO SERVER ] receiving '+ payload);
                     payload = JSON.parse(payload);
-                    // bind to session ID
-                    if ( typeof(payload.session) != 'undefined' ) {
-                        this.sessionId = payload.session.id;
+                    // #B365 — the recipient of a targeted push is resolved from
+                    // `socket.sessionId`, and that used to be set RIGHT HERE from
+                    // `payload.session.id`: a value the CLIENT sends, on every
+                    // message, never checked against the connection's own session.
+                    // Any client could claim another user's session and receive
+                    // the pushes addressed to it — and the page renders the BARE
+                    // session id into its bootstrap script, so claiming one needed
+                    // strictly less than stealing the cookie.
+                    //
+                    // The binding now happens once, server-side, at connection
+                    // (see bindSocketSession below) from the upgrade request's own
+                    // signed cookie. What is left here is a DETECTOR: a client that
+                    // still asserts an id we did not derive gets logged and ignored.
+                    if (
+                        typeof(payload.session) != 'undefined'
+                        && payload.session != null
+                        && typeof(payload.session.id) != 'undefined'
+                        && payload.session.id !== this.sessionId
+                    ) {
+                        console.warn(
+                            '[IO SERVER ] socket #'+ this.id +' asserted session `'+ payload.session.id
+                            + '` which does not match the session derived from its own cookie'
+                            + ( this.sessionId ? ' (`'+ this.sessionId +'`)' : ' (none)' )
+                            + '. Ignoring the assertion (#B365).'
+                        );
                     }
                     // Inspector: respond to data pull request. #INS10 — the engine.io
                     // channel is UNAUTHENTICATED, so never serve the captured snapshot

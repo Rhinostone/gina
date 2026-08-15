@@ -3222,3 +3222,159 @@ describe('17b - #RC5 isaac cacheStatus build — pure-logic replica', function()
         assert.equal(buildMissStatus('cache'), 'cache; fwd=uri-miss');
     });
 });
+
+
+// 18 — #B365 socket identity is derived server-side, never client-asserted
+describe('18 - #B365 engine.io socket session binding — source pins', function() {
+
+    var read = function() {
+        if (!src) { src = fs.readFileSync(SOURCE, 'utf8'); }
+        return src;
+    };
+
+    it('the client-asserted binding is GONE', function() {
+        // The whole defect: `this.sessionId = payload.session.id` inside the
+        // message handler, run on EVERY message, never checked.
+        var s = read();
+        assert.equal(/this\.sessionId\s*=\s*payload\.session\.id/.test(s), false);
+        // Control: the identifier still exists in the file, so a broken needle
+        // could not have produced the zero above.
+        assert.ok(/sessionId/.test(s), 'sessionId must still appear — else the pin is vacuous');
+    });
+
+    it('binds from the upgrade request at connection, not from a message', function() {
+        var s = read();
+        assert.match(s, /var\s+bindSocketSession\s*=\s*function\s*\(\s*socket\s*,\s*cb\s*\)/);
+        assert.match(s, /bindSocketSession\(socket\)/);
+        // The bound value comes from the request the session middleware populated.
+        assert.match(s, /req\.sessionID/);
+        assert.match(s, /socket\.sessionId\s*=\s*sid/);
+    });
+
+    it('replays the bundle session middleware rather than unsigning a cookie itself', function() {
+        var s = read();
+        // Matches express-session's own named middleware and the gina wrapper's
+        // absolute-timeout variant, so adopting and non-adopting bundles behave alike.
+        assert.match(s, /\^\(session\|ginaSessionAbsoluteTimeout\)\$/);
+        assert.match(s, /server\._expressMiddlewares/);
+        // It must NOT grow its own crypto path — that would need the session
+        // secret, which lives in bundle code.
+        assert.equal(/createHmac\([^)]*\)[\s\S]{0,400}sessionId/.test(s), false);
+    });
+
+    it('passes an INERT response so a socket upgrade can never emit Set-Cookie', function() {
+        var s = read();
+        assert.match(s, /var\s+inertRes\s*=\s*\{/);
+        assert.match(s, /setHeader:\s*noop/);
+        assert.match(s, /writeHead:\s*noop/);
+        assert.match(s, /end:\s*noop/);
+    });
+
+    it('fails CLOSED — no middleware and no request both return without binding', function() {
+        var s = read();
+        assert.match(s, /if\s*\(\s*req\s*==\s*null\s*\|\|\s*!server\._expressMiddlewares/);
+        assert.match(s, /if\s*\(\s*!chain\.length\s*\)\s*\{[\s\S]{0,40}return done\(null\)/);
+    });
+
+    it('keeps a mismatch DETECTOR on the message path', function() {
+        var s = read();
+        assert.match(s, /payload\.session\.id\s*!==\s*this\.sessionId/);
+        assert.match(s, /Ignoring the assertion \(#B365\)/);
+    });
+});
+
+describe('18b - #B365 binding logic — pure-seam replica', function() {
+
+    // The real bindSocketSession is an inner closure, so its BRANCHES are
+    // replicated here. The replica is validated against a known-FALSE case
+    // (a socket whose middleware yields no sessionID must bind nothing), so a
+    // stuck-true replica cannot pass silently.
+    function replica(server, socket, cb) {
+        var req = socket.request;
+        if (req == null || !server._expressMiddlewares || !server._expressMiddlewares.length) { return cb(null); }
+        var chain = server._expressMiddlewares.filter(function (fn) {
+            return typeof fn === 'function' && /^(session|ginaSessionAbsoluteTimeout)$/.test(fn.name);
+        });
+        if (!chain.length) { return cb(null); }
+        var idx = 0;
+        var next = function (err) {
+            if (err) { return cb(null); }
+            if (idx >= chain.length) {
+                var sid = (typeof req.sessionID !== 'undefined' && req.sessionID) ? req.sessionID : null;
+                if (sid) { socket.sessionId = sid; }
+                return cb(sid);
+            }
+            var mw = chain[idx++];
+            try { mw(req, {}, next); } catch (e) { return cb(null); }
+        };
+        next();
+    }
+
+    function sessionMw(sid) {
+        // Named `session`, exactly as express-session returns it.
+        return function session(req, res, next) { req.sessionID = sid; next(); };
+    }
+
+    it('binds the id the session middleware resolved', function(t, done) {
+        var socket = { request: {} };
+        replica({ _expressMiddlewares: [sessionMw('SESSION-A')] }, socket, function (sid) {
+            assert.equal(sid, 'SESSION-A');
+            assert.equal(socket.sessionId, 'SESSION-A');
+            done();
+        });
+    });
+
+    it('KNOWN-NEGATIVE: binds nothing when the middleware resolves no session', function(t, done) {
+        var socket = { request: {} };
+        replica({ _expressMiddlewares: [sessionMw(undefined)] }, socket, function (sid) {
+            assert.equal(sid, null);
+            assert.equal(socket.sessionId, undefined);
+            done();
+        });
+    });
+
+    it('ignores non-session middlewares', function(t, done) {
+        var socket = { request: {} };
+        var other = function bodyParser(req, res, next) { req.sessionID = 'WRONG'; next(); };
+        replica({ _expressMiddlewares: [other] }, socket, function (sid) {
+            assert.equal(sid, null);
+            assert.equal(socket.sessionId, undefined);
+            done();
+        });
+    });
+
+    it('matches the gina wrapper timeout variant by name', function(t, done) {
+        var socket = { request: {} };
+        var wrapped = function ginaSessionAbsoluteTimeout(req, res, next) { req.sessionID = 'SESSION-W'; next(); };
+        replica({ _expressMiddlewares: [wrapped] }, socket, function (sid) {
+            assert.equal(sid, 'SESSION-W');
+            done();
+        });
+    });
+
+    it('fails closed when the middleware errors', function(t, done) {
+        var socket = { request: {} };
+        var boom = function session(req, res, next) { next(new Error('store down')); };
+        replica({ _expressMiddlewares: [boom] }, socket, function (sid) {
+            assert.equal(sid, null);
+            assert.equal(socket.sessionId, undefined);
+            done();
+        });
+    });
+
+    it('fails closed when the middleware throws', function(t, done) {
+        var socket = { request: {} };
+        var boom = function session() { throw new Error('exploded'); };
+        replica({ _expressMiddlewares: [boom] }, socket, function (sid) {
+            assert.equal(sid, null);
+            done();
+        });
+    });
+
+    it('fails closed when there is no upgrade request', function(t, done) {
+        replica({ _expressMiddlewares: [sessionMw('SESSION-A')] }, { request: null }, function (sid) {
+            assert.equal(sid, null);
+            done();
+        });
+    });
+});
