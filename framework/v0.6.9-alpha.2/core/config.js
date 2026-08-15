@@ -175,6 +175,22 @@ function Config(opt, contextResetNeeded) {
 
         self.Env.load( function(err, envConf) {
 
+            // #B372 — the env load can fail (an unlinkable release path, most often one
+            // bundle's release tree missing on the target host). Nothing consumed that
+            // error before, so it either vanished or resurfaced as an opaque deref later
+            // in the boot. Refuse here, through the same sink loadBundlesConfiguration
+            // uses below, so the reason reaches stderr and the process exits cleanly.
+            if (err) {
+                var _envMsg = (err.stack||err.message);
+                console.error(_envMsg);
+                // Guarantee the reason survives process.exit() on an async pipe (e.g. bin/gina-container).
+                try { fs.writeSync(2, _envMsg + '\n'); } catch (_e) { /* best-effort */ }
+                setTimeout(() => {
+                    process.exit(1);
+                }, 0);
+                return;
+            }
+
             if ( typeof(self.Env.loaded) == 'undefined') {
                 // Need to globalize some of them.
                 self.envConf = envConf;
@@ -400,6 +416,17 @@ function Config(opt, contextResetNeeded) {
         template : requireJSON( getEnvVar('GINA_FRAMEWORK_DIR') +'/core/template/conf/env.json'),
         load : function(callback) {
             loadWithTemplate(this.parent.userConf, this.template, function(err, envConf) {
+                // #B372 — loadWithTemplate calls back with an error and NO envConf (e.g. a
+                // release path that cannot be linked). Dereferencing envConf here discarded
+                // that well-formed reason — which already names the offending path — and
+                // replaced it with `TypeError: Cannot set properties of undefined (setting
+                // 'env')`, so the operator got an uncaughtException pointing at framework
+                // internals instead of at the path they had to fix. Propagate: getConf's
+                // callback turns it into a named exit(1).
+                if (err) {
+                    return callback(err);
+                }
+
                 self.envConf            = envConf;
                 envConf.env             = self.env;
                 envConf.scope           = self.scope;
@@ -767,7 +794,14 @@ function Config(opt, contextResetNeeded) {
                 }
             } catch (releaseError) {
                 console.error('[ releaseError ] ', releaseError);
-                let _releaseError = new Error('[ releaseError ] path: '+ targetAppPathObj.toString() );
+                // #B372 — name the bundle, env and scope. One bundle's unlinkable release
+                // tree aborts the SHARED config load for every bundle in the project, so
+                // "which one?" is the operator's first question and the loop already knows.
+                // `targetAppPathObj` is deliberately not reported: when the throw comes from
+                // `pkg[app].releases[scope][env]` itself, the assignment above never ran and
+                // the object still holds the LINK path, so reporting it names the wrong file.
+                // The underlying message does name the real one (ENOENT carries the path).
+                let _releaseError = new Error('[ releaseError ] bundle: `'+ app +'` (env: `'+ env +'`, scope: `'+ scope +'`), link: '+ appPath +' — '+ (releaseError.message || releaseError) );
                 return callback(_releaseError);
             }
             targetAppPathObj = null;
