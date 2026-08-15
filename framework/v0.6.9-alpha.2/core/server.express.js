@@ -14,9 +14,15 @@
  * **Inspector endpoints:** This file has no `/_gina/*` handlers.
  * `server.js` registers all Inspector endpoints (`/_gina/inspector/*`,
  * `/_gina/logs`, `/_gina/agent`) on the Express `app` instance returned
- * here, inside its `onRequest()` catch-all (`self.instance.all('*', ...)`).
+ * here, inside its `onRequest()` catch-all (`self.instance.all(/(.*)/, ...)`
+ * — a RegExp since #B211, because Express 5's router rejects the former
+ * bare-string `'*'` at mount time).
  * No fast-path is needed in this adapter because Express request handling
  * already flows through `server.js`.
+ *
+ * **Supported Express range: >= 4 < 6** (#B211 — both majors verified live;
+ * an out-of-range major logs a loud warning at engine construction and
+ * boots anyway).
  *
  * @class ServerEngineClass
  * @constructor
@@ -245,6 +251,39 @@ function ServerEngineClass(options) {
     }
 
 
+
+    // #B211 — Express version awareness. The supported range is declared HERE
+    // (express is consumer-provided by design — deliberately NOT a dependency,
+    // and NEVER a peerDependency: npm >= 7 auto-installs peers, which would
+    // force express onto every consumer of the framework).
+    var expressVersion = 'unknown';
+    try {
+        expressVersion = require('express/package.json').version;
+    } catch (_e) { /* best effort — version display only */ }
+    var expressMajor = parseInt(expressVersion, 10);
+    console.info('engine: express v' + expressVersion + ' (supported: >= 4 < 6)');
+    if ( !isNaN(expressMajor) && (expressMajor < 4 || expressMajor >= 6) ) {
+        // WARN, never refuse (gate decision 2026-08-15): an unverified future
+        // major may work, and a wrong refusal is a total outage while a wrong
+        // warning is a log line. Verified majors: 4 and 5.
+        console.warn('engine: express v' + expressVersion + ' is OUTSIDE the verified range (>= 4 < 6) — the bundle will boot, but this combination is unverified; pin express@^4 or express@^5 if anything misbehaves.');
+    }
+
+    // #B211 — Express 5 defines `req.query` as a prototype GETTER (v4 assigned
+    // it from its auto-mounted query middleware as an own property). Gina's
+    // request pipeline (core/server.js) computes and ASSIGNS `request.query`
+    // itself under 'use strict', which throws
+    //   TypeError: Cannot set property query ... which has only a getter
+    // on every request under Express 5. Shadowing the getter with a writable
+    // own DATA property on the per-app request prototype restores gina's
+    // owns-the-query-parse contract; on Express 4 the property does not exist
+    // on the prototype chain as a getter, so this is a measured no-op there.
+    Object.defineProperty(app.request, 'query', {
+        value: undefined,
+        writable: true,
+        configurable: true,
+        enumerable: false
+    });
 
     return {
         instance: app,

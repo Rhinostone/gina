@@ -204,7 +204,7 @@
       "properties": {
         "engine": {
           "type": "string",
-          "description": "HTTP server engine. Defaults to \"isaac\" (built-in HTTP/2 server).",
+          "description": "HTTP server engine. Defaults to \"isaac\" (built-in HTTP/2 server). \"express\" uses the project's own express install (the framework deliberately ships no express dependency) — supported range >= 4 < 6, Express 4 and 5 both verified (#B211); an out-of-range major logs a warning at boot.",
           "enum": ["isaac", "express"]
         },
         "protocol": {

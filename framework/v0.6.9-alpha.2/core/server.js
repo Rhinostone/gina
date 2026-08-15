@@ -4029,9 +4029,19 @@ function Server(options) {
 
 
     /**
-     * Attaches the catch-all `*` route handler to the server instance.
+     * Attaches the catch-all route handler to the server instance.
      * Handles statics, preflight (CORS OPTIONS), body parsing, Express
      * middleware chain, and final routing delegation to the Router.
+     *
+     * The catch-all pattern is ENGINE-CONDITIONAL (#B211): Express mounts a
+     * RegExp — Express 5 routes through path-to-regexp v8, which rejects a
+     * bare `'*'` path string at mount time (`TypeError: Missing parameter
+     * name`), while a RegExp path bypasses string parsing on Express 4 AND 5,
+     * measured live-dispatching `/`, `/web/` and deep paths on both majors.
+     * Isaac KEEPS the string `'*'`: its request listener's dispatch gate is
+     * `path === '*' || path == request.url` (server.isaac.js:2366), so a
+     * RegExp there matches NOTHING and every request hangs without a
+     * response — measured, a deterministic container-boot timeout.
      *
      * @inner
      * @private
@@ -4043,7 +4053,11 @@ function Server(options) {
         var webrootLen = self.conf[self.appName][self.env].server.webroot.length;
 
         // catch all (request urls)
-        self.instance.all('*', function onInstance(request, response, next) {
+        // #B211 — was: self.instance.all('*', ...) unconditionally. Express 5's
+        // router rejects the bare-string wildcard at mount (boot abort before
+        // listen()); isaac's dispatch gate REQUIRES it (see the JSDoc above).
+        var catchAllPattern = ( /^express/.test(self.engine) ) ? /(.*)/ : '*';
+        self.instance.all(catchAllPattern, function onInstance(request, response, next) {
 
             // #M12b / #COMPLY2 — stamp the request id + entry time at request entry.
             //
