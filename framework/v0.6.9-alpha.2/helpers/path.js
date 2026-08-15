@@ -674,12 +674,20 @@ function PathHelper() {
      *
      *  })
      *
-     * @ram {string} target
+     * @param {string} target
      * @param {array} [ excluded ] - Excluded list
      *
      * @callback callback
-     * @param {string} errResponse
+     * @param {boolean|Error} errResponse - `false` on success, an `Error` on
+     *      failure (#B227 — was a plain string on stream-copy failures)
      * @param {string} [pathResponse]
+     *
+     * @example
+     *  // copy a file, overwriting the destination atomically
+     *  new _('/tmp/a.txt').cp('/tmp/b.txt', function(err, destination) {
+     *      if (err) return console.error(err.stack);
+     *      console.log('copied to ' + destination);
+     *  });
      * */
 
     _.prototype.cp = function(target, excluded, cb) {
@@ -1056,11 +1064,13 @@ function PathHelper() {
      * @param {string} source
      * @param {string} destination
      * @param {number} [i]
-     * @param {number} [fileCount]
+     * @param {Array} [excluded] - Filenames (strings) or RegExps to skip
      *
      * @callback callback
-     * @param {bool|string} err
-     *
+     * @param {boolean|Error} err - `false` on success, an `Error` on failure
+     *                              (was a plain string pre-#B227)
+     * @param {string} source
+     * @param {number} i
      * */
     var copyFileToFile = function(source, destination, i, callback, excluded) {
         var isExcluded = false;
@@ -1096,21 +1106,32 @@ function PathHelper() {
                         destination += path
                     }
 
-                    exists(destination, function(replaceFlag) {
-                        if (replaceFlag) {
-                            fs.unlink(destination, function(err) {
-                                //TODO - log error.
-                                startCopy(source, destination, i, function(err, i) {
-
-                                    callback(err, source, i)
-                                })
-                            })
-                        } else {
-                            startCopy(source, destination, i, function(err, i) {
-                                //TODO - log error.
-                                callback(err, source, i)
-                            })
-                        }
+                    // #B227 — no destination pre-delete: copyFile now stages to a
+                    // temp sibling and publishes with an atomic rename, which
+                    // replaces an existing destination only once the new content is
+                    // fully written. The unlink below destroyed the previous content
+                    // BEFORE the copy had succeeded (a 404/zero-byte window, and a
+                    // copy failure after it left nothing at all) — and its own error
+                    // was silently discarded.
+                    // was:
+                    // exists(destination, function(replaceFlag) {
+                    //     if (replaceFlag) {
+                    //         fs.unlink(destination, function(err) {
+                    //             //TODO - log error.
+                    //             startCopy(source, destination, i, function(err, i) {
+                    //
+                    //                 callback(err, source, i)
+                    //             })
+                    //         })
+                    //     } else {
+                    //         startCopy(source, destination, i, function(err, i) {
+                    //             //TODO - log error.
+                    //             callback(err, source, i)
+                    //         })
+                    //     }
+                    // })
+                    startCopy(source, destination, i, function(err, i) {
+                        callback(err, source, i)
                     })
                 }//EO if (err)
             })
@@ -1129,18 +1150,70 @@ function PathHelper() {
         }
     }
 
+    /**
+     * Copy one file's bytes — the writer behind `_.cp()` / `PathObject.mv()`
+     *
+     * #B227 — mirrors the #B223 `movefiles` rework: bytes land in a temp
+     * sibling inside the destination's own directory (so the publish rename
+     * is always same-filesystem, while the stream copy itself may cross
+     * filesystems) and publish atomically via `renameSync`, so a reader can
+     * never observe a truncated destination and a failed copy never destroys
+     * the previous content.
+     *
+     * @inner
+     * @param {string} source
+     * @param {string} destination
+     * @param {number} i - Caller's iteration cursor, passed back untouched
+     *
+     * @callback callback
+     * @param {boolean|Error} err - `false` on success, an `Error` on failure
+     *                              (was a plain string pre-#B227)
+     * @param {number} i
+     * */
     var copyFile = function(source, destination, i, callback) {
 
+        var _tmpTarget  = destination + '.' + process.pid + '.' + Math.random().toString(36).slice(2, 8) + '.tmp';
+        var _settled    = false;
+
         var sourceStream = fs.createReadStream(source);
-        var destinationStream = fs.createWriteStream(destination);
+        // #B227 — no direct write to the final name
+        // was: var destinationStream = fs.createWriteStream(destination);
+        var destinationStream = fs.createWriteStream(_tmpTarget);
+
+        var onCopyError = function(err) {
+            if (_settled) return;
+            _settled = true;
+            try { destinationStream.destroy() } catch (_e) {}
+            try { if ( fs.existsSync(_tmpTarget) ) fs.unlinkSync(_tmpTarget) } catch (_e) {}
+            // #B227 — propagate a real Error (was a plain string, so callers
+            // printing `err.stack` logged `undefined`); keep the historical
+            // message prefix for log continuity
+            if ( !(err instanceof Error) ) {
+                err = new Error('Error on Path.cp(...): could not copy `'+ source +'` to `'+ destination +'`');
+            }
+            callback(err, i)
+        };
+
+        // #B227 — the source stream previously had NO error listener: an
+        // unreadable/vanished source raised an unhandled 'error' event
+        // (uncaughtException → process kill)
+        sourceStream.on('error', onCopyError);
 
         sourceStream
             .pipe(destinationStream)
-            .on('error', function() {
-                var err = 'Error on Path.cp(...): Not found ' + source +' or ' + destination;
-                callback(err, i)
-            })
+            .on('error', onCopyError)
             .on('close', function() {
+                // 'close' also follows 'error' on an autoDestroyed stream — the
+                // settled latch keeps a failed copy from settling the callback a
+                // SECOND time as a success (the pre-fix shape did exactly that,
+                // and in browseCopy's recursion each double-settle forked the
+                // directory walk)
+                if (_settled) return;
+                try {
+                    fs.renameSync(_tmpTarget, destination);
+                } catch (err) {
+                    return onCopyError(err)
+                }
                 callback(false, i)
             })
     }
@@ -1149,11 +1222,20 @@ function PathHelper() {
     /**
      * move or rename, file or folder
      *
+     * Implemented as `cp()` then `rm(source)` — the byte-writer is `copyFile`,
+     * so the #B227 temp+rename semantics apply here too.
+     *
      * @param {string} target
      *
      * @callback callback
-     * @param {string} errResponse
+     * @param {boolean|Error} errResponse - `false`/falsy on success, an `Error`
+     *      on failure (#B227 — was a plain string on stream-copy failures)
      * @param {string} [pathResponse]
+     *
+     * @example
+     *  new _('/tmp/staged.pdf').mv('/var/shared/final.pdf', function(err) {
+     *      if (err) return console.error(err.stack);
+     *  });
      * */
 
     _.prototype.mv = function(target, callback) {
