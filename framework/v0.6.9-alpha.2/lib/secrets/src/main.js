@@ -381,10 +381,19 @@ function selectBackend(config) {
         // check above to catch: `${homedir}/${scope}/secrets.env` with an empty
         // scope collapses to `<home>//secrets.env`, which POSIX reads as
         // `<home>/secrets.env` — a silent read of the WRONG file, one directory up
-        // from the intended one. The empty segment is the only surviving trace of
-        // the collapse, so refuse on it.
+        // from the intended one. The empty segment is the only surviving trace.
+        //
+        // This CANNOT distinguish that from the benign cause — a token carrying a
+        // trailing slash, e.g. GINA_HOMEDIR=/opt/gina/ (operator-supplied, and
+        // nothing in the path chain normalises it) — because by here both have
+        // collapsed to the same string. It refuses either way, deliberately: the
+        // dangerous case runs the bundle on the wrong credential in silence, and
+        // this file already refuses on the same reasoning when a declared layer
+        // exists but cannot be read. The benign case costs one character to fix
+        // and the message names it, so the error must NOT assert a cause it
+        // cannot know.
         if (p.indexOf('//') > -1) {
-            throw new Error('`settings.secrets.file` contains an empty path segment — a `${…}` token resolved to an empty value: ' + p);
+            throw new Error('`settings.secrets.file` contains an empty path segment (`//`), so it does not name the file it appears to — POSIX reads `<a>//<b>` as `<a>/<b>`. Either a `${…}` token resolved to an empty value (the path then silently drops a directory), or a token carries a trailing slash. Remove the doubled separator or fix the token: ' + p);
         }
     }
 
