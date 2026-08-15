@@ -6430,17 +6430,40 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
 
     /**
      * Push a Server-Sent Events payload to connected clients.
-     * Targets the client whose `sessionID` matches the current session,
-     * or broadcasts to all active clients when no session is found.
      *
-     * @param {object|null} payload     - Data to push; falls back to `req[method].payload` when `null`
-     * @param {object}      [option]    - Push options (e.g. `{ section: '...' }`)
-     * @param {function}    [callback]  - `callback(err, result)`
+     * The recipient is decided SERVER-side and can never be chosen by the
+     * request body (#B364): an explicit `option.sessionID` wins, else the
+     * payload goes to the caller's own session. With neither — and without an
+     * explicit broadcast — this is a no-op that warns, because a push with no
+     * resolvable recipient is a bug, and the previous fail-OPEN answer to it
+     * was to send to everybody.
+     *
+     * Reaching every connected client requires `option.broadcast === true`,
+     * supplied by your code rather than inferred from a missing value.
+     *
+     * @param {object|null}  payload             - Data to push; falls back to `req[method].payload` when `null`
+     * @param {object}       [option]            - Push options, also forwarded to the transport (e.g. `{ compress: true }`)
+     * @param {string}       [option.sessionID]  - Explicit recipient session id; defaults to the caller's own session
+     * @param {boolean}      [option.broadcast]  - `true` (strictly) to reach every connected client
+     * @param {string}       [option.section]    - Section stamped onto the payload; falls back to `req[method].section`
+     * @param {function}     [callback]          - `callback(err, result)`
      * @returns {void}
+     *
+     * @example
+     * // to the caller's own session
+     * self.push({ event: 'saved' });
+     *
+     * @example
+     * // to a specific session your code selected
+     * self.push({ event: 'invited' }, { sessionID: invitee.sessionId });
+     *
+     * @example
+     * // to everyone — deliberate, never implicit
+     * self.push({ event: 'maintenance' }, { broadcast: true });
      */
     this.push = function(payload, option, callback) {
 
-        // #B38 — released-response guard (see #B31): push is a fire-and-forget broadcast
+        // #B38 — released-response guard (see #B31): push is a fire-and-forget send
         // over the SSE/engine.io clients; on a released request (per-request refs nulled by
         // a terminal exit) a no-op return is correct — the response this request would have
         // pushed to is already gone. Live requests are unaffected (guard skipped).
@@ -6450,11 +6473,34 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
 
         var req = local.req, res = local.res;
         var method  = req.method.toLowerCase();
-        // if no session defined, will push to all active clients
-        // resuming current session
-        var sessionId = ( typeof(req[method].sessionID) != 'undefined' ) ? req[method].sessionID : null;
-        // retrieve section if existing
-        var section = ( typeof(req[method].section) != 'undefined' ) ? req[method].section : null;
+
+        // #B364 — the recipient is NEVER read from the request body. It used to be
+        // (`req[method].sessionID`), which let a caller aim a push at any session by
+        // sending an id — and, when the id was absent, at EVERY connected client.
+        // Order: explicit server-supplied id → the caller's own session → nothing.
+        var broadcast = ( option != null && option.broadcast === true );
+        var sessionId = null;
+        if ( option != null && typeof(option.sessionID) == 'string' && option.sessionID !== '' ) {
+            sessionId = option.sessionID;
+        } else if ( typeof(req.sessionID) != 'undefined' && req.sessionID ) {
+            sessionId = req.sessionID;
+        } else if ( req.session != null && typeof(req.session.id) != 'undefined' && req.session.id ) {
+            sessionId = req.session.id;
+        }
+
+        // Fail CLOSED: no recipient and no explicit broadcast sends nothing at all.
+        if ( !broadcast && !sessionId ) {
+            console.warn('[CONTROLLER][ push ] no recipient: the request has no session and no `option.sessionID` was given, so nothing was sent. Pass `{ sessionID: <id> }` to target a session, or `{ broadcast: true }` to reach every connected client.');
+            return;
+        }
+
+        // retrieve section if existing — an explicit option wins over the request
+        var section = null;
+        if ( option != null && typeof(option.section) != 'undefined' ) {
+            section = option.section;
+        } else if ( typeof(req[method].section) != 'undefined' ) {
+            section = req[method].section;
+        }
 
         if (!payload) {
             payload     = null;
@@ -6485,20 +6531,27 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
             clients = self.serverInstance.eio.clients;
             if ( clients ) {
                 for (let s in clients) {
-                    if ( !clients[s].constructor.name == 'Socket' ) {
+                    // #B364 — was `!clients[s].constructor.name == 'Socket'`, which parses
+                    // as `(!name) == 'Socket'` and is therefore always false: the guard
+                    // never once skipped a non-socket entry.
+                    if ( clients[s].constructor.name !== 'Socket' ) {
                         continue;
                     }
 
                     if (
-                        // session filter
-                        sessionId
-                        && typeof(clients[s].sessionId) != 'undefined'
-                        && clients[s].sessionId == sessionId
+                        // every client, only when the caller asked for it
+                        broadcast
                         ||
-                        // send to all clients if no specific sessionId defined
-                        !sessionId
+                        // otherwise the resolved session, and nothing else
+                        (
+                            typeof(clients[s].sessionId) != 'undefined'
+                            && clients[s].sessionId == sessionId
+                        )
                     ) {
-                        clients[s].sendPacket("message", payload, options, callback);
+                        // #B364 — was `options`, an identifier that exists nowhere in this
+                        // scope: every call threw ReferenceError here before sending, so
+                        // push() had never delivered a packet in any published release.
+                        clients[s].sendPacket("message", payload, option, callback);
                     }
                 }
             }
