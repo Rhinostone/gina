@@ -391,6 +391,58 @@ function Add(opt, cmd) {
 
 
     /**
+     * Copies the framework's `_gitignore` template to the project's `.gitignore`,
+     * but only when the project does not already have one (#B258).
+     *
+     * The `_` prefix is the ship-time name: a real `.gitignore` tracked inside
+     * `core/template/` would be read by git as ignore rules for the framework's
+     * own tree. The rename to the dotted form belongs here, at scaffold time —
+     * and until now nothing performed it, so the template shipped in every
+     * tarball with no consumer and scaffolded projects got no `.gitignore` at
+     * all. That left the `.env` / `*.env` globs it carries unable to protect
+     * anything, which is the security-adjacent half of this fix.
+     *
+     * SKIP-IF-EXISTS is deliberate. A project's `.gitignore` is the user's file
+     * and routinely carries rules the framework knows nothing about; filling a
+     * gap is safe, replacing is not. This also makes the step idempotent, so
+     * re-running `project:add` over an existing project cannot clobber it.
+     *
+     * Note this does NOT reuse `lib.generator.createFileFromTemplateSync`, which
+     * is otherwise the right shape: it unlinks the target first, so it cannot
+     * express skip-if-exists, and it chmods 0755 — an executable `.gitignore`.
+     *
+     * Never fatal: a scaffold that produced a complete, working project should
+     * not fail over an ignore file the operator can write by hand.
+     *
+     * @inner
+     * @private
+     * @param {string} target - Absolute path to the project's `.gitignore`
+     * @returns {boolean} true when written, false when one already existed or the write was skipped
+     *
+     * @example
+     * createGitignoreFile('/path/to/project/.gitignore'); // → true on a fresh project
+     * createGitignoreFile('/path/to/project/.gitignore'); // → false the second time
+     */
+    var createGitignoreFile = function(target) {
+        try {
+            if ( fs.existsSync(target) ) {
+                return false
+            }
+            var source = _(getPath('gina').core + '/template/_gitignore', true).toString();
+            if ( !fs.existsSync(source) ) {
+                return false
+            }
+            fs.writeFileSync(target, fs.readFileSync(source));
+            try { fs.chmodSync(target, 0o644) } catch (chmodErr) { /* best effort */ }
+            return true
+        } catch (gitignoreErr) {
+            console.warning('[ project:add ] could not write `.gitignore`: ' + (gitignoreErr.message || gitignoreErr));
+            return false
+        }
+    }
+
+
+    /**
      * Creates or updates package.json from the framework template, merging
      * any existing file when isCreatedFromExistingPackage is true.
      *
@@ -429,6 +481,12 @@ function Add(opt, cmd) {
             contentFile,
             target
         );
+
+        // #B258 — the project's `.gitignore`, written only when absent. This is
+        // the last scaffold step for both the new-project and the import path:
+        // an imported project without one has exactly the same exposure as a
+        // fresh one, and skip-if-exists keeps the import non-destructive.
+        createGitignoreFile( _(self.projectLocation + '/.gitignore', true).toString() );
 
         end(true)
     }
