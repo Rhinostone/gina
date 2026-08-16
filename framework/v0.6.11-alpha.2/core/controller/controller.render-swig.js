@@ -1159,6 +1159,13 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                             + _cacheFlowPatch
                             + 'if(u&&u.environment&&u.environment.metrics){u.environment.metrics.weightBytes=' + _cacheWeightBytes + ';u.environment.metrics.serverMs=' + _cacheServerMsFinal + ';}'
                             + 'if(g&&g.environment&&g.environment.metrics){g.environment.metrics.weightBytes=' + _cacheWeightBytes + ';g.environment.metrics.serverMs=' + _cacheServerMsFinal + ';}'
+                            // #B386 — re-sync the Inspector's localStorage fallback channel.
+                            // statusbar.html writes that mirror BEFORE this patch runs, so
+                            // without this line it keeps the emit-time payload forever:
+                            // weightBytes null (View tab drops its weight badge whenever the
+                            // client Performance leg is unavailable) and the late flow entries
+                            // missing (Flow tab loses its template/response/total bars).
+                            + 'try{localStorage.setItem("__ginaData",JSON.stringify(d))}catch(e){}'
                             + '}(window.__ginaData));</script>';
                         htmlContent = htmlContent.replace(/<\/body>/i, function () { return _cachePatchScript + '</body>'; });
                     }
@@ -1963,6 +1970,13 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                             + _flowPatch
                             + 'if(u&&u.environment&&u.environment.metrics){u.environment.metrics.weightBytes=' + _weightBytesFinal + ';u.environment.metrics.serverMs=' + _serverMsFinal + ';}'
                             + 'if(g&&g.environment&&g.environment.metrics){g.environment.metrics.weightBytes=' + _weightBytesFinal + ';g.environment.metrics.serverMs=' + _serverMsFinal + ';}'
+                            // #B386 — re-sync the Inspector's localStorage fallback channel.
+                            // statusbar.html writes that mirror BEFORE this patch runs, so
+                            // without this line it keeps the emit-time payload forever:
+                            // weightBytes null (View tab drops its weight badge whenever the
+                            // client Performance leg is unavailable) and the late flow entries
+                            // missing (Flow tab loses its template/response/total bars).
+                            + 'try{localStorage.setItem("__ginaData",JSON.stringify(d))}catch(e){}'
                             + '}(window.__ginaData));</script>';
                         htmlContent = htmlContent.replace(/<\/body>/i, function () { return _patchScript + '</body>'; });
                     }

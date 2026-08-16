@@ -6965,12 +6965,24 @@ describe('58 - View tab Weight / Load fallback via server-side metrics', functio
         var src = getRNj58();
         var idx = src.indexOf('_njPatchScript');
         assert.ok(idx > -1, 'expected _njPatchScript variable');
-        // Slice forward across the multi-line patch construction (var decl,
-        // string concat, and the html.replace call) — keep generous.
-        var block = src.substring(idx, idx + 1500);
+        // #B386 — realigned to the FUNCTION replacer. The patch embeds
+        // JSON.stringify'd flow entries, and a string replacement expands $&,
+        // $` , $' and $1 in the replacement text; both render-swig.js sites
+        // already used the function form. Strictly tighter than the previous
+        // pin: it now also asserts WHICH replacer form is used.
+        //
+        // Matched against the WHOLE source rather than a char-distance window:
+        // `_njPatchScript` occurs exactly twice (the declaration and this
+        // replace call), so the match is unambiguous, and a proximity pin keyed
+        // on a fixed byte-count silently stops reaching its target the moment a
+        // comment is added above it — which is exactly what happened here.
+        assert.strictEqual(
+            (src.match(/_njPatchScript/g) || []).length, 2,
+            'expected _njPatchScript to appear exactly twice (declaration + replace call)'
+        );
         assert.ok(
-            /html\s*=\s*html\.replace\(\s*\/<\\\/body>\/i\s*,\s*_njPatchScript/.test(block),
-            'expected html = html.replace(/<\\/body>/i, _njPatchScript + ...)'
+            /html\s*=\s*html\.replace\(\s*\/<\\\/body>\/i\s*,\s*function\s*\(\s*\)\s*\{\s*return\s+_njPatchScript/.test(src),
+            'expected html = html.replace(/<\\/body>/i, function () { return _njPatchScript + ... })'
         );
     });
 

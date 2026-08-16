@@ -1439,8 +1439,20 @@ module.exports = async function renderNunjucks(userData, displayInspector, errOp
                 + _njFlowPatch
                 + 'if(u&&u.environment&&u.environment.metrics){u.environment.metrics.weightBytes=' + _njWeightBytesFinal + ';u.environment.metrics.serverMs=' + _njServerMsFinal + ';}'
                 + 'if(g&&g.environment&&g.environment.metrics){g.environment.metrics.weightBytes=' + _njWeightBytesFinal + ';g.environment.metrics.serverMs=' + _njServerMsFinal + ';}'
+                // #B386 — re-sync the Inspector's localStorage fallback channel.
+                // statusbar.html writes that mirror BEFORE this patch runs, so
+                // without this line it keeps the emit-time payload forever:
+                // weightBytes null (View tab drops its weight badge whenever the
+                // client Performance leg is unavailable) and the late flow entries
+                // missing (Flow tab loses its template/response/total bars).
+                + 'try{localStorage.setItem("__ginaData",JSON.stringify(d))}catch(e){}'
                 + '}(window.__ginaData));</script>';
-            html = html.replace(/<\/body>/i, _njPatchScript + '</body>');
+            // Function replacer, not a string: the patch embeds JSON.stringify'd
+            // flow entries, and a string replacement expands $&, $`, $' and $1 in
+            // the replacement text — corrupting the emitted script for any entry
+            // whose label/detail carries one. Both render-swig.js sites already
+            // use the function form; this one did not.
+            html = html.replace(/<\/body>/i, function () { return _njPatchScript + '</body>'; });
         } catch (lateBindErr) {
             try { console.warn('[render-nunjucks] view-fallback late-bind skipped: ' + (lateBindErr.message || lateBindErr)); } catch (e) {}
         }
