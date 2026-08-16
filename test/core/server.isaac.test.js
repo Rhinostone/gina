@@ -1329,7 +1329,7 @@ describe('09 - #HDR8 Phase 2 X-Powered-By framework gate source structure', func
         assert.ok(helperPos < reqPos,    "helper must be defined before `server.on('request', ...)`");
     });
 
-    it('exactly 27 object-literal sites wrap headers via _setPoweredByHeader({', function() {
+    it('exactly 28 object-literal sites wrap headers via _setPoweredByHeader({', function() {
         // 16 sites through #INS9b; #INS10 added the 17th — the GET/POST
         // /_gina/instrument control handler wraps its reply headers via the
         // helper so the deny/status responses honour server.hidePoweredBy.
@@ -1351,9 +1351,14 @@ describe('09 - #HDR8 Phase 2 X-Powered-By framework gate source structure', func
         // NOTE: the gate's own 503 path is deliberately NOT in this census — it
         // wraps lib.maintenance.responseHeaders(...), a function RESULT, not an
         // object literal, so it does not match this pattern.
+        // #B384 added the 28th: the cross-origin WRITE guard that fronts the
+        // whole /_gina/* family wraps its 403-deny headers via the helper, so a
+        // refusal cannot leak X-Powered-By under server.hidePoweredBy. It sits
+        // above every /_gina/* handler, which is why it is the first site in
+        // file order rather than the last.
         var matches = src.match(/=\s*_setPoweredByHeader\(\{/g);
-        assert.equal(matches && matches.length, 27,
-            'expected 27 `= _setPoweredByHeader({` call sites; found ' + (matches ? matches.length : 0));
+        assert.equal(matches && matches.length, 28,
+            'expected 28 `= _setPoweredByHeader({` call sites; found ' + (matches ? matches.length : 0));
     });
 
     it('every named headers var that previously held X-Powered-By is now wrapped via helper', function() {

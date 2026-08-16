@@ -1113,6 +1113,48 @@ function ServerEngineClass(options) {
             acceptEncoding      = null;
             isBinary            = false;
 
+            // ── #B384 — cross-origin WRITE guard for the /_gina/* control family ────────
+            // Twin of the core/server.js gate — see there for the full rationale.
+            // Isaac needs its OWN copy rather than inheriting the express one:
+            // its fast-path handlers (/_gina/maintenance, /_gina/cache/clear,
+            // /_gina/release/rebuild) answer here and never reach server.js's
+            // onInstance, so a single copy on the express side would leave
+            // precisely the mutating endpoints unguarded under this engine.
+            //
+            // Placed above every /_gina/* handler so current AND future ones
+            // inherit the refusal. SAFE methods are untouched — the Inspector's
+            // cross-origin GET/SSE channels are a documented design.
+            if (
+                /^\/_gina\//.test(request.url)
+                && !lib.admin.isSafeMethod(request.method)
+                && lib.admin.isCrossOriginWrite(request)
+            ) {
+                console.warn('[ SERVER ] refused a cross-origin write to `' + request.url.split('?')[0] + '`');
+
+                const xOrgBody = JSON.stringify({
+                    error: 'forbidden',
+                    message: 'cross-origin write to a /_gina/* control endpoint is refused'
+                });
+
+                const xOrgHeaders = _setPoweredByHeader({
+                    'cache-control': 'no-cache, no-store, must-revalidate',
+                    'pragma': 'no-cache',
+                    'expires': '0',
+                    'content-type': 'application/json; charset=utf8'
+                });
+
+                if (response.stream) {
+                    response.stream.respond({
+                        ':status': 403,
+                        ...xOrgHeaders
+                    });
+                    return response.stream.end(xOrgBody);
+                }
+
+                response.writeHead(403, xOrgHeaders);
+                return response.end(xOrgBody);
+            }
+
             // healthcheck
             // TODO - add a top level API : server.api.js (check, get ...)
             // TODO - on 90% RAM usage, redirect to `come back later then restart bundle`
@@ -2277,6 +2319,14 @@ function ServerEngineClass(options) {
             //   route middleware only runs once a route has matched.
             //
             // Cost when off: one property read plus a boolean.
+            //
+            // ⚠️ #B383 — THIS GATE MUST STAY SYNCHRONOUS, and so must any future
+            // pre-routing gate on either engine. A gate that defers its decision
+            // (await / callback / promise / setImmediate) hands control back to
+            // the HTTP/2 'stream' emitter, and the raw byte-serving listener in
+            // core/server.js then serves the asset underneath it — MEASURED as a
+            // 200 bypass, against a synchronous arm that held at 503. The full
+            // mechanism is documented at the core/server.js twin.
             var _mtState = server._maintenance;
             if ( _mtState && lib.maintenance.isActive(_mtState) ) {
                 var _mtNow     = Date.now();

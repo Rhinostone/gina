@@ -824,7 +824,11 @@ declare namespace gina {
         StorageStore: any;
         SwigFilters: any;
         Watcher: any;
-        /** Admin-endpoint IP allowlist helpers (`app.json > admin.allowFrom`). */
+        /**
+         * Admin-endpoint gates: the IP allowlist (`app.json > admin.allowFrom`)
+         * and the cross-origin WRITE guard fronting the `/_gina/*` control
+         * family (#B384).
+         */
         admin: any;
         archiver: any;
         async: any;

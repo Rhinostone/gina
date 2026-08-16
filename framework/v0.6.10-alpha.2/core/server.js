@@ -4322,6 +4322,47 @@ function Server(options) {
                 response.setHeader('X-Request-Id', request._ginaReqId);
             }
 
+            // ── #B384 — cross-origin WRITE guard for the /_gina/* control family ────────
+            // PLACEMENT IS THE FEATURE, exactly as with the #MAINT1 gate below.
+            //
+            // It sits ABOVE every /_gina/* handler so that each one — and every
+            // FUTURE one — inherits the refusal without having to remember it.
+            // The alternative seams were both measured worse: the shared body
+            // reader `_readInstrumentBody` fronts only 2 of the family (the
+            // query-param endpoints never read a body at all), and folding the
+            // check into lib.admin.isClientAllowed would silently widen a
+            // function whose name promises an IP check, catching six admin GETs
+            // that were never the problem.
+            //
+            // WHY it is needed: these endpoints authenticate with an AMBIENT
+            // credential (the client IP), so a lured operator browsing from an
+            // allowlisted address — loopback by DEFAULT, i.e. the machine
+            // running the bundle — silently carries that credential into any
+            // request an attacker's page makes. /_gina/storage/gc,
+            // /_gina/cache/clear and /_gina/release/rebuild read their whole
+            // input from the QUERY STRING and no body, so this needs no fetch
+            // and no CORS reasoning: an auto-submitting <form> is enough.
+            //
+            // SAFE methods are deliberately untouched — the Inspector's
+            // cross-origin GET/SSE channels (/_gina/agent, /_gina/logs,
+            // /_gina/indexes) are a documented design, and a cross-origin GET
+            // is not a CSRF vector. MEASURED before shipping: the plugin source
+            // issues ZERO POSTs to /_gina/*, with a firing control (23 hits on
+            // /_gina/agent), so no shipped caller is broken by this.
+            //
+            // Keep in sync with the core/server.isaac.js twin.
+            if (
+                /^\/_gina\//.test(request.url)
+                && !lib.admin.isSafeMethod(request.method)
+                && lib.admin.isCrossOriginWrite(request)
+            ) {
+                console.warn('[admin] refused a cross-origin write to `' + request.url.split('?')[0] + '` — `' + self.appName + '`');
+                response.setHeader('content-type',  'application/json; charset=utf8');
+                response.setHeader('cache-control', 'no-cache, no-store, must-revalidate');
+                response.statusCode = 403;
+                return response.end(JSON.stringify({ error: 'forbidden', message: 'cross-origin write to a /_gina/* control endpoint is refused' }));
+            }
+
             // ── /_gina/health/check — liveness probe (always-on, UNGATED) ───────────────
             // (MS2) Engine-agnostic mirror of the Isaac handler (server.isaac.js ~:1105).
             // GET only, returns {status:"healthy", timestamp}. Deliberately UNGATED — no
@@ -5291,6 +5332,26 @@ function Server(options) {
             //
             // Cost when off: one property read + one boolean. The #P39-sensitive
             // render path pays nothing for an opt-in it is not using.
+            //
+            // ⚠️ #B383 — THIS GATE MUST STAY SYNCHRONOUS. Anything added here that
+            // defers its decision (await, a callback, a promise, setImmediate)
+            // becomes BYPASSABLE, and silently so. Under HTTP/2 node's compat
+            // layer registers its own 'stream' listener when a 'request' listener
+            // attaches; gina's byte-serving onHttp2Strem (registered lazily from
+            // inside the first h2 static request, ~:3900) therefore lands SECOND
+            // on the same emitter. EventEmitter dispatches synchronously in
+            // registration order, so a synchronous gate completes its 503 while
+            // the compat listener still holds the stack — before gina's listener
+            // ever runs. An ASYNC gate returns control to the emitter first, and
+            // the raw listener then serves the asset underneath it: MEASURED as a
+            // 200 bypass in a 6-arm micro-replica whose synchronous arm held at
+            // 503, with a positive control that served 200. The live h2 boot also
+            // logs one harmless ERR_HTTP2_HEADERS_SENT here — gina's listener
+            // losing the race it was always going to lose — which lib/proc
+            // downgrades to a warn; the bundle stays up.
+            //
+            // The constraint is GENERAL: it binds any future pre-routing gate
+            // placed in onRequest(), not just this one.
             //
             // Keep in sync with the core/server.isaac.js twin.
             var _mtState = self.instance && self.instance._maintenance;
