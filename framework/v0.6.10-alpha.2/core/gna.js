@@ -1779,6 +1779,29 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
                                     console.warn('[transient-errors] config validation skipped: ' + (teErr.message || teErr));
                                 }
 
+                                // #MAINT1 — `server.maintenance` boot-time shape check
+                                // (warn-only, NEVER fatal, exactly as #CE1 above: the
+                                // opt-in governs how a request RENDERS, so a bad value
+                                // must not refuse a boot). The engine-side reader
+                                // (lib.maintenance.resolveConf, boot-resolved in
+                                // core/server.js) independently falls back to the same
+                                // defaults per key — this lint exists so that fallback
+                                // is never SILENT. Per-key, not all-or-nothing: a bad
+                                // retryAfter must not disable the whole feature and
+                                // leave an operator believing the site is closed.
+                                try {
+                                    var _mtBlock = null;
+                                    try {
+                                        _mtBlock = config.getInstance()[gna.core.startingApp][env].server.maintenance;
+                                    } catch (mtConfErr) { _mtBlock = null; }
+                                    var _mtWarnings = lib.maintenance.lintConf(_mtBlock);
+                                    for (var _mtW = 0; _mtW < _mtWarnings.length; ++_mtW) {
+                                        console.warn('[maintenance] ' + _mtWarnings[_mtW]);
+                                    }
+                                } catch (mtErr) {
+                                    console.warn('[maintenance] config validation skipped: ' + (mtErr.message || mtErr));
+                                }
+
                                 // setting default global middlewares
                                 if ( typeof(instance.use) == 'function' ) {
 

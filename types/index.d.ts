@@ -860,6 +860,11 @@ declare namespace gina {
         job: any;
         jsonConfigHeader: any;
         logger: any;
+        /**
+         * Maintenance-mode primitive (#MAINT1) behind the pre-routing gate on
+         * both engines — `settings.json > server.maintenance`.
+         */
+        maintenance: any;
         math: any;
         mcpDispatch: any;
         mcpHttp: any;

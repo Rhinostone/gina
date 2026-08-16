@@ -195,6 +195,45 @@ var a11yErrorDocument = function(code, bodyHtml, req) {
 };
 
 /**
+ * #MAINT1 — answer a request refused by the maintenance gate.
+ *
+ * Always 503 + `Retry-After` + `Cache-Control: no-store`. The `no-store` is
+ * load-bearing rather than tidy: a 503 cached by an intermediary would outlive
+ * the maintenance window and keep serving the closed page after the site
+ * reopened — the one failure mode that turns a 10-minute window into an
+ * open-ended outage.
+ *
+ * Content negotiation is header-only, because this runs BEFORE routing: nothing
+ * has parsed the request yet, so `req.isXMLRequest` does not exist at this point.
+ * The HTML branch reuses the #A11Y3 conforming-document wrapper (doctype, `lang`,
+ * `<title>`) and is entirely self-contained — no stylesheet, no image, no script —
+ * precisely because the gate above it also refuses static assets.
+ *
+ * Engine-agnostic: uses the express idiom (setHeader/statusCode/end) and is
+ * mirrored by the isaac twin in core/server.isaac.js.
+ *
+ * @inner
+ * @param {object} req - the request
+ * @param {object} res - the response
+ * @param {object} conf - the effective conf from lib.maintenance.effectiveConf()
+ * @returns {*} the result of `res.end()`
+ *
+ * @example
+ * _serveMaintenance(request, response, { retryAfter: 300, message: 'Back at 14:00 UTC' });
+ */
+var _serveMaintenance = function(req, res, conf) {
+    var kind    = lib.maintenance.negotiate(req);
+    var built   = lib.maintenance.buildBody(conf, kind, a11yLangTag(req));
+    var headers = lib.maintenance.responseHeaders(conf, built.contentType);
+
+    res.statusCode = 503;
+    for (var h in headers) {
+        res.setHeader(h, headers[h]);
+    }
+    return res.end(built.body);
+};
+
+/**
  * Constant-time API-key check for the /_gina/agent SSE endpoint when it is
  * exposed outside dev mode (#INS9b). Engine-agnostic mirror of the helper in
  * server.isaac.js. The configured key lives on `process.gina._inspectorAgentKey`
@@ -1724,6 +1763,43 @@ function Server(options) {
                 }
             } catch (_proxyClassifyErr) {
                 process.gina._proxyRequireForwarded = false;
+            }
+
+            // ── #MAINT1 — maintenance mode: boot-resolve the per-bundle state ──
+            // A server serves exactly ONE bundle (#H13 slice 3b), so the state
+            // lives on the ENGINE INSTANCE rather than a bundle-keyed map: in
+            // merged-process mode each bundle has its own instance, so per-bundle
+            // scope falls out for free and `gina bundle:x` maintenance can never
+            // leak onto a sibling bundle sharing the process.
+            //
+            // Resolved ONCE here (not per request) so the gate costs one property
+            // read plus a boolean when the feature is off — the #P39-sensitive
+            // render path must not pay for an opt-in it is not using. Same
+            // boot-resolve precedent as `instance._cacheName` (#B238) and
+            // `process.gina._proxyRequireForwarded` above.
+            //
+            // `_maintenance.runtime` is the POST /_gina/maintenance override
+            // (null = follow config). It is deliberately NOT persisted: a restart
+            // returns the bundle to its configured state, which is the safe
+            // direction — a forgotten runtime toggle can never outlive the process
+            // that set it. Config `enabled: true` is the durable form.
+            //
+            // Read by the gate in onRequest() below AND by the isaac twin
+            // (core/server.isaac.js reads the same object as `server._maintenance`).
+            try {
+                var _mtBlock = self.conf[self.appName][self.env].server.maintenance;
+                engine.instance._maintenance = {
+                    conf    : lib.maintenance.resolveConf(_mtBlock),
+                    runtime : null
+                };
+                if ( engine.instance._maintenance.conf.enabled ) {
+                    console.warn('[ BUNDLE ][ server ][ init ] MAINTENANCE MODE IS ON for `'+ self.appName +'` (settings.json > server.maintenance.enabled) — every request outside /_gina/* answers 503 until it is turned off.');
+                }
+            } catch (_mtErr) {
+                engine.instance._maintenance = {
+                    conf    : lib.maintenance.resolveConf(null),
+                    runtime : null
+                };
             }
 
             // ── #RWATCH — stale built-release watch (local production rehearsals) ──
@@ -4766,6 +4842,96 @@ function Server(options) {
                 return; // keep the connection open — do not call response.end()
             }
 
+            // ── /_gina/maintenance — maintenance-mode control (always-on, admin-gated) ──
+            // (#MAINT1) GET returns status; POST {enable:bool[,ttlSeconds,retryAfter,
+            // message]} flips it. Admin IP-allowlist gated like /_gina/info and the
+            // cache/storage families — NOT key-gated like /_gina/instrument, because
+            // this is an operational switch rather than a data-capture toggle, and it
+            // must stay reachable from the host/pod and from the CLI (which dials the
+            // bundle port directly, so it presents as loopback under any topology).
+            //
+            // Deliberately declared ABOVE the maintenance gate itself, so an operator
+            // can always reach their own off switch while the window is open.
+            //
+            // The runtime override is NOT persisted: a restart returns the bundle to
+            // its configured state. `ttlSeconds` is a dead-man switch — when it
+            // expires the bundle reverts to CONFIG (not to "off"), so a forgotten
+            // timer can never re-open a site settings.json says is closed.
+            //
+            // Keep in sync with the core/server.isaac.js twin.
+            if (
+                ( request.method.toUpperCase() === 'GET' || request.method.toUpperCase() === 'POST' )
+                && /\/_gina\/maintenance(?:\?|$)/.test(request.url)
+            ) {
+                response.setHeader('content-type',  'application/json; charset=utf8');
+                response.setHeader('cache-control', 'no-cache, no-store, must-revalidate');
+                if ( !lib.admin.isClientAllowed(request) ) {
+                    response.statusCode = 403;
+                    return response.end(JSON.stringify({ error: 'forbidden', message: '/_gina/maintenance: client IP not in app.json admin.allowFrom' }));
+                }
+
+                var _mtCtl = self.instance._maintenance;
+                if ( !_mtCtl ) {
+                    response.statusCode = 503;
+                    return response.end(JSON.stringify({ error: 'unavailable', message: '/_gina/maintenance: state not initialised' }));
+                }
+
+                // The status payload NEVER carries bypassKey — only whether one is
+                // configured, which is what an operator actually needs to know
+                // before closing a site they might then be unable to browse.
+                var _mtStatus = function() {
+                    var _now = Date.now();
+                    var _eff = lib.maintenance.effectiveConf(_mtCtl, _now);
+                    var _rt  = _mtCtl.runtime;
+                    var _rtLive = !!( _rt && !( typeof(_rt.until) == 'number' && _rt.until <= _now ) );
+                    return {
+                        bundle       : self.appName,
+                        active       : lib.maintenance.isActive(_mtCtl, _now),
+                        source       : _rtLive ? 'runtime' : 'config',
+                        retryAfter   : _eff.retryAfter,
+                        message      : _eff.message,
+                        until        : ( _rtLive && _rt && typeof(_rt.until) == 'number' ) ? new Date(_rt.until).toISOString() : null,
+                        hasBypassKey : !!( _eff.bypassKey && _eff.bypassKey.length )
+                    };
+                };
+
+                if ( request.method.toUpperCase() === 'GET' ) {
+                    return response.end(JSON.stringify(_mtStatus()));
+                }
+
+                return _readInstrumentBody(request, function(_mbErr, _mbBody) {
+                    if ( _mbErr ) {
+                        response.statusCode = 400;
+                        return response.end(JSON.stringify({ error: 'bad_request', message: '/_gina/maintenance: ' + _mbErr.message }));
+                    }
+                    if ( !_mbBody || ( _mbBody.enable !== true && _mbBody.enable !== false ) ) {
+                        response.statusCode = 400;
+                        return response.end(JSON.stringify({ error: 'bad_request', message: '/_gina/maintenance: body must be {"enable":true|false[,"ttlSeconds":N,"retryAfter":N,"message":"…"]}' }));
+                    }
+
+                    var _rtNew = { active: _mbBody.enable === true, until: null };
+                    if ( typeof(_mbBody.ttlSeconds) == 'number' && isFinite(_mbBody.ttlSeconds)
+                            && Math.floor(_mbBody.ttlSeconds) === _mbBody.ttlSeconds
+                            && _mbBody.ttlSeconds >= 1 && _mbBody.ttlSeconds <= 86400 ) {
+                        _rtNew.until = Date.now() + (_mbBody.ttlSeconds * 1000);
+                    }
+                    if ( typeof(_mbBody.retryAfter) == 'number' ) {
+                        _rtNew.retryAfter = _mbBody.retryAfter;
+                    }
+                    if ( typeof(_mbBody.message) == 'string' ) {
+                        _rtNew.message = _mbBody.message;
+                    }
+                    _mtCtl.runtime = _rtNew;
+
+                    console.warn('[maintenance] `' + self.appName + '` maintenance mode turned '
+                        + ( _rtNew.active ? 'ON' : 'OFF' ) + ' via POST /_gina/maintenance'
+                        + ( _rtNew.until ? (' until ' + new Date(_rtNew.until).toISOString()) : '' )
+                        + ' — runtime override, NOT persisted across a restart.');
+
+                    return response.end(JSON.stringify(_mtStatus()));
+                });
+            }
+
             // ── /_gina/instrument — toggleable instrumentation window (#INS10) ──
             // Opt-in (settings.json inspector.instrumentation.enabled) + key-auth
             // (required EVEN in dev — turning on raw query/flow capture outside dev
@@ -5098,6 +5264,74 @@ function Server(options) {
 
                 console.info(request.method + ' [200] ' + request.url);
                 return response.end(JSON.stringify(self.instance._lastGinaDataUnredacted));
+            }
+
+            // ── #MAINT1 — maintenance gate (always-on, opt-in) ───────────────────
+            // PLACEMENT IS THE FEATURE. It sits here deliberately:
+            //
+            //   AFTER every /_gina/* handler above — so liveness keeps answering
+            //   200 (an orchestrator must NOT restart pods because the operator
+            //   declared maintenance; correct k8s maintenance keeps pods READY and
+            //   serves the 503 from the app), and so the admin endpoints, metrics
+            //   and the maintenance toggle itself stay reachable while the window
+            //   is open. Gating them would strand the operator outside their own
+            //   off switch.
+            //
+            //   BEFORE the webroot filter, the static-asset branch below
+            //   (`priority to statics`) and all routing — which is exactly what a
+            //   middleware-based maintenance mode structurally CANNOT do, since
+            //   route middleware runs only after a route matches (core/router.js
+            //   processMiddlewares). Below this line, statics would keep serving
+            //   200 and an unmatched URL would 404 instead of 503.
+            //
+            // It is also above BOTH render-cache serve points: isaac's pre-routing
+            // L1 read, and the shared handle() L2 read — handle() runs downstream
+            // of onRequest(), so this single placement covers it. A cache serve
+            // point sitting above a gate is precisely #B158's shape.
+            //
+            // Cost when off: one property read + one boolean. The #P39-sensitive
+            // render path pays nothing for an opt-in it is not using.
+            //
+            // Keep in sync with the core/server.isaac.js twin.
+            var _mtState = self.instance && self.instance._maintenance;
+            if ( _mtState && lib.maintenance.isActive(_mtState) ) {
+                var _mtNow     = Date.now();
+                var _mtConf    = lib.maintenance.effectiveConf(_mtState, _mtNow);
+                var _mtVerdict = lib.maintenance.evaluateBypass(
+                    request, _mtConf, _mtNow, process.gina._proxyRequireForwarded
+                );
+
+                if ( _mtVerdict.allowed ) {
+                    if ( _mtVerdict.grant ) {
+                        // The operator presented the key in the URL. Hand back a
+                        // cookie so the rest of the session needs no secret, then
+                        // redirect to the same URL WITHOUT it so the key leaves the
+                        // address bar, the history and the Referer.
+                        //
+                        // The Location is the stripped PATH ONLY — never rebuilt
+                        // from Host or any X-Forwarded-* header. #B367 established
+                        // those are attacker-controlled; a redirect target built
+                        // from them is an open redirect. A relative Location is
+                        // resolved against the origin the client already reached,
+                        // which is always the right one here.
+                        console.warn('[maintenance] bypass granted to a client presenting a valid key (' + _mtVerdict.reason + ') — `' + self.appName + '`');
+                        response.setHeader('set-cookie', lib.maintenance.buildBypassCookieHeader(
+                            _mtVerdict.cookie, lib.maintenance.isSecureRequest(request)
+                        ));
+                        response.setHeader('cache-control', 'no-store');
+                        response.setHeader('location', _mtVerdict.redirectTo || '/');
+                        response.statusCode = 302;
+                        return response.end();
+                    }
+                    // cookie / header / allowlisted-and-not-proxied: straight through.
+                } else {
+                    if ( _mtVerdict.reason === 'invalid-key' ) {
+                        // Never log the presented value — the #B365 precedent for an
+                        // asserting client. One line is enough to spot probing.
+                        console.warn('[maintenance] a client presented an INVALID bypass key — `' + self.appName + '`');
+                    }
+                    return _serveMaintenance(request, response, _mtConf);
+                }
             }
 
             // Fixing an express js bug :(

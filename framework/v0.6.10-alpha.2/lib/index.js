@@ -132,6 +132,14 @@ function Lib() {
         // stateless pure-function leaf with no instance/singleton state to
         // hot-reload — same #B32-residual precedent as merge / uuid / Collection.
         admin           : require('./admin'),
+        // #MAINT1 — maintenance-mode primitive backing the pre-routing gate on
+        // BOTH engines: config resolve/lint, constant-time bypass-key check,
+        // stateless HMAC bypass cookie, and the proxy-aware IP adjudication.
+        // PLAIN require (NOT _require) for the same reason as admin above: a
+        // stateless pure-function leaf with no state to hot-reload — and it is
+        // security-bearing, which keeps it out of the hot-reload path entirely
+        // (the lib/authn precedent).
+        maintenance     : require('./maintenance'),
         // #AI6 — Async-job primitive. Holds an in-memory job registry, a
         // concurrency-limited worker, and a self-contained unref'd setInterval
         // sweep timer at module scope. Like State / logger below, it MUST use a

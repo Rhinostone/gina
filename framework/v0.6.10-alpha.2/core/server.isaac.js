@@ -1552,6 +1552,99 @@ function ServerEngineClass(options) {
                 });
             }
 
+            // ── /_gina/maintenance — maintenance-mode control (always-on, admin-gated) ──
+            // (#MAINT1) Twin of the core/server.js handler — keep in sync per the
+            // /_gina/* endpoint rule. GET returns status; POST {enable:bool[,
+            // ttlSeconds,retryAfter,message]} flips it. Admin IP-allowlist gated like
+            // /_gina/info and the cache family — an operational switch, not a
+            // data-capture toggle — and declared ABOVE the maintenance gate itself so
+            // the operator can always reach their own off switch while the window is
+            // open. The runtime override is NOT persisted; `ttlSeconds` expiry reverts
+            // to CONFIG (never to "off"), so a forgotten timer cannot re-open a site
+            // settings.json says is closed.
+            if (
+                ( request.method.toUpperCase() === 'GET' || request.method.toUpperCase() === 'POST' )
+                && /\/_gina\/maintenance(?:\?|$)/.test(request.url)
+            ) {
+                var _mtCtlHeaders = _setPoweredByHeader({
+                    'cache-control': 'no-cache, no-store, must-revalidate',
+                    'pragma':        'no-cache',
+                    'expires':       '0',
+                    'content-type':  'application/json; charset=utf8'
+                });
+                var _mtSend = function(status, payload) {
+                    var _b = JSON.stringify(payload);
+                    if (response.stream) {
+                        response.stream.respond({ ':status': status, ..._mtCtlHeaders });
+                        return response.stream.end(_b);
+                    }
+                    response.writeHead(status, _mtCtlHeaders);
+                    return response.end(_b);
+                };
+
+                if ( !lib.admin.isClientAllowed(request) ) {
+                    return _mtSend(403, { error: 'forbidden', message: '/_gina/maintenance: client IP not in app.json admin.allowFrom' });
+                }
+
+                var _mtCtl = server._maintenance;
+                if ( !_mtCtl ) {
+                    return _mtSend(503, { error: 'unavailable', message: '/_gina/maintenance: state not initialised' });
+                }
+
+                // The status payload NEVER carries bypassKey — only whether one is
+                // configured, which is what an operator needs to know before closing
+                // a site they might then be unable to browse.
+                var _mtStatus = function() {
+                    var _now    = Date.now();
+                    var _eff    = lib.maintenance.effectiveConf(_mtCtl, _now);
+                    var _rt     = _mtCtl.runtime;
+                    var _rtLive = !!( _rt && !( typeof(_rt.until) == 'number' && _rt.until <= _now ) );
+                    return {
+                        bundle       : server._wsBundle || (typeof getContext === 'function' ? getContext('bundle') : null),
+                        active       : lib.maintenance.isActive(_mtCtl, _now),
+                        source       : _rtLive ? 'runtime' : 'config',
+                        retryAfter   : _eff.retryAfter,
+                        message      : _eff.message,
+                        until        : ( _rtLive && _rt && typeof(_rt.until) == 'number' ) ? new Date(_rt.until).toISOString() : null,
+                        hasBypassKey : !!( _eff.bypassKey && _eff.bypassKey.length )
+                    };
+                };
+
+                if ( request.method.toUpperCase() === 'GET' ) {
+                    return _mtSend(200, _mtStatus());
+                }
+
+                return _readInstrumentBody(request, function(_mbErr, _mbBody) {
+                    if ( _mbErr ) {
+                        return _mtSend(400, { error: 'bad_request', message: '/_gina/maintenance: ' + _mbErr.message });
+                    }
+                    if ( !_mbBody || ( _mbBody.enable !== true && _mbBody.enable !== false ) ) {
+                        return _mtSend(400, { error: 'bad_request', message: '/_gina/maintenance: body must be {"enable":true|false[,"ttlSeconds":N,"retryAfter":N,"message":"…"]}' });
+                    }
+
+                    var _rtNew = { active: _mbBody.enable === true, until: null };
+                    if ( typeof(_mbBody.ttlSeconds) == 'number' && isFinite(_mbBody.ttlSeconds)
+                            && Math.floor(_mbBody.ttlSeconds) === _mbBody.ttlSeconds
+                            && _mbBody.ttlSeconds >= 1 && _mbBody.ttlSeconds <= 86400 ) {
+                        _rtNew.until = Date.now() + (_mbBody.ttlSeconds * 1000);
+                    }
+                    if ( typeof(_mbBody.retryAfter) == 'number' ) {
+                        _rtNew.retryAfter = _mbBody.retryAfter;
+                    }
+                    if ( typeof(_mbBody.message) == 'string' ) {
+                        _rtNew.message = _mbBody.message;
+                    }
+                    _mtCtl.runtime = _rtNew;
+
+                    console.warn('[maintenance] maintenance mode turned '
+                        + ( _rtNew.active ? 'ON' : 'OFF' ) + ' via POST /_gina/maintenance'
+                        + ( _rtNew.until ? (' until ' + new Date(_rtNew.until).toISOString()) : '' )
+                        + ' — runtime override, NOT persisted across a restart.');
+
+                    return _mtSend(200, _mtStatus());
+                });
+            }
+
             // ── /_gina/instrument — toggleable instrumentation window (#INS10) ──
             // Opt-in (inspector.instrumentation.enabled) + key-auth required EVEN
             // in dev. GET → window status; POST {enable,ttlSeconds} → open/close.
@@ -2164,6 +2257,78 @@ function ServerEngineClass(options) {
 
             if (isDev) {
                 refreshCore()
+            }
+
+            // ── #MAINT1 — maintenance gate (always-on, opt-in) ───────────────────
+            // Twin of the core/server.js gate — keep the two in sync per the
+            // /_gina/* endpoint rule. PLACEMENT IS THE FEATURE:
+            //
+            //   AFTER every /_gina/* handler above (liveness keeps answering 200 so
+            //   an orchestrator does not restart pods over a declared maintenance
+            //   window; the admin endpoints and the maintenance toggle itself stay
+            //   reachable, so the operator is never stranded outside their own off
+            //   switch) and after the proxied-request classification, whose
+            //   `request._ginaIsProxyHost` stamp lib.maintenance reuses rather than
+            //   deriving a fourth copy of the #B65 heuristic.
+            //
+            //   BEFORE this engine's pre-routing render-cache L1 read below, before
+            //   the static-asset resolution and before routing — which is what a
+            //   middleware-based maintenance mode structurally cannot reach, since
+            //   route middleware only runs once a route has matched.
+            //
+            // Cost when off: one property read plus a boolean.
+            var _mtState = server._maintenance;
+            if ( _mtState && lib.maintenance.isActive(_mtState) ) {
+                var _mtNow     = Date.now();
+                var _mtConf    = lib.maintenance.effectiveConf(_mtState, _mtNow);
+                var _mtVerdict = lib.maintenance.evaluateBypass(
+                    request, _mtConf, _mtNow, (process.gina && process.gina._proxyRequireForwarded)
+                );
+
+                if ( !_mtVerdict.allowed ) {
+                    if ( _mtVerdict.reason === 'invalid-key' ) {
+                        // Never log the presented value — the #B365 precedent.
+                        console.warn('[maintenance] a client presented an INVALID bypass key');
+                    }
+                    var _mtKind    = lib.maintenance.negotiate(request);
+                    var _mtBuilt   = lib.maintenance.buildBody(
+                        _mtConf, _mtKind, lib.maintenance.langTag(request.headers['accept-language'])
+                    );
+                    var _mtHeaders = _setPoweredByHeader(
+                        lib.maintenance.responseHeaders(_mtConf, _mtBuilt.contentType)
+                    );
+                    if (response.stream) {
+                        response.stream.respond({ ':status': 503, ..._mtHeaders });
+                        return response.stream.end(_mtBuilt.body);
+                    }
+                    response.writeHead(503, _mtHeaders);
+                    return response.end(_mtBuilt.body);
+                }
+
+                if ( _mtVerdict.grant ) {
+                    // Key presented in the URL: hand back a cookie so the rest of
+                    // the session needs no secret, then redirect to the same URL
+                    // WITHOUT it so the key leaves the address bar, history and
+                    // Referer. The Location is the stripped PATH ONLY — never
+                    // rebuilt from Host or any X-Forwarded-* header (#B367 proved
+                    // those are attacker-controlled; a target built from them is an
+                    // open redirect).
+                    console.warn('[maintenance] bypass granted to a client presenting a valid key (' + _mtVerdict.reason + ')');
+                    var _mtGrantHeaders = _setPoweredByHeader({
+                        'cache-control' : 'no-store',
+                        'location'      : _mtVerdict.redirectTo || '/',
+                        'set-cookie'    : lib.maintenance.buildBypassCookieHeader(
+                                              _mtVerdict.cookie, lib.maintenance.isSecureRequest(request)
+                                          )
+                    });
+                    if (response.stream) {
+                        response.stream.respond({ ':status': 302, ..._mtGrantHeaders });
+                        return response.stream.end();
+                    }
+                    response.writeHead(302, _mtGrantHeaders);
+                    return response.end();
+                }
+                // cookie / header / allowlisted-and-not-proxied: straight through.
             }
 
             if (!isCacheless || String(server._cacheIsEnabled).toLowerCase() === 'true') {
