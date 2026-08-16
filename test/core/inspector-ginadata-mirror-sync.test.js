@@ -100,6 +100,44 @@ describe('#B386 — late-bind patch re-syncs the __ginaData localStorage mirror'
         );
     });
 
+    it('§06 — the per-tab channel convention agrees across all FOUR owners', function () {
+        // #B386 part 2. The bound-mode BroadcastChannel name and the sessionStorage
+        // key that seeds it are now referenced from four places: statusbar.html
+        // (publisher), inspector.js (subscriber) and both render delegates (the
+        // late-bind republish). A rename in one without the others silently
+        // strands the Inspector on a channel nobody publishes to — no error, no
+        // failing request, just a permanently stale badge. This pin makes such a
+        // rename break the suite instead.
+        const STATUSBAR = fs.readFileSync(
+            path.join(__dirname, '..', '..', 'framework', FW, 'core', 'asset', 'plugin',
+                'src', 'vendor', 'gina', 'inspector', 'html', 'statusbar.html'), 'utf8');
+        const SPA = fs.readFileSync(
+            path.join(__dirname, '..', '..', 'framework', FW, 'core', 'asset', 'plugin',
+                'src', 'vendor', 'gina', 'inspector', 'js', 'inspector.js'), 'utf8');
+
+        // (a) the channel prefix is spelled identically everywhere
+        for (const [label, src] of [['statusbar.html', STATUSBAR], ['inspector.js', SPA],
+                                    ['render-swig.js', SWIG_SRC], ['render-nunjucks.js', NJ_SRC]]) {
+            assert.ok(src.indexOf('gina-inspector-') > -1,
+                label + ' must reference the per-tab channel prefix "gina-inspector-"');
+        }
+
+        // (b) the delegates must seed it from sessionStorage — NOT from the
+        //     localStorage advert, which is last-writer-wins across tabs and
+        //     would let one tab's patch publish onto another tab's channel.
+        for (const [label, src] of [['render-swig.js', SWIG_SRC], ['render-nunjucks.js', NJ_SRC]]) {
+            assert.ok(/sessionStorage\.getItem\("__gina_tab_id"\)/.test(src),
+                label + ' must read the tab id from sessionStorage.__gina_tab_id');
+            assert.strictEqual(src.indexOf('__gina_last_tab_ch'), -1,
+                label + ' must NOT derive the channel from the cross-tab localStorage advert');
+        }
+
+        // (c) statusbar.html is the origin of that key — if it stops writing it,
+        //     the delegates' read silently yields null and the republish no-ops.
+        assert.ok(/sessionStorage\.setItem\('__gina_tab_id'/.test(STATUSBAR),
+            'statusbar.html must still seed sessionStorage.__gina_tab_id');
+    });
+
     it('§05 — BEHAVIOURAL: the emitted script writes the PATCHED payload to the mirror', function () {
         // Execute the real emitted contract rather than matching its text.
         // Harness validity is established by the subtract arm below: with the

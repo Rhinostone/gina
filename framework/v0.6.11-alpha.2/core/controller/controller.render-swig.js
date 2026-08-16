@@ -1166,6 +1166,18 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                             // client Performance leg is unavailable) and the late flow entries
                             // missing (Flow tab loses its template/response/total bars).
                             + 'try{localStorage.setItem("__ginaData",JSON.stringify(d))}catch(e){}'
+                            // #B386 (part 2) — republish over the per-tab BroadcastChannel.
+                            // localStorage above is only the Inspector's FALLBACK channel;
+                            // a statusbar-launched Inspector runs in BOUND mode and reads
+                            // this channel instead, so the re-sync above never reached it.
+                            // Every statusbar _ginaPublish() call site runs BEFORE this
+                            // patch (measured: 7 sites, all ahead of it), so without this
+                            // line a bound Inspector holds the pre-patch frame until it
+                            // re-requests — which is what "refresh the Inspector" did.
+                            // The channel id comes from sessionStorage, which is per-tab
+                            // and therefore race-free; the localStorage advert is
+                            // last-writer-wins across tabs and must NOT be used here.
+                            + 'try{var _t=sessionStorage.getItem("__gina_tab_id");if(_t&&typeof BroadcastChannel!=="undefined"){var _c=new BroadcastChannel("gina-inspector-"+_t);_c.postMessage({type:"data",payload:d});_c.close();}}catch(e){}'
                             + '}(window.__ginaData));</script>';
                         htmlContent = htmlContent.replace(/<\/body>/i, function () { return _cachePatchScript + '</body>'; });
                     }
@@ -1977,6 +1989,18 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                             // client Performance leg is unavailable) and the late flow entries
                             // missing (Flow tab loses its template/response/total bars).
                             + 'try{localStorage.setItem("__ginaData",JSON.stringify(d))}catch(e){}'
+                            // #B386 (part 2) — republish over the per-tab BroadcastChannel.
+                            // localStorage above is only the Inspector's FALLBACK channel;
+                            // a statusbar-launched Inspector runs in BOUND mode and reads
+                            // this channel instead, so the re-sync above never reached it.
+                            // Every statusbar _ginaPublish() call site runs BEFORE this
+                            // patch (measured: 7 sites, all ahead of it), so without this
+                            // line a bound Inspector holds the pre-patch frame until it
+                            // re-requests — which is what "refresh the Inspector" did.
+                            // The channel id comes from sessionStorage, which is per-tab
+                            // and therefore race-free; the localStorage advert is
+                            // last-writer-wins across tabs and must NOT be used here.
+                            + 'try{var _t=sessionStorage.getItem("__gina_tab_id");if(_t&&typeof BroadcastChannel!=="undefined"){var _c=new BroadcastChannel("gina-inspector-"+_t);_c.postMessage({type:"data",payload:d});_c.close();}}catch(e){}'
                             + '}(window.__ginaData));</script>';
                         htmlContent = htmlContent.replace(/<\/body>/i, function () { return _patchScript + '</body>'; });
                     }
