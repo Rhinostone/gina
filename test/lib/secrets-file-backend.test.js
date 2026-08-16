@@ -418,3 +418,103 @@ describe('07 - #B268 an empty env var falls through to the file, but warns', fun
             'an absent env var is the ordinary case and must stay quiet');
     });
 });
+
+
+/**
+ * §08 — the three guards added by the 2026-08-15 adversarial-review batch.
+ * Each pins a shape that previously passed in silence:
+ *
+ *   #B270  the framework-environment tier must not shadow `process.env` with a
+ *          NON-STRING. `filterArgs()` stores real booleans, so the old `||`
+ *          short-circuited on a truthy boolean and skipped process.env — the
+ *          file tier then won over a set environment variable, inverting the
+ *          precedence §04 exists to protect. This is §04's blind spot.
+ *   #B271  `[]` silently disabled the whole tier; `[" "]` cleared the schema's
+ *          `minLength: 1` and built a tier that could never resolve anything.
+ *   #B272  a `${…}` token that resolved to EMPTY leaves no token behind for the
+ *          unresolved-token guard — only an empty path segment, which POSIX
+ *          collapses into a silent read of the file one directory up.
+ */
+describe('08 - post-review guards (#B270, #B271, #B272)', function () {
+
+    var envBackend = require(path.join(LIB, 'backends', 'env.js'));
+    var warnings   = [];
+
+    function capture(fn) {
+        var orig = console.warn;
+        warnings = [];
+        console.warn = function () {
+            warnings.push(Array.prototype.slice.call(arguments).join(' '));
+        };
+        try { return fn(); } finally { console.warn = orig; }
+    }
+
+    function withEnvVar(impl, fn) {
+        var had  = Object.prototype.hasOwnProperty.call(global, 'getEnvVar');
+        var orig = global.getEnvVar;
+        global.getEnvVar = impl;
+        try { return fn(); }
+        finally { if (had) { global.getEnvVar = orig; } else { delete global.getEnvVar; } }
+    }
+
+    function defaultBackend() {
+        return secrets.selectBackend({ content: { settings: {} } });
+    }
+
+    it('#B270 a BOOLEAN from the framework tier does not shadow process.env', function () {
+        process.env.B270_KEY = 'a_real_secret_from_the_environment';
+        try {
+            var got = withEnvVar(function (k) { return (k === 'B270_KEY') ? true : undefined; },
+                                 function () { return envBackend.resolve('B270_KEY'); });
+            assert.equal(got, 'a_real_secret_from_the_environment',
+                'a truthy NON-STRING must fall through to process.env, not win');
+        } finally { delete process.env.B270_KEY; }
+    });
+
+    it('#B270 CONTROL: a non-empty STRING from the framework tier still wins', function () {
+        process.env.B270_KEY = 'from_process_env';
+        try {
+            var got = withEnvVar(function (k) { return (k === 'B270_KEY') ? 'from_framework' : undefined; },
+                                 function () { return envBackend.resolve('B270_KEY'); });
+            assert.equal(got, 'from_framework',
+                'the framework tier keeps its precedence for real strings');
+        } finally { delete process.env.B270_KEY; }
+    });
+
+    it('#B270 CONTROL: an EMPTY string from the framework tier falls through too', function () {
+        process.env.B270_KEY = 'from_process_env';
+        try {
+            var got = withEnvVar(function (k) { return (k === 'B270_KEY') ? '' : undefined; },
+                                 function () { return envBackend.resolve('B270_KEY'); });
+            assert.equal(got, 'from_process_env', 'empty counts as unset on both tiers');
+        } finally { delete process.env.B270_KEY; }
+    });
+
+    it('#B271 `[]` disables the file tier and no longer does it silently', function () {
+        var backend = capture(function () { return secrets.selectBackend(cfg([])); });
+        assert.strictEqual(backend, defaultBackend(),
+            'an empty array still opts out — refusing boot here would be an outage');
+        assert.equal(warnings.length, 1, 'expected exactly one warning');
+        assert.ok(/empty array/i.test(warnings[0]), 'the warning must name the shape');
+    });
+
+    it('#B271 CONTROL: a populated array opts IN and stays quiet', function () {
+        var backend = capture(function () { return secrets.selectBackend(cfg([BASE])); });
+        assert.notStrictEqual(backend, defaultBackend(), 'a file tier must have been built');
+        assert.equal(warnings.length, 0, 'the ordinary case must not warn');
+    });
+
+    it('#B271 a whitespace-only path is refused, not built into a dead tier', function () {
+        assert.throws(function () { secrets.selectBackend(cfg([' '])); },  /non-empty string/);
+        assert.throws(function () { secrets.selectBackend(cfg('\t')); },   /non-empty string/);
+    });
+
+    it('#B272 an empty path segment is refused (a token resolved to EMPTY)', function () {
+        assert.throws(function () { secrets.selectBackend(cfg(TMP + '//secrets.env')); },
+                      /empty path segment/);
+    });
+
+    it('#B272 CONTROL: the same path with the segment present is accepted', function () {
+        assert.doesNotThrow(function () { secrets.selectBackend(cfg(TMP + '/scope/secrets.env')); });
+    });
+});

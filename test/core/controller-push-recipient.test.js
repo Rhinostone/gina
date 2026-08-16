@@ -88,8 +88,10 @@ function drive(opts) {
     if (typeof opts.reqSessionID !== 'undefined') { req.sessionID = opts.reqSessionID; }
 
     var local = { req: opts.released ? null : req, res: {} };
+    // #B371 — `noChannel` models the express engine, which attaches no engine.io.
+    // Default is unchanged, so every arm written before this option is untouched.
     var self  = {
-        serverInstance: { eio: { clients: clients } },
+        serverInstance: opts.noChannel ? {} : { eio: { clients: clients } },
         throwError: function(err) { thrown = err; }
     };
 
@@ -235,5 +237,42 @@ describe('07 - #B364 instrument validation + non-socket skip', function() {
             clients: [ { id: 'A' }, { id: 'B', ctor: 'NotASocket' } ]
         });
         assert.deepEqual(r.delivered.map(function(d) { return d.to; }), [ 'A' ]);
+    });
+});
+
+describe('08 - #B371 a missing engine.io channel refuses by name', function() {
+    it('pins the guard in source, not just in behaviour', function() {
+        assert.match(CODE, /serverInstance\.eio == null/);
+        assert.match(CODE, /PUSH_CHANNEL_NOT_CONFIGURED/);
+    });
+
+    it('sends nothing and does NOT fail the request', function() {
+        var r = drive({ reqSessionID: 'SESSION-CALLER', noChannel: true });
+        assert.equal(r.delivered.length, 0, 'nothing may be sent without a channel');
+        assert.equal(r.thrown, null, 'a missing channel must not take down the request');
+    });
+
+    it('warns, naming the engine that carries the channel', function() {
+        var r = drive({ reqSessionID: 'SESSION-CALLER', noChannel: true });
+        assert.equal(r.warned.length, 1);
+        assert.match(r.warned[0], /no engine\.io channel/);
+        assert.match(r.warned[0], /isaac/);
+    });
+
+    it('reports PUSH_CHANNEL_NOT_CONFIGURED to a supplied callback', function() {
+        var got = [];
+        drive({
+            reqSessionID: 'SESSION-CALLER',
+            noChannel: true,
+            callback: function(err) { got.push(err); }
+        });
+        assert.equal(got.length, 1, 'the documented callback(err, result) contract must fire');
+        assert.equal(got[0].code, 'PUSH_CHANNEL_NOT_CONFIGURED');
+    });
+
+    it('does not fire when a channel IS present (control)', function() {
+        var r = drive({ reqSessionID: 'SESSION-CALLER' });
+        assert.equal(r.delivered.length, 1);
+        assert.equal(r.warned.length, 0, 'the channel warn must not fire when eio exists');
     });
 });
