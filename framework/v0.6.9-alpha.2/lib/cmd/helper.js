@@ -94,6 +94,7 @@ function CmdHelper(cmd, client, debug) {
         // don't use this collection to store into files
         bundlesByProject: {}, // bundles collection will be loaded into cmd.projects[$project].bundles
         bundlesLocation : null, // symlink to cmd.projects[$project].bundles_path
+        warnedAbsentBundles : {}, // #B375 — once-per-command dedup for the declared-but-absent-bundle warning emitted by loadAssets()
 
         // current project env.json path
         envPath : null, // path to env.json - defined by filterArgs()
@@ -663,6 +664,12 @@ function CmdHelper(cmd, client, debug) {
      * A registered project whose directory exists but whose manifest.json is missing
      * (a stale ~/.gina/projects.json entry) is warned and skipped (#B24) rather than
      * aborting the whole command.
+     * On `project:add`/`project:import`, the current project's bundle list is the
+     * UNION of the manifest's declared bundles and the bundle directories found on
+     * disk (#B375): declared entries are preserved as-is, disk-only bundles are
+     * appended for additive registration, and a declared bundle whose tree is
+     * absent is warned about once per command — never auto-pruned, since the
+     * declaration may be scope-restricted (#B373).
      * Also links node_modules and gina when running start/stop/restart tasks in global mode.
      * Assigns itself to the global `loadAssets`.
      *
@@ -1373,36 +1380,53 @@ function CmdHelper(cmd, client, debug) {
                 }
 
                 cmd.bundlesByProject[project]   = (cmd.bundlesByProject[project].count() > 0) ? cmd.bundlesByProject[project] : requireJSON(projectPropertiesPath).bundles;
-                // additional checks
-                let bundlesCount = cmd.bundlesByProject[project].count();
-                if ( /^project\:(add|import)/.test(cmd.task) && bundlesCount > 0 ) {
-                    let releasesPathObj = new _(cmd.projects[project].path +'/releases', true);
-                    let _bundleConfigPath = cmd.bundlesLocation;
-                    let files = [], f = 0;
-                    if ( new _(cmd.projects[project].path +'/src', true).existsSync() ) {
-                        files = fs.readdirSync(_(cmd.projects[project].path +'/src', true));
-                    } else if (releasesPathObj.existsSync()) {
-                        _bundleConfigPath = releasesPathObj.toString();
-                        files = fs.readdirSync(releasesPathObj.toString());
-                    }
-                    let _count = 0;
-                    for (;f < files.length; ++f) {
-                        // skip hidden
-                        let name = files[f];
-                        if ( /^\./.test(name) ) continue;
-                        _count++
-                    }
-                    if (_count != bundlesCount) {
-                        cmd.bundles = [];
-                        cmd.bundlesByProject[project] = {}
-                        let updatedManifest = requireJSON(projectPropertiesPath);
-                        updatedManifest.bundles = {};
-                        lib.generator.createFileFromDataSync(
-                            updatedManifest,
-                            projectPropertiesPath
-                        )
-                    }
-                }
+                // #B375 — the "additional checks" block below (introduced 2023, absorbed into an
+                // automated version-bump commit, never revisited) compared each project's declared
+                // bundle COUNT against a readdir of `<project>/src` (else `/releases`) and, on ANY
+                // mismatch, emptied `manifest.bundles` and wrote it back to disk — for EVERY
+                // registered project, not just the one being added/imported. That destroyed every
+                // per-bundle declaration the recreation skeleton does not carry (the `scopes`
+                // allow-list — #B373 —, `gina_version`, any custom key), reset `version`/`tag` and
+                // release targets to defaults, permanently emptied bystander projects' manifests
+                // (no rebuild ever runs for a non-target project), and did the same on plain
+                // `project:add` (the rebuild only runs on import). Its one legitimate function —
+                // forcing a rescan of the bundle directories so bundles on disk but missing from
+                // the manifest still get registered on import — is now served non-destructively by
+                // the union rescan near the end of loadAssets, which no longer needs `cmd.bundles`
+                // to be emptied to fire. Manifest entries are never auto-pruned anymore: a
+                // declared bundle whose tree is absent is warned about there instead.
+                // Kept commented per the replace-don't-delete convention:
+                //
+                // // additional checks
+                // let bundlesCount = cmd.bundlesByProject[project].count();
+                // if ( /^project\:(add|import)/.test(cmd.task) && bundlesCount > 0 ) {
+                //     let releasesPathObj = new _(cmd.projects[project].path +'/releases', true);
+                //     let _bundleConfigPath = cmd.bundlesLocation;
+                //     let files = [], f = 0;
+                //     if ( new _(cmd.projects[project].path +'/src', true).existsSync() ) {
+                //         files = fs.readdirSync(_(cmd.projects[project].path +'/src', true));
+                //     } else if (releasesPathObj.existsSync()) {
+                //         _bundleConfigPath = releasesPathObj.toString();
+                //         files = fs.readdirSync(releasesPathObj.toString());
+                //     }
+                //     let _count = 0;
+                //     for (;f < files.length; ++f) {
+                //         // skip hidden
+                //         let name = files[f];
+                //         if ( /^\./.test(name) ) continue;
+                //         _count++
+                //     }
+                //     if (_count != bundlesCount) {
+                //         cmd.bundles = [];
+                //         cmd.bundlesByProject[project] = {}
+                //         let updatedManifest = requireJSON(projectPropertiesPath);
+                //         updatedManifest.bundles = {};
+                //         lib.generator.createFileFromDataSync(
+                //             updatedManifest,
+                //             projectPropertiesPath
+                //         )
+                //     }
+                // }
 
             } else {
                 cmd.projects[project].exists    = false;
@@ -1525,10 +1549,22 @@ function CmdHelper(cmd, client, debug) {
             return false;
         }
 
+        // #B375 — this rescan used to be gated on `!cmd.bundles.length`, which only ever
+        // opened after the destructive count-mismatch reset (now retired, see above) had
+        // emptied the list: that reset WAS the discovery mechanism for bundles present on
+        // disk but missing from the manifest. The rescan now always runs for
+        // `project:add`/`project:import` on the current project and UNIONS the two sources
+        // instead: manifest-declared bundles keep their existing entries untouched
+        // (`scopes`, `version`, custom keys, release targets — all preserved), and only
+        // bundles found on disk but absent from the manifest are appended, for
+        // `addBundleToManifest` to seed additively (#B55). A bundle declared in the
+        // manifest but absent from disk is warned about, never auto-pruned: the
+        // declaration may be deliberate (a bundle restricted to other scopes — #B373 —
+        // whose tree is stripped at this scope); removing it for good is
+        // `gina bundle:remove`'s job.
         if (
             /^project\:(add|import)/.test(cmd.task)
             && typeof(cmd.projects[cmd.projectName]) != 'undefined'
-            && !cmd.bundles.length
         ) {
             var releasesPathObj = new _(cmd.projects[cmd.projectName].path +'/releases', true);
             var _bundleConfigPath = cmd.bundlesLocation;
@@ -1539,17 +1575,34 @@ function CmdHelper(cmd, client, debug) {
                 _bundleConfigPath = releasesPathObj.toString();
                 files = fs.readdirSync(releasesPathObj.toString());
             }
+            var _diskNames = [];
             for (;f < files.length; ++f) {
                 // skip hidden
                 let name = files[f];
                 if ( /^\./.test(name) ) continue;
+                _diskNames.push(name);
+                if ( cmd.bundles.indexOf(name) > -1 ) {
+                    // already declared in the manifest — keep the existing entry untouched
+                    continue;
+                }
                 cmd.bundles.push(name);
-                _bundleConfigPath += '/'+ name;
+                // #B376 — the settings path is derived from the loop-invariant scan root
+                // for every bundle: the previous version mutated the root across
+                // iterations, so every bundle after the first got a path nested under its
+                // predecessors and the settings-consistency pass silently skipped it.
                 cmd.bundlesByProject[cmd.projectName][name] = {
+                    src: 'src/'+ name,
                     configPaths: {
-                        settings: _(_bundleConfigPath +'/config/settings.json', true)
+                        settings: _(_bundleConfigPath +'/'+ name +'/config/settings.json', true)
                     }
                 };
+            }
+            // Surface manifest entries whose tree is missing from the scanned location —
+            // once per bundle per command (loadAssets runs several times per command).
+            for (let declared in cmd.bundlesByProject[cmd.projectName]) {
+                if ( _diskNames.indexOf(declared) > -1 || cmd.warnedAbsentBundles[declared] ) continue;
+                cmd.warnedAbsentBundles[declared] = true;
+                console.warn('Bundle `'+ declared +'` is declared in the manifest.json of project `@'+ cmd.projectName +'` but was not found under `'+ _bundleConfigPath +'` — keeping the declaration (it may be restricted to other scopes); if the bundle is gone for good, remove it with `gina bundle:remove '+ declared +' @'+ cmd.projectName +'`.');
             }
             cmd.bundles.sort()
         }

@@ -651,6 +651,10 @@ function Add(opt, cmd) {
      * and writes ports.json and ports.reverse.json when all bundles are done.
      * Also used by the `port:reset` command.
      *
+     * Bundles declared in the manifest but absent from disk (e.g. restricted to
+     * other scopes — #B373) carry no `configPaths`; the settings-consistency
+     * check skips them (#B375) while their port entries are still processed.
+     *
      * @inner
      * @private
      * @param {number} b - Current bundle index into self.bundles
@@ -735,10 +739,14 @@ function Add(opt, cmd) {
                             // bundle settings inconsistency check @ fix
                             bundleName              = local.bundle;
                             bundleConfig            = self.bundlesByProject[self.projectName][bundleName];
-                            settingsPath            = _(bundleConfig.configPaths.settings, true);
+                            // #B375 — a bundle declared in the manifest but absent from disk
+                            // (e.g. restricted to other scopes) carries no `configPaths`: skip
+                            // its settings-consistency check instead of throwing; the ports
+                            // handling below is unaffected.
+                            settingsPath            = ( bundleConfig && bundleConfig.configPaths ) ? _(bundleConfig.configPaths.settings, true) : null;
                             bundleSettingsUpdate    = false;
 
-                            if ( fs.existsSync(settingsPath) ) {
+                            if ( settingsPath && fs.existsSync(settingsPath) ) {
 
                                 bundleSettings  = requireJSON(settingsPath);
                                 //console.debug('found [ '+ bundleName +' ] settings ');
