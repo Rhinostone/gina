@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'During `gina project:add`/`gina project:import`, the rescan that registers bundles found on disk built a wrong `settings.json` path for every bundle after the first — the scan root grew by one path segment per bundle, so the second bundle''s settings were looked up under the first bundle''s directory, the third under the first two, and so on (#B376). Only the first bundle''s settings file could ever be found by the pass that reconciles a bundle''s declared protocol and scheme with the project''s lists; every later bundle was silently skipped. Each bundle''s path is now derived from the scan root and its own name.'
-time: 2026-08-16T02:13:41+01:00
