@@ -95,6 +95,7 @@ function CmdHelper(cmd, client, debug) {
         bundlesByProject: {}, // bundles collection will be loaded into cmd.projects[$project].bundles
         bundlesLocation : null, // symlink to cmd.projects[$project].bundles_path
         warnedAbsentBundles : {}, // #B375 — once-per-command dedup for the declared-but-absent-bundle warning emitted by loadAssets()
+        warnedInvalidServerSettings : {}, // #B378 — once-per-command dedup for the invalid bundle protocol/scheme warning emitted by loadAssets()
 
         // current project env.json path
         envPath : null, // path to env.json - defined by filterArgs()
@@ -670,6 +671,12 @@ function CmdHelper(cmd, client, debug) {
      * appended for additive registration, and a declared bundle whose tree is
      * absent is warned about once per command — never auto-pruned, since the
      * declaration may be scope-restricted (#B373).
+     * Each project's bundles are resolved against that project's OWN path (#B379),
+     * and a project's protocols/schemes lists are DERIVED bookkeeping constrained
+     * to the framework's supported sets from `~/main.json` (#B378): a bundle's
+     * declared `server.protocol`/`server.scheme` may extend its project's list
+     * only when the framework supports the value — an unsupported one is warned
+     * about once per command and never adopted or made a default.
      * Also links node_modules and gina when running start/stop/restart tasks in global mode.
      * Assigns itself to the global `loadAssets`.
      *
@@ -1480,10 +1487,18 @@ function CmdHelper(cmd, client, debug) {
                 cmd.bundlesByProject[project][bundle].schemes   = cmd.projects[project].schemes;
                 cmd.bundlesByProject[project][bundle].def_scheme = cmd.defaultScheme;
 
-                if ( fs.existsSync(_(cmd.projectLocation + '/'+ cmd.bundlesByProject[project][bundle].src )) ) {
+                // #B379 — resolve each project's bundles against ITS OWN path. This loop
+                // runs over EVERY registered project, while the singular
+                // `cmd.projectLocation` names only the CURRENT one — so a same-named
+                // bundle in another project used to be read out of the wrong tree: its
+                // `exists` flag, `configPaths` and default protocol/scheme all came from
+                // the current project's files, and whatever its namesake declared there
+                // leaked into the other project's registry entry.
+                let _ownProjectPath = cmd.projects[project].path;
+                if ( fs.existsSync(_(_ownProjectPath + '/'+ cmd.bundlesByProject[project][bundle].src )) ) {
                     cmd.bundlesByProject[project][bundle].exists = true;
                     // adding configurations
-                    bundleConfigPath = _(cmd.projectLocation + '/'+ cmd.bundlesByProject[project][bundle].src +'/config' );
+                    bundleConfigPath = _(_ownProjectPath + '/'+ cmd.bundlesByProject[project][bundle].src +'/config' );
                     cmd.bundlesByProject[project][bundle].configPaths = {
                         settings: _(bundleConfigPath +'/settings.json')
                     };
@@ -1495,22 +1510,40 @@ function CmdHelper(cmd, client, debug) {
                             typeof(settings.server) != 'undefined'
                             && typeof(settings.server.protocol) != 'undefined'
                         ) {
-                            // adding in case of bad configuration : exists in bundle, but not listed in available/global settings
-                            if (cmd.bundlesByProject[project][bundle].protocols.indexOf(settings.server.protocol) < 0)
-                                cmd.bundlesByProject[project][bundle].protocols.push(settings.server.protocol);
+                            // #B378 — a bundle's declared protocol may extend the project's
+                            // list ONLY when the framework itself supports it. The entry's
+                            // `.protocols` deliberately aliases the project's own array
+                            // (assigned above): that aliasing is how the project's port
+                            // matrix learns what its bundles use — and it persists to
+                            // ~/.gina/projects.json on the next registry write, from where
+                            // `image:build` bakes the list into a container's environment.
+                            // So an unsupported value is surfaced by name instead of
+                            // adopted, and never becomes the entry's default either.
+                            if ( cmd.protocolsAvailable.indexOf(settings.server.protocol) > -1 ) {
+                                if (cmd.bundlesByProject[project][bundle].protocols.indexOf(settings.server.protocol) < 0)
+                                    cmd.bundlesByProject[project][bundle].protocols.push(settings.server.protocol);
 
-                            cmd.bundlesByProject[project][bundle].def_protocol = settings.server.protocol
+                                cmd.bundlesByProject[project][bundle].def_protocol = settings.server.protocol
+                            } else if ( !cmd.warnedInvalidServerSettings[project +'/'+ bundle +':protocol'] ) {
+                                cmd.warnedInvalidServerSettings[project +'/'+ bundle +':protocol'] = true;
+                                console.warn('Bundle `'+ bundle +'` of project `@'+ project +'` declares `server.protocol: "'+ settings.server.protocol +'"`, which is not an allowed protocol (allowed: '+ cmd.protocolsAvailable.join(', ') +' — check your framework configuration `~/main.json`). Ignoring it: the bundle keeps the default `'+ cmd.bundlesByProject[project][bundle].def_protocol +'`.');
+                            }
                         }
 
                         if (
                             typeof(settings.server) != 'undefined'
                             && typeof(settings.server.scheme) != 'undefined'
                         ) {
-                            // adding in case of bad configuration : exists in bundle, but not listed in available/global settings
-                            if (cmd.bundlesByProject[project][bundle].schemes.indexOf(settings.server.scheme) < 0)
-                                cmd.bundlesByProject[project][bundle].schemes.push(settings.server.scheme);
+                            // #B378 — same rule as the protocol above.
+                            if ( cmd.schemesAvailable.indexOf(settings.server.scheme) > -1 ) {
+                                if (cmd.bundlesByProject[project][bundle].schemes.indexOf(settings.server.scheme) < 0)
+                                    cmd.bundlesByProject[project][bundle].schemes.push(settings.server.scheme);
 
-                            cmd.bundlesByProject[project][bundle].def_scheme = settings.server.scheme
+                                cmd.bundlesByProject[project][bundle].def_scheme = settings.server.scheme
+                            } else if ( !cmd.warnedInvalidServerSettings[project +'/'+ bundle +':scheme'] ) {
+                                cmd.warnedInvalidServerSettings[project +'/'+ bundle +':scheme'] = true;
+                                console.warn('Bundle `'+ bundle +'` of project `@'+ project +'` declares `server.scheme: "'+ settings.server.scheme +'"`, which is not an allowed scheme (allowed: '+ cmd.schemesAvailable.join(', ') +' — check your framework configuration `~/main.json`). Ignoring it: the bundle keeps the default `'+ cmd.bundlesByProject[project][bundle].def_scheme +'`.');
+                            }
                         }
                     }
 
@@ -1836,17 +1869,30 @@ function CmdHelper(cmd, client, debug) {
         }
 
         // getting available all protocols
+        // #B380 — read the SOURCE list by its own index, exactly as the env loop
+        // above does: the previous form indexed the TARGET with the source's index,
+        // so once the contextual list outgrew the project's own, the overshoot read
+        // undefined. #B378 — and merge only values the framework supports: the
+        // contextual list also grows from ports.json keys, which can retain
+        // protocols a framework update removed.
         for (let p in cmd.protocols) {
-            let newProtocol = allProjectProtocols[p];
-            if (allProjectProtocols.indexOf(newProtocol) < 0) {
+            let newProtocol = cmd.protocols[p];
+            if (
+                cmd.protocolsAvailable.indexOf(newProtocol) > -1
+                && allProjectProtocols.indexOf(newProtocol) < 0
+            ) {
                 console.debug('adding new protocol ['+newProtocol+'] VS' + JSON.stringify(cmd.protocols, null, 2));
                 allProjectProtocols.push(newProtocol);
             }
         }
         // getting available all schemes
+        // #B380 / #B378 — same two rules as the protocol loop above.
         for (let p in cmd.schemes) {
-            let newScheme = allProjectSchemes[p];
-            if (allProjectSchemes.indexOf(newScheme) < 0) {
+            let newScheme = cmd.schemes[p];
+            if (
+                cmd.schemesAvailable.indexOf(newScheme) > -1
+                && allProjectSchemes.indexOf(newScheme) < 0
+            ) {
                 console.debug('adding new scheme ['+newScheme+'] VS' + JSON.stringify(cmd.schemes, null, 2));
                 allProjectSchemes.push(newScheme);
             }

@@ -751,12 +751,17 @@ function Add(opt, cmd) {
                                 bundleSettings  = requireJSON(settingsPath);
                                 //console.debug('found [ '+ bundleName +' ] settings ');
                                 if ( typeof(bundleSettings.server) != 'undefined' ) {
+                                    // #B378 — this heal is what makes an invalid declaration
+                                    // bootable again, but a user file must never be rewritten
+                                    // silently: every change is collected and reported by name.
+                                    var _settingsChanges = [];
                                     // update only if given bundle protocol setting not in project protocols list
                                     // use project def_protocol by default in that case
                                     if (
                                         typeof(bundleSettings.server.protocol) != 'undefined'
                                         && protocols.indexOf(bundleSettings.server.protocol) < 0
                                     ) {
+                                        _settingsChanges.push('server.protocol "'+ bundleSettings.server.protocol +'" -> "'+ self.defaultProtocol +'"');
                                         bundleSettings.server.protocol = self.defaultProtocol;
                                         bundleSettingsUpdate = true
                                     }
@@ -767,13 +772,14 @@ function Add(opt, cmd) {
                                         typeof(bundleSettings.server.scheme) != 'undefined'
                                         && schemes.indexOf(bundleSettings.server.scheme) < 0
                                     ) {
+                                        _settingsChanges.push('server.scheme "'+ bundleSettings.server.scheme +'" -> "'+ self.defaultScheme +'"');
                                         bundleSettings.server.scheme = self.defaultScheme;
                                         bundleSettingsUpdate = true
                                     }
 
                                     if (bundleSettingsUpdate) {
                                         lib.generator.createFileFromDataSync(bundleSettings, settingsPath);
-                                        console.debug('updated [ '+ bundleName +' ] settings');
+                                        console.warn('Updated [ '+ bundleName +' ] settings: '+ _settingsChanges.join('; ') +' — the declared value is not in the project protocols/schemes list.');
                                     }
                                 }
                             }
