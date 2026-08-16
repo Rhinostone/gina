@@ -844,20 +844,28 @@ function Config(opt, contextResetNeeded) {
 
             appPath = _(root +'/'+ pkg[app].link, true);
             console.debug('[CONFIG] Checking appPath [ '+ appPath +' ] ');
-            // cleanup symlinks
-            let targetAppPathObj = new _(appPath, true);
-            if ( targetAppPathObj.existsSync() ) {
-                targetAppPathObj.rmSync()
-            }
+            // #B381 — this loop runs for EVERY declared bundle on EVERY config
+            // load, and it used to unlink-then-recreate each bundle's link in
+            // two non-atomic steps: with N processes sharing one project tree
+            // that is N×M unserialised rewrites of the same names, and a lost
+            // race aborted the whole shared config load. ensureSymlinkSync()
+            // keeps a correct link untouched — the steady-state load now
+            // writes nothing — and publishes a wrong/missing one atomically.
+            // was:
+            // let targetAppPathObj = new _(appPath, true);
+            // if ( targetAppPathObj.existsSync() ) {
+            //     targetAppPathObj.rmSync()
+            // }
+            let targetAppPathObj = null;
             try {
                 if (envIsDev) {
                     targetAppPathObj = new _(root +'/'+ pkg[app].src, true);
                     console.debug('[CONFIG][env:'+env+'][envIsDev:'+ envIsDev +'] Linking ['+ targetAppPathObj.toString() +'] to [ '+ appPath +' ] ');
-                    targetAppPathObj.symlinkSync(appPath);
+                    targetAppPathObj.ensureSymlinkSync(appPath);
                 } else {
                     targetAppPathObj = new _(root +'/'+ pkg[app].releases[scope][env].target, true);
                     console.debug('[CONFIG][env'+env+'][envIsDev:'+ envIsDev +'] Linking ['+ targetAppPathObj.toString() +'] to [ '+ appPath +' ] ');
-                    targetAppPathObj.symlinkSync(appPath);
+                    targetAppPathObj.ensureSymlinkSync(appPath);
                 }
             } catch (releaseError) {
                 console.error('[ releaseError ] ', releaseError);

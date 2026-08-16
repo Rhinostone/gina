@@ -230,6 +230,43 @@
           "type": "boolean",
           "description": "When true, the HTTP/2 server also accepts HTTP/1.1 connections (ALPN negotiation). Defaults to true."
         },
+        "maintenance": {
+          "type": "object",
+          "description": "Opt-in maintenance mode (#MAINT1). When active, every request EXCEPT the /_gina/* endpoints is answered 503 + Retry-After with a self-contained maintenance page, before static assets, the render/output cache and routing — coverage a route middleware cannot reach, since middleware only runs once a route has matched. The /_gina/* family stays reachable on purpose: liveness keeps answering 200 so an orchestrator does not restart pods over a declared window, and the operator can always reach the toggle. Flip it at runtime with POST /_gina/maintenance (admin-gated); a runtime override is NOT persisted across a restart, so `enabled` here is the durable form. A malformed block warns at boot per key and never refuses a boot.",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Master switch, and the state a restart returns to. Must be strictly boolean true to turn maintenance on — any other type or value leaves it off. Defaults to false.",
+              "default": false
+            },
+            "retryAfter": {
+              "type": "integer",
+              "description": "Delta-seconds emitted as the Retry-After header on the 503. Integer between 1 and 86400; out-of-range or non-integer values are ignored with a boot warning. Defaults to 300 (5 minutes) — longer than transientErrors' 30s, because an operator-declared window does not resolve in seconds.",
+              "minimum": 1,
+              "maximum": 86400,
+              "default": 300
+            },
+            "message": {
+              "type": "string",
+              "description": "User-facing text shown on the maintenance page and placed in the `explicit` field of the JSON body. HTML-escaped at the emission site. Non-empty string; empty or non-string values are ignored with a boot warning. Defaults to the standard 503 status text (Service Unavailable).",
+              "minLength": 1
+            },
+            "bypassKey": {
+              "type": "string",
+              "description": "Shared secret that lets a chosen visitor through an active maintenance window — the topology-INDEPENDENT bypass, and the only one that works behind a reverse proxy. Present it as the `x-gina-maintenance-key` header (programmatic callers) or as `?gina-maintenance-key=…` once in a browser, which sets a 12h HttpOnly cookie and redirects to the same URL without the secret. Compared in constant time; fail-closed when unset. Supports ${secret:KEY} substitution. Mint with `openssl rand -hex 24`; keys shorter than 16 characters warn at boot. Rotate the key to revoke every outstanding cookie.",
+              "minLength": 1
+            },
+            "allowFrom": {
+              "type": "array",
+              "description": "Supplementary IP allowlist for bypassing an active window. Honoured ONLY for requests that do NOT classify as proxied, because behind a reverse proxy every socket address is the proxy's: an unconditioned list would either admit the entire internet (proxy listed) or nobody (proxy not listed). Behind a proxy this axis is deliberately inert and `bypassKey` is the bypass. Reads req.socket.remoteAddress only — X-Forwarded-For is NOT trusted. Defaults to an empty list (no IP bypass).",
+              "items": {
+                "type": "string"
+              },
+              "default": []
+            }
+          }
+        },
         "transientErrors": {
           "type": "object",
           "description": "Opt-in rendering of transient datastore failures as 503 + Retry-After. When enabled, a connector error stamped isTransient that would render as HTTP 500 through throwError renders as 503 with a Retry-After header and a clean user-facing error message instead. Explicit non-500 statuses and permanent errors are never upgraded. A malformed block warns at boot and leaves the feature off — it never refuses a boot.",

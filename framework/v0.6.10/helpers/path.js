@@ -660,6 +660,120 @@ function PathHelper() {
         }
     }
 
+    /**
+     * Reports whether `linkPath` is an existing symbolic link that already
+     * resolves to `source`. Never throws: any read failure (nothing at the
+     * path, a non-link, a permission error) reads as `false`.
+     *
+     * A relative link text is resolved against the link's own directory before
+     * comparison, mirroring how the filesystem itself resolves it.
+     *
+     * @private
+     *
+     * @param {string} linkPath - Candidate symlink path
+     * @param {string} source - Intended link target
+     *
+     * @returns {boolean} true when the link exists and points at `source`
+     */
+    var isSymlinkResolvingTo = function(linkPath, source) {
+        var currentTarget = null;
+        try {
+            currentTarget = fs.readlinkSync(linkPath)
+        } catch (readErr) {
+            // nothing there, or not a symlink — either way it does not resolve to source
+            return false
+        }
+        if (currentTarget === source) {
+            return true
+        }
+        return Path.resolve(Path.dirname(linkPath), currentTarget) === Path.resolve(source)
+    }
+
+    /**
+     * Ensures `destination` is a symbolic link pointing at `source`, without
+     * ever leaving a window where the destination name is absent.
+     *
+     * Boot-time mounts used to unlink-then-recreate their links on every
+     * (re)start; with several processes sharing one project tree (e.g. replicas
+     * on a POSIX network filesystem) the two-step rewrite let a sibling observe
+     * — or collide on — a missing name (#B381). This helper is idempotent and
+     * atomic instead:
+     *
+     *   1. When the link already resolves to `source` (and `source` exists),
+     *      nothing is written at all.
+     *   2. Otherwise the link is created under a unique sibling name in the
+     *      SAME directory and published over `destination` with
+     *      `fs.renameSync()` — rename(2) replaces atomically on POSIX, so
+     *      concurrent creators cannot collide and readers never see the name
+     *      vanish.
+     *   3. If the write still fails (e.g. EEXIST, or a transient EIO from a
+     *      contended network filesystem), the failure is accepted as success
+     *      ONLY when the destination now resolves to `source` — a concurrent
+     *      process published the identical link. Anything else re-throws.
+     *
+     * A destination occupied by a real (non-link) directory is NOT silently
+     * destroyed — the rename fails and the error surfaces to the caller.
+     *
+     * @private
+     *
+     * @param {string} source - Path the link must point at (must exist)
+     * @param {string} destination - Symlink path to create or repair
+     * @param {string} [type] - Windows-only symlink type: 'dir', 'file' or 'junction' (ignored elsewhere)
+     *
+     * @returns {string} One of 'kept', 'created', 'replaced' or 'concurrent'
+     */
+    var ensureSymlinkSync = function(source, destination, type) {
+        if ( isSymlinkResolvingTo(destination, source) && existsSync(source) ) {
+            // Already correct: skipping the rewrite is what removes the
+            // steady-state contention — N processes × M bundles of
+            // unlink/create pairs collapse to zero writes.
+            return 'kept'
+        }
+
+        var existed = existsSync(destination);
+        // Unique sibling in the same directory, so the rename below stays on
+        // one filesystem and rename(2) keeps its atomic-replace guarantee.
+        var _tmpLink = destination + '.gina-tmp-'+ process.pid +'-'+ process.hrtime.bigint();
+        try {
+            symlinkSync(source, _tmpLink, type);
+            fs.renameSync(_tmpLink, destination);
+        } catch (linkErr) {
+            try {
+                fs.unlinkSync(_tmpLink)
+            } catch (cleanupErr) {}
+
+            if ( isSymlinkResolvingTo(destination, source) && existsSync(source) ) {
+                // A concurrent process just published the very link we wanted —
+                // the outcome is correct, so the collision is not an error.
+                return 'concurrent'
+            }
+            throw linkErr
+        }
+        return (existed) ? 'replaced' : 'created'
+    }
+    /**
+     * Ensure the path held by this PathObject is symlinked at `destination`,
+     * idempotently and atomically: a link that already resolves to this path
+     * is kept untouched, a wrong or missing one is published atomically via a
+     * temp sibling + rename, and a concurrent identical creator is treated as
+     * success (#B381).
+     *
+     * The PathObject's value is the link SOURCE; `destination` is the link
+     * name to create — the same convention as `symlinkSync()`.
+     *
+     * @param {string} destination - Symlink path to create or repair
+     * @param {string} [type] - Windows-only symlink type: 'dir', 'file' or 'junction' (ignored elsewhere)
+     *
+     * @returns {string} One of 'kept', 'created', 'replaced' or 'concurrent'
+     *
+     * @example
+     * // mount a built release into a project's bundles directory
+     * new _('/releases/some-bundle/prod').ensureSymlinkSync('/bundles/some-bundle');
+     */
+    _.prototype.ensureSymlinkSync = function(destination, type) {
+        return ensureSymlinkSync(this.value, destination, type)
+    }
+
 
     /**
      * copy, file or entire folder

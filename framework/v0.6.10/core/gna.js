@@ -598,7 +598,12 @@ var isBundleMounted = function(projects, bundlesPath, bundle, cb) {
 
     console.debug('Is `'+ bundle +'` mounted ?', isMounted);
     if (!gna.started && isMounted) {
-        new _( project.path +'/'+ manifest.bundles[bundle].link ).rmSync();
+        // #B381 — no pre-unlink here: removing the mount before re-creating it
+        // left a window where a sibling process booting the same project tree
+        // observed a missing link. gna.mount() is idempotent now (it keeps a
+        // correct link as-is and atomically replaces a wrong one), so forcing
+        // the mount call is enough.
+        // was: new _( project.path +'/'+ manifest.bundles[bundle].link ).rmSync();
         isMounted = false;
     }
     if (!isMounted) {
@@ -711,6 +716,11 @@ gna.getProjectConfiguration = function (callback){
 /**
  * Mounts a bundle release directory into the project's bundles/ directory
  * by creating required folders (bundles, tmp, cache) and symlinking the source.
+ * Idempotent and concurrency-safe (#B381): a link that already resolves to the
+ * source is kept untouched, a wrong or missing one is published atomically,
+ * and a concurrent identical creator is treated as success — so several
+ * processes may boot one shared project tree without racing each other's
+ * mounts.
  * When `type` is omitted it defaults to `'dir'`.
  *
  * Also exposed as `process.mount`.
@@ -731,28 +741,21 @@ gna.mount = process.mount = function(bundlesPath, source, target, type, callback
 
     //creating folders.
     //use junction when using Win XP os.release == '5.1.2600'
+    // #B381 — create-if-missing WITHOUT the exists/mkdir two-step: two
+    // processes booting the same project tree raced the check-then-create,
+    // and the loser threw EEXIST out of the mount, uncaught. `recursive: true`
+    // never throws on an existing directory, so the race disappears.
     var mountingPath = getPath('project') + '/bundles';
     console.debug('mounting path: ', mountingPath);
-    if ( !fs.existsSync(mountingPath) ) {
-        new _(mountingPath).mkdirSync();
-    }
+    fs.mkdirSync(mountingPath, { recursive: true });
     // /tmp
     var tmpPath = getPath('project') + '/tmp';
     console.debug('tmp path: ', tmpPath);
-    var tmpPathObj = new _(tmpPath);
-    if ( !tmpPathObj.existsSync() ) {
-        tmpPathObj.mkdirSync();
-    }
-    tmpPathObj = null;
-
+    fs.mkdirSync(tmpPath, { recursive: true });
     // cache
     var cachePath = getPath('project') + '/cache';
     console.debug('cache path: ', cachePath);
-    var cachePathObj = new _(cachePath);
-    if ( !cachePathObj.existsSync() ) {
-        cachePathObj.mkdirSync();
-    }
-    cachePathObj = null;
+    fs.mkdirSync(cachePath, { recursive: true });
 
     var sourceObj = new _(source);
     var targetObj = new _(target);
@@ -762,14 +765,20 @@ gna.mount = process.mount = function(bundlesPath, source, target, type, callback
     ;
     console.debug('[ FRAMEWORK ][ MOUNT ] Source: ', source);
     console.debug('[ FRAMEWORK ][ MOUNT ] Checking before mounting ', target, isTargetFound, bundlesPath);
-    if ( isTargetFound ) {
-        try {
-            console.debug('[ FRAMEWORK ][ MOUNT ] removing old build ', target);
-            fs.unlinkSync(target)
-        } catch (err) {
-            callback(err)
-        }
-    }
+    // #B381 — the early unlink is gone: it opened the absent-name window at
+    // the TOP of the mount (spanning the whole createPathSync walk below), and
+    // its catch called callback(err) WITHOUT returning, so a lost race (a
+    // sibling removing the link first) aborted the boot AND fell through into
+    // a second callback. ensureSymlinkSync() below replaces atomically instead.
+    // was:
+    // if ( isTargetFound ) {
+    //     try {
+    //         console.debug('[ FRAMEWORK ][ MOUNT ] removing old build ', target);
+    //         fs.unlinkSync(target)
+    //     } catch (err) {
+    //         callback(err)
+    //     }
+    // }
 
     // hack to test none-dev env without building: in case you did not build your bundle, but you have the src available
     if (!isSourceFound && !isDev) {
@@ -792,21 +801,24 @@ gna.mount = process.mount = function(bundlesPath, source, target, type, callback
     }
 
     if ( isSourceFound ) {
-        //will override existing each time you restart.
+        // #B381 — was: unlink-then-recreate on every restart ("will override
+        // existing each time you restart"), two non-atomic steps during which
+        // the mount name did not exist. Under two processes booting one shared
+        // project tree that window produced collisions on the contended names
+        // and killed the boot below. ensureSymlinkSync() keeps a correct link
+        // untouched, publishes a new one atomically (temp sibling + rename),
+        // and treats a concurrent identical creator as success.
         gna.lib.generator.createPathSync(bundlesPath, function onPathCreated(err){
             if (!err) {
                 try {
-                    // var targetObj = new _(target);
-                    if ( targetObj.existsSync() ) {
-                        targetObj.rmSync();
-                    }
+                    // was:
+                    // if ( targetObj.existsSync() ) {
+                    //     targetObj.rmSync();
+                    // }
                     console.debug('[ FRAMEWORK ][ MOUNT ] Linking ['+ source +'] to [ '+ target +' ] ');
-                    if ( type != undefined) {
-                        fs.symlinkSync(source, target, type)
-                    } else {
-                        fs.symlinkSync(source, target);
-                    }
-                    // symlink created
+                    new _(source).ensureSymlinkSync(target, type);
+                    // symlink created (or kept / atomically replaced / adopted
+                    // from a concurrent boot of the same tree)
                     callback(false);
 
                 } catch (err) {
@@ -817,17 +829,22 @@ gna.mount = process.mount = function(bundlesPath, source, target, type, callback
                         try { fs.writeSync(2, _mountMsg + '\n'); } catch (_e) { /* best-effort */ }
                         process.exit(1)
                     }
-                    if ( fs.existsSync(target) ) {
-                        var stats = fs.lstatSync(target);
-                        if ( stats.isDirectory() ) {
-                            var d = new _(target).rm( function(err){
-                                callback(err);
-                            })
-                        } else {
-                            fs.unlinkSync(target);
-                            callback(err)
-                        }
-                    }
+                    // #B381 — the recovery below was structurally unreachable
+                    // (the `if (err)` above always fires inside a catch, so the
+                    // exit is unconditional); the tolerance it intended now
+                    // lives in ensureSymlinkSync()'s verify-then-accept path.
+                    // was:
+                    // if ( fs.existsSync(target) ) {
+                    //     var stats = fs.lstatSync(target);
+                    //     if ( stats.isDirectory() ) {
+                    //         var d = new _(target).rm( function(err){
+                    //             callback(err);
+                    //         })
+                    //     } else {
+                    //         fs.unlinkSync(target);
+                    //         callback(err)
+                    //     }
+                    // }
                 }
             } else {
                 console.error(err);
@@ -1760,6 +1777,29 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
                                     }
                                 } catch (teErr) {
                                     console.warn('[transient-errors] config validation skipped: ' + (teErr.message || teErr));
+                                }
+
+                                // #MAINT1 — `server.maintenance` boot-time shape check
+                                // (warn-only, NEVER fatal, exactly as #CE1 above: the
+                                // opt-in governs how a request RENDERS, so a bad value
+                                // must not refuse a boot). The engine-side reader
+                                // (lib.maintenance.resolveConf, boot-resolved in
+                                // core/server.js) independently falls back to the same
+                                // defaults per key — this lint exists so that fallback
+                                // is never SILENT. Per-key, not all-or-nothing: a bad
+                                // retryAfter must not disable the whole feature and
+                                // leave an operator believing the site is closed.
+                                try {
+                                    var _mtBlock = null;
+                                    try {
+                                        _mtBlock = config.getInstance()[gna.core.startingApp][env].server.maintenance;
+                                    } catch (mtConfErr) { _mtBlock = null; }
+                                    var _mtWarnings = lib.maintenance.lintConf(_mtBlock);
+                                    for (var _mtW = 0; _mtW < _mtWarnings.length; ++_mtW) {
+                                        console.warn('[maintenance] ' + _mtWarnings[_mtW]);
+                                    }
+                                } catch (mtErr) {
+                                    console.warn('[maintenance] config validation skipped: ' + (mtErr.message || mtErr));
                                 }
 
                                 // setting default global middlewares

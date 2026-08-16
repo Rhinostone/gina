@@ -125,21 +125,21 @@ var Generator = {
     },
     // createFoldersFromStructureSync : function(structure){
     // },
+    /**
+     * Creates a directory path recursively (mkdir -p semantics), then calls
+     * back.
+     *
+     * #B381 — was a per-segment exists/mkdir walk: two processes creating the
+     * same path concurrently raced each check-then-create and the loser threw
+     * EEXIST. `recursive: true` never throws on an existing directory, so the
+     * race disappears; the callback contract is unchanged.
+     *
+     * @param {string} path - Directory path to create
+     * @param {function} callback - `function(err)` — called with `false` on success
+     */
     createPathSync : function(path, callback) {
-        var t = path.replace(/\\/g, '\/').split('/');
-        var path = '';
-        //creating folders
         try {
-            for (var p=0; p<t.length; ++p) {
-                if (process.platform == 'win32' && p === 0) {
-                    path += t[p];
-                } else {
-                    path += '/' + t[p];
-                }
-                if ( !fs.existsSync(path) ) {
-                    fs.mkdirSync(path);
-                }
-            }
+            fs.mkdirSync( path.replace(/\\/g, '/'), { recursive: true } );
             callback(false);
         } catch (err) {
             callback(err);

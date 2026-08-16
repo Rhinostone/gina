@@ -22,6 +22,31 @@
     // HTTP/3 on :443. Idempotent (first-writer-wins: an upstream-set Alt-Svc
     // is never clobbered). Default `false` = zero behaviour change.
     "http3Advertisement": false,
+    // #MAINT1 — maintenance mode. When `enabled` is true, every request EXCEPT
+    // the /_gina/* endpoints is answered 503 + Retry-After with a self-contained
+    // maintenance page, ahead of static assets, the output cache and routing —
+    // coverage a route middleware cannot reach, since middleware only runs once
+    // a route has matched. /_gina/health/check keeps answering 200 on purpose,
+    // so an orchestrator does not restart pods over a declared window.
+    // `enabled` must be a STRICT boolean; every other key falls back per key
+    // with a boot warning, and a malformed block never refuses a boot.
+    // Flip it without a restart via the admin-gated POST /_gina/maintenance
+    // (a runtime flip is NOT persisted — a restart returns to `enabled` here).
+    // `bypassKey` lets chosen visitors through and works under ANY topology:
+    // send it as the `x-gina-maintenance-key` header, or once in a browser as
+    // ?gina-maintenance-key=<key>, which sets a 12h cookie and redirects
+    // without the secret. Mint one with `openssl rand -hex 24`.
+    // `allowFrom` is a supplementary IP allowlist honoured ONLY for requests
+    // that did NOT arrive through a reverse proxy — behind one, every address
+    // gina sees is the proxy's, so an unconditioned list would admit either
+    // everyone or no one. Proxied deployments should rely on `bypassKey`.
+    "maintenance": {
+      "enabled": false,
+      "retryAfter": 300,
+      "message": "Service Unavailable",
+      "bypassKey": "",
+      "allowFrom": []
+    },
     // [Listen] Binding address: `0.0.0.0` by default or `127.0.0.1` for ipv4 only, `::` for ipv6 only, `:::` for both
     "address": "0.0.0.0",
     // [Listen] Queue length limited to os values : tcp_max_syn_backlog, somaxconn
