@@ -40,6 +40,12 @@
  *                                         the layoutless region when the request
  *                                         carries `X-Gina-Navigate` (`bare` answers
  *                                         2xx WITHOUT `Vary`, the defect arm)
+ *   GET /autocomplete                  -> fixtures/validator-autocomplete.html
+ *                                         (#B389 caret-integrity harness: a
+ *                                         live-checked autocomplete="off" text
+ *                                         input — webkit-only spec, #B135 gate)
+ *   GET /js/gina.onload.autocomplete.js-> built onload with the acform rules
+ *                                         whisper, /ac-sink answers {}
  *   GET /link-gate                     -> fixtures/link-disabled-gate.html (#B310
  *                                         link disabled-gate harness; same sink)
  *   GET /link-shared                   -> fixtures/link-same-url.html (#B287
@@ -169,6 +175,15 @@ const FACE_FORMS_JSON = JSON.stringify({ rules: { faceform: { agree: { isRequire
 // `title` rather than on the file input so the dropzone binding is not entangled
 // with a validity state the drag assertions do not care about.
 const UPLOAD_FORMS_JSON = JSON.stringify({ rules: { uploadform: { title: { isRequired: true } } } });
+
+// #B389 (gh issue #63) — a non-empty forms whisper for the autocomplete-caret
+// fixture. Same reason as FACE above: core.js only scans + binds forms when
+// gina.forms.rules is non-empty. The rule sits on the `ref` text input itself:
+// a LIVE-CHECKED field is the reported scene (the live check is part of the
+// main-thread work occupying the window between keystrokes), and
+// autocomplete="off" in the fixture markup is what routes the field through
+// handleAutoComplete's keydown interception on a REAL-Safari UA.
+const AC_FORMS_JSON = JSON.stringify({ rules: { acform: { ref: { isRequired: true } } } });
 
 // #SPA1 Tier 1 — the routing table gina/nav matches clicks against. Shape mirrors the
 // served map: `param` must be present (getCompiled skips paramless routes), `bundle`
@@ -303,6 +318,19 @@ const server = http.createServer(function (req, res) {
         // binds and bindUploadDropzone() runs (the /upload fixture references this).
         if (url === '/js/gina.onload.upload.js') {
             return send(res, 200, 'application/javascript; charset=utf-8', renderOnload(UPLOAD_FORMS_JSON));
+        }
+        // #B389 — same onload with a non-empty forms whisper so the validator binds
+        // the live-checked autocomplete="off" field (the /autocomplete fixture
+        // references this).
+        if (url === '/js/gina.onload.autocomplete.js') {
+            return send(res, 200, 'application/javascript; charset=utf-8', renderOnload(AC_FORMS_JSON));
+        }
+        if (url === '/autocomplete' || url === '/autocomplete.html') {
+            return send(res, 200, 'text/html; charset=utf-8',
+                fs.readFileSync(path.join(FIXTURES, 'validator-autocomplete.html')));
+        }
+        if (url === '/ac-sink') {
+            return send(res, 200, 'application/json; charset=utf-8', '{}');
         }
         if (url === '/upload' || url === '/upload.html') {
             return send(res, 200, 'text/html; charset=utf-8',

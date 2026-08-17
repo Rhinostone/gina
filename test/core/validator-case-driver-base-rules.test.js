@@ -557,7 +557,11 @@ describe('validator-case-driver-base-rules §06 — dist fidelity', function () 
         //   typeof Ya[Pa]=='undefined'&&typeof w!='undefined'&&(Ya[Pa]=w)
         // VALIDATED against the real artifacts: 0 on the pre-fix gina.min.js
         // (git HEAD before the rebuild), 1 on the rebuilt one.
-        var restore = min.match(/typeof ([A-Za-z_$][\w$]*)\[([A-Za-z_$][\w$]*)\]=='undefined'&&typeof ([A-Za-z_$][\w$]*)!='undefined'&&\(\1\[\2\]=\3\)/g) || [];
+        // Wrap-agnostic (`\s*` before the restored operand): Closure's
+        // line-wrap position is content-dependent and may land at any token
+        // boundary — the #B389 rebuild emitted `&&(Ua[Xa]=\nR)`, a newline
+        // inside the assignment (the case-coercion §04.2 lesson).
+        var restore = min.match(/typeof ([A-Za-z_$][\w$]*)\[([A-Za-z_$][\w$]*)\]=='undefined'&&typeof ([A-Za-z_$][\w$]*)!='undefined'&&\(\1\[\2\]=\s*\3\)/g) || [];
         assert.equal(restore.length, 1,
             'the shipped, served artifact must carry the caseValue restore — gina.min.js is what browsers run');
     });
