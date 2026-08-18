@@ -9369,12 +9369,22 @@ function ValidatorPlugin(rules, data, formId, culture) {
         var $target         = $formInstance.target;
         var validationInfo  = getFormValidationInfos($target, $formInstance.rules);
 
-        validate($target, validationInfo.fields, validationInfo.$fields, $formInstance.rules, function onDisabledTriggerReveal(result) {
+        var onDisabledTriggerReveal = function(result) {
             var errors = result['fields'] || result['error'];
             handleErrorsDisplay($target, errors, result['data']);
             focusFirstInvalidField($target, errors);
             updateSubmitTriggerState($formInstance, result.isValid());
-        });
+        };
+        // #B348 — completion identity. A reveal pass is un-latched, writes
+        // neither `isSubmitting` nor `isValidating`, and on a VALID form its
+        // verdict is clean — so with the async `query` field not declared
+        // last its waiter completion matched NO dispatch branch and this
+        // callback silently never ran: the documented self-heal + gate
+        // re-sync were dead on those forms. The marker rides the exact cb of
+        // the exact pass (the engine's own `cb._data`/`cb._errors` property
+        // idiom); the waiter's terminal-gated rescue branch consults it.
+        onDisabledTriggerReveal.isRevealCompletion = true;
+        validate($target, validationInfo.fields, validationInfo.$fields, $formInstance.rules, onDisabledTriggerReveal);
     };
 
     /**
@@ -10179,6 +10189,29 @@ function ValidatorPlugin(rules, data, formId, culture) {
                                 else if (/^true$/i.test(instance.$forms[formId].isValidating) && listedFields.length > 1 && listedFields[listedFields.length-1] != field ) {
                                     //console.debug(field +' is NOT the last element to be validated for formId: '+ formId);
                                     needsGlobalReValidation = true;
+                                }
+                                // #B348 — the reveal's rescue: a TERMINAL completion
+                                // (same condition as the errors>0 block above — the
+                                // guard is what stops a multi-query-field early wake,
+                                // where the first waiter fires at asyncCount 1)
+                                // carrying the reveal's completion identity, that
+                                // matched none of the branches above, must dispatch
+                                // its own pass or `onDisabledTriggerReveal` starves:
+                                // clean verdict + un-latched + not live-check +
+                                // query-not-last fell through EVERY branch, the gate
+                                // marker never re-synced, and a fully valid form ate
+                                // every later click. Chained LAST so every
+                                // previously-working shape (terminal errors>0, #B342
+                                // latch, last-field, live-check display-only) stays
+                                // byte-identical; an un-latched programmatic submit
+                                // (#B347) carries no marker and is deliberately
+                                // unaffected — its fix is gated on its own repro.
+                                else if (
+                                    hasParsedAllRules
+                                    && asyncCount <= 0
+                                    && cb && cb.isRevealCompletion
+                                ) {
+                                    triggerEvent(gina, $formOrElement, 'validated.' + formId, cb);
                                 }
 
                                 if (needsGlobalReValidation) {

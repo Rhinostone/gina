@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'FormValidator: on a form whose async `query` rule rides a field that is not declared last, the display-only validation pass answering a refused submit click could silently never complete — its result matched no completion route — so the stale not-ready marker on the submit trigger was never re-synced and a fully valid form kept refusing every click until reload. The reveal pass now carries its own completion identity and always completes: the refused click renders the current validation state, the trigger state re-syncs from the fresh result, and the next click on a valid form goes through. Field declaration order no longer decides whether a stale marker can heal.'
+time: 2026-08-18T03:55:00.000000000+01:00
