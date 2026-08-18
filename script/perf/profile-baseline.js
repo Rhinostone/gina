@@ -712,14 +712,30 @@ function teardown() {
         }
     } catch (e) { /* ignore */ }
 
-    // stray self-symlink at the repo root
-    try {
-        var stray = path.join(GINA_ROOT, 'gina');
-        if (fs.existsSync(stray) && fs.lstatSync(stray).isSymbolicLink()) {
+    // Stray self-symlink at the repo root. The CLI auto-link step drops it under
+    // the bare package name AND under the checkout's own basename (a worktree
+    // named `gina-framework` gets `./gina-framework`), so both forms are swept —
+    // matching only `gina` left the basename form behind, and it is NOT
+    // gitignored, so a release cut's `git add --all` would absorb it into the
+    // tagged, immutably-published Release commit. Guarded twice: the entry must
+    // be a symlink (never a real directory) AND must resolve to the repo root
+    // (never an unrelated link a developer put there). readlinkSync is used
+    // rather than existsSync/realpathSync so a DANGLING stray is still swept.
+    var strayNames = ['gina'];
+    if (strayNames.indexOf(path.basename(GINA_ROOT)) === -1) { strayNames.push(path.basename(GINA_ROOT)); }
+    strayNames.forEach(function (name) {
+        var stray = path.join(GINA_ROOT, name);
+        var st;
+        try { st = fs.lstatSync(stray); } catch (e) { return; }          // absent
+        if (!st.isSymbolicLink()) { return; }                            // a real dir — never touch
+        var target;
+        try { target = path.resolve(path.dirname(stray), fs.readlinkSync(stray)); } catch (e) { return; }
+        if (target !== path.resolve(GINA_ROOT)) { return; }              // not a self-link
+        try {
             fs.unlinkSync(stray);
-            warnings.push('removed a stray `gina` self-symlink at the repo root');
-        }
-    } catch (e) { /* ignore */ }
+            warnings.push('removed a stray `' + name + '` self-symlink at the repo root');
+        } catch (e) { /* ignore */ }
+    });
     return warnings;
 }
 
