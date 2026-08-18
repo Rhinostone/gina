@@ -773,6 +773,69 @@ function ValidatorPlugin(rules, data, formId, culture) {
      */
     var isAnswerFocusInProgress = false;
 
+    /**
+     * #B387 — the asynchronous continuation of the #B319 exemption above.
+     *
+     * The answer's own focus move makes the answered field the active element,
+     * and BOTH display refreshers read "active element" as "the user is editing
+     * this field" and soften/hide the committed message:
+     *   - `refreshWarning`'s error->warning downgrade appends `hidden`;
+     *   - `handleErrorsDisplay`'s refresh branch re-creates the message born-hidden.
+     * The one-shot flag above only covers the SYNCHRONOUS focusin dispatched
+     * inside `.focus()`; a validation completion firing LATER in the same
+     * cascade (a live-check waiter woken by the reveal pass's deferred release,
+     * or the trailing silent global re-validation) runs after the `finally`
+     * cleared it — and re-hid the very message the answer had just rendered.
+     *
+     * This slot records WHICH field currently holds an answer-placed focus, so
+     * the two hide sites can tell answer-placed focus from user-placed focus,
+     * for ANY caller, however late. A single slot is exact: only one active
+     * element exists. Released on the first genuine user interaction (any
+     * trusted native event reaching a form proxy while the one-shot flag is
+     * down), so the deliberate mid-typing suppression re-engages the moment
+     * the user actually edits.
+     *
+     * @private
+     * @type {object|null} `{ formId, elName }` while an answer-placed focus is live, else `null`
+     */
+    var answerFocusHold = null;
+
+    /**
+     * #B387 — does `answerFocusHold` name this exact field?
+     *
+     * @private
+     * @param {string} formId - owning form id
+     * @param {string} elName - field name
+     * @returns {boolean} true while the answer-placed focus is live on this field
+     */
+    var isAnswerFocusHeldFor = function(formId, elName) {
+        return ( answerFocusHold
+            && answerFocusHold.formId === formId
+            && answerFocusHold.elName === elName ) ? true : false;
+    };
+
+    /**
+     * #B387 — release the hold on the first genuine user interaction.
+     *
+     * Trusted-only: framework-internal `triggerEvent` dispatches are untrusted
+     * CustomEvents and must not release it. The `isAnswerFocusInProgress`
+     * guard keeps the answer's OWN synchronous focusin (trusted — the UA
+     * generates it inside `.focus()`) from releasing the hold it is part of
+     * delivering.
+     *
+     * @private
+     * @param {object} event - the native event reaching a form proxy handler
+     * @returns {void}
+     */
+    var releaseAnswerFocusHold = function(event) {
+        if ( !answerFocusHold ) {
+            return;
+        }
+        if ( event && event.isTrusted && !isAnswerFocusInProgress ) {
+            answerFocusHold = null;
+        }
+    };
+
     var refreshWarning = function($el) {
         var formId = $el.form.id || $el.form.getAttribute('id');
         var elName = $el.name || $el.form.getAttribute('name');
@@ -789,7 +852,19 @@ function ValidatorPlugin(rules, data, formId, culture) {
         if ( /form\-item\-warning/.test($parent.className) && currentElName != elName ) {
             $parent.className = $parent.className.replace(/form\-item\-warning/, 'form-item-error');
 
-        } else if (/form\-item\-error/.test($parent.className) && currentElName == elName ) {
+        }
+        // #B387 — `currentElName == elName` reads "the user is editing this
+        // field", but the ANSWER's own focus move (#B319) also makes the field
+        // the active element — and unlike the synchronous focusin, the async
+        // completion callers arrive after the one-shot flag is already down.
+        // While the answer-focus hold names this field the focus is
+        // answer-placed, not user-placed: keep the message the answer just
+        // rendered.
+        // was: else if (/form\-item\-error/.test($parent.className) && currentElName == elName ) {
+        else if (
+            /form\-item\-error/.test($parent.className) && currentElName == elName
+            && !isAnswerFocusHeldFor(formId, elName)
+        ) {
             $parent.className = $parent.className.replace(/form\-item\-error/, 'form-item-warning');
             isErrorMessageHidden = true;
         }
@@ -1409,7 +1484,11 @@ function ValidatorPlugin(rules, data, formId, culture) {
                         // blur. This "refresh" re-create runs AFTER refreshWarning in the live-check
                         // global pass, so without this focus guard it re-shows the message mid-typing.
                         // On blur (field no longer active) the message is created shown (focusout commits).
-                        $err.setAttribute('class', ( document.activeElement && document.activeElement.name == name ) ? 'form-item-error-message hidden' : 'form-item-error-message');
+                        // #B387 — same provenance refinement as refreshWarning's downgrade:
+                        // an answer-placed focus (#B319) must not read as "being typed in",
+                        // or this re-create clips the very message the answer delivered.
+                        // was: ( document.activeElement && document.activeElement.name == name ) ?
+                        $err.setAttribute('class', ( document.activeElement && document.activeElement.name == name && !isAnswerFocusHeldFor(id, name) ) ? 'form-item-error-message hidden' : 'form-item-error-message');
                         // #A11Y5 — the branch below re-asserts aria-invalid="true" on this same
                         // field, so when the message is hidden it must stay resolvable: clip it
                         // out of view rather than out of the accessibility tree. Reads the class
@@ -7903,6 +7982,7 @@ function ValidatorPlugin(rules, data, formId, culture) {
         // are guarded fallbacks that no-op on a control).
         var resetProxyHandler = function(event) {
             var $el = event.target;
+            releaseAnswerFocusHold(event); // #B387
             if (
                 typeof(event.defaultPrevented) != 'undefined'
                 && event.defaultPrevented
@@ -7921,6 +8001,7 @@ function ValidatorPlugin(rules, data, formId, culture) {
         };
         var keydownProxyHandler = function(event) {
             var $el = event.target;
+            releaseAnswerFocusHold(event); // #B387
             if ( typeof(event.defaultPrevented) != 'undefined' && event.defaultPrevented )
             return false;
 
@@ -7939,6 +8020,7 @@ function ValidatorPlugin(rules, data, formId, culture) {
         };
         var keyupProxyHandler = function(event) {
             var $el = event.target;
+            releaseAnswerFocusHold(event); // #B387
             if ( typeof(event.defaultPrevented) != 'undefined' && event.defaultPrevented )
             return false;
 
@@ -7958,6 +8040,7 @@ function ValidatorPlugin(rules, data, formId, culture) {
         };
         var focusinProxyHandler = function(event) {
             var $el = event.target;
+            releaseAnswerFocusHold(event); // #B387
             if ( typeof(event.defaultPrevented) != 'undefined' && event.defaultPrevented )
             return false;
 
@@ -7992,6 +8075,7 @@ function ValidatorPlugin(rules, data, formId, culture) {
         };
         var focusoutProxyHandler = function(event) {
             var $el = event.target;
+            releaseAnswerFocusHold(event); // #B387
             if ( typeof(event.defaultPrevented) != 'undefined' && event.defaultPrevented )
                 return false;
 
@@ -8009,6 +8093,7 @@ function ValidatorPlugin(rules, data, formId, culture) {
         };
         var changeProxyHandler = function(event) {
             var $el = event.target;
+            releaseAnswerFocusHold(event); // #B387
             if ( typeof(event.defaultPrevented) != 'undefined' && event.defaultPrevented )
             return false;
 
@@ -8025,6 +8110,7 @@ function ValidatorPlugin(rules, data, formId, culture) {
         };
         var clickProxyHandler = function(event) {
             var $el = event.target;
+            releaseAnswerFocusHold(event); // #B387
 
             // a click target removed from the DOM during its own dispatch
             // (e.g. an upload preview's reset/delete link) has no parent by
@@ -8396,6 +8482,8 @@ function ValidatorPlugin(rules, data, formId, culture) {
                                     // no-op on an unfocusable host that still passes the
                                     // typeof-function gate above.
                                     if ( typeof(document) === 'undefined' || !document || document.activeElement === _aField ) {
+                                        // #B387 — same provenance record as focusFirstInvalidField.
+                                        answerFocusHold = { formId: $a11yForm.getAttribute('id'), elName: _aName };
                                         break;
                                     }
                                 }
@@ -9238,6 +9326,10 @@ function ValidatorPlugin(rules, data, formId, culture) {
                     // so a failed submit announced nothing. Confirming it is also what makes the
                     // "skips unfocusable controls" contract above true rather than aspirational.
                     if ( typeof(document) === 'undefined' || !document || document.activeElement === $field ) {
+                        // #B387 — record the answer-placed focus so display
+                        // refreshes firing after the one-shot window (async
+                        // completion callers) can tell it from user focus.
+                        answerFocusHold = { formId: $form.getAttribute('id'), elName: name };
                         return true;
                     }
                 }

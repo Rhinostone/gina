@@ -98,10 +98,16 @@ describe('FormValidator — live-check message hidden while typing, shown on blu
     describe('source pins (main.js handleErrorsDisplay refresh branch)', function () {
 
         it('the refresh re-create makes the message class focus-aware', function () {
+            // #B387 realignment (approved): the ternary gained the answer-focus
+            // provenance conjunct — an answer-placed focus (#B319) must not read
+            // as "being typed in". Re-pinned at the new exact shape so the pin
+            // keeps guarding drift in both directions; the replica arms above
+            // model the classic (not-held) path, which is unchanged — the held
+            // path is owned by test/core/validator-answer-focus-hold.test.js.
             assert.match(
                 mainSrc,
-                /document\.activeElement\.name\s*==\s*name\s*\)\s*\?\s*'form-item-error-message hidden'\s*:\s*'form-item-error-message'/,
-                'the refresh branch must create the error message hidden while the field is the active element'
+                /document\.activeElement\.name\s*==\s*name\s*&&\s*!isAnswerFocusHeldFor\(id,\s*name\)\s*\)\s*\?\s*'form-item-error-message hidden'\s*:\s*'form-item-error-message'/,
+                'the refresh branch must create the error message hidden while the field is the active element — unless the answer-focus hold names it (#B387)'
             );
         });
     });
