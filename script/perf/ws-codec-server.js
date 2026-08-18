@@ -3,11 +3,14 @@
  * ws-codec-server.js — standalone HTTP/2 extended-CONNECT echo server for the
  * #P34 ws arm, driving the framework's OWN RFC 6455 codec (lib/ws-framing)
  * and session wrapper (lib/ws-session) — the #P36 candidate bytes — outside a
- * bundle boot. The in-bundle ws arm is blocked: every WebSocket-handler
- * registration shape (programmatic onInitialize/onWebSocket AND the
- * declarative `method: "ws"` route) killed the isolated gina-container boot
- * silently during harness bring-up; staked as bug candidates in the todo
- * board. Cleartext h2 loopback keeps TLS noise out of the codec profile.
+ * bundle boot. Isolation is what this instrument is FOR (codec self-time with
+ * nothing else in the process); the bring-up's claim that an in-bundle arm
+ * was BLOCKED (every ws-handler registration shape silently killing the
+ * isolated gina-container boot) was REFUTED on 2026-07-31 — 11/11 fresh-scene
+ * arms booted alive; the deaths were the sibling env.json bug (#B181), not
+ * the registration shapes. The in-bundle counterpart now exists as
+ * profile-baseline.js's `ws-bundle` arm (#P36's re-arm measurement).
+ * Cleartext h2 loopback keeps TLS noise out of the codec profile.
  *
  * Spawned by profile-baseline.js under `node --cpu-prof`; prints `PORT <n>`
  * on stdout when listening; SIGTERM destroys sessions, closes, exits 0 (the
