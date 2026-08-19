@@ -1439,8 +1439,32 @@ module.exports = async function renderNunjucks(userData, displayInspector, errOp
                 + _njFlowPatch
                 + 'if(u&&u.environment&&u.environment.metrics){u.environment.metrics.weightBytes=' + _njWeightBytesFinal + ';u.environment.metrics.serverMs=' + _njServerMsFinal + ';}'
                 + 'if(g&&g.environment&&g.environment.metrics){g.environment.metrics.weightBytes=' + _njWeightBytesFinal + ';g.environment.metrics.serverMs=' + _njServerMsFinal + ';}'
+                // #B386 — re-sync the Inspector's localStorage fallback channel.
+                // statusbar.html writes that mirror BEFORE this patch runs, so
+                // without this line it keeps the emit-time payload forever:
+                // weightBytes null (View tab drops its weight badge whenever the
+                // client Performance leg is unavailable) and the late flow entries
+                // missing (Flow tab loses its template/response/total bars).
+                + 'try{localStorage.setItem("__ginaData",JSON.stringify(d))}catch(e){}'
+                // #B386 (part 2) — republish over the per-tab BroadcastChannel.
+                // localStorage above is only the Inspector's FALLBACK channel;
+                // a statusbar-launched Inspector runs in BOUND mode and reads
+                // this channel instead, so the re-sync above never reached it.
+                // Every statusbar _ginaPublish() call site runs BEFORE this
+                // patch (measured: 7 sites, all ahead of it), so without this
+                // line a bound Inspector holds the pre-patch frame until it
+                // re-requests — which is what "refresh the Inspector" did.
+                // The channel id comes from sessionStorage, which is per-tab
+                // and therefore race-free; the localStorage advert is
+                // last-writer-wins across tabs and must NOT be used here.
+                + 'try{var _t=sessionStorage.getItem("__gina_tab_id");if(_t&&typeof BroadcastChannel!=="undefined"){var _c=new BroadcastChannel("gina-inspector-"+_t);_c.postMessage({type:"data",payload:d});_c.close();}}catch(e){}'
                 + '}(window.__ginaData));</script>';
-            html = html.replace(/<\/body>/i, _njPatchScript + '</body>');
+            // Function replacer, not a string: the patch embeds JSON.stringify'd
+            // flow entries, and a string replacement expands $&, $`, $' and $1 in
+            // the replacement text — corrupting the emitted script for any entry
+            // whose label/detail carries one. Both render-swig.js sites already
+            // use the function form; this one did not.
+            html = html.replace(/<\/body>/i, function () { return _njPatchScript + '</body>'; });
         } catch (lateBindErr) {
             try { console.warn('[render-nunjucks] view-fallback late-bind skipped: ' + (lateBindErr.message || lateBindErr)); } catch (e) {}
         }

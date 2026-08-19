@@ -157,6 +157,30 @@ describe('02 - real-filesystem behaviour', function () {
             'a mount whose release vanished must fail with the usual clear message, not be kept');
     });
 
+    it('the refused publish leaves the existing dangling link UNTOUCHED — same inode, same text (#B388 refutation record)', function () {
+        // #B388 probed whether this scene silently rewrites the link every
+        // call ("a futile write per mount per boot"). Measured on the real
+        // bytes: it does not — the wrapper refuses BEFORE any write, and the
+        // tmp-sibling pattern means nothing has touched the destination by
+        // then. This arm pins that survival property, which the arm above
+        // (the throw) does not: pre-#B381 unlink-then-create DESTROYED the
+        // existing link before its create failed. The asserted throw is this
+        // arm's firing control — the helper demonstrably ran and refused.
+        var ghost = path.join(root, 'ghost-src-b388');
+        fs.mkdirSync(ghost);
+        var dst = path.join(root, 'link-ghost-b388');
+        fs.symlinkSync(ghost, dst);
+        fs.rmdirSync(ghost);                               // correct text, dangling source
+        var inoBefore = fs.lstatSync(dst).ino;
+        assert.throws(function () {
+            new _(ghost).ensureSymlinkSync(dst);
+        }, /Cannot complete symlinkSync from/);
+        assert.equal(fs.lstatSync(dst).ino, inoBefore,
+            'the refusal must not have re-created the link — the failed publish leaves the name exactly as found');
+        assert.equal(fs.readlinkSync(dst), ghost,
+            'the link text must be byte-identical to what was found');
+    });
+
     it('does NOT silently destroy a real directory sitting at the destination', function () {
         var dst = path.join(root, 'real-dir');
         fs.mkdirSync(dst);

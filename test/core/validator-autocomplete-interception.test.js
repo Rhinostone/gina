@@ -108,22 +108,56 @@ function makeEvent(el, keyCode, key, mods) {
     };
     return ev;
 }
+// #B389 — the caret helpers the handler references are REAL extracted bytes
+// too (no replica to drift): brace-walk each `var <name> = function` decl.
+function extractFnDecl(name) {
+    var anchor = 'var ' + name + ' = function';
+    var i = mainSrc.indexOf(anchor);
+    if (i < 0) return null;
+    var braceStart = mainSrc.indexOf('{', i);
+    var depth = 0, j = braceStart;
+    for (; j < mainSrc.length; j++) {
+        if (mainSrc[j] === '{') depth++;
+        else if (mainSrc[j] === '}') {
+            depth--;
+            if (depth === 0) break;
+        }
+    }
+    if (depth !== 0) return null;
+    return mainSrc.substring(i + ('var ' + name + ' = ').length, j + 1);
+}
+var commitCaretText = extractFnDecl('commitCaret');
+var queueCaretRestoreText = extractFnDecl('queueCaretRestore');
+
 // Builds a callable from the extracted real bytes, supplying the handler's
-// free variables as stubbed params.
+// free variables as stubbed params. The #B389 helpers (commitCaret /
+// queueCaretRestore) are built from their own extracted bytes, wired to the
+// SAME setCaretToPos spy, so caret assertions see both the synchronous
+// commit and the guarded deferred restore.
 function buildHandler(spies) {
     spies = spies || {};
     var setCaretCalls = [];
+    var spyCaret = spies.setCaretToPos || function ($el, pos) { setCaretCalls.push(pos); };
+    var commitCaretFn = commitCaretText
+        ? new Function('setCaretToPos', 'return ( ' + commitCaretText + ' );')(spyCaret)
+        : undefined;
+    var queueCaretRestoreFn = queueCaretRestoreText
+        ? new Function('setTimeout', 'setCaretToPos', 'return ( ' + queueCaretRestoreText + ' );')(setTimeout, spyCaret)
+        : undefined;
     var fn = new Function(
         'keyboardMapping', 'setCaretToPos', 'focusNextElement',
         'clearTimeout', 'liveCheckTimer', 'console',
+        'commitCaret', 'queueCaretRestore',
         'return ( ' + keydownHandlerText + ' );'
     )(
         spies.keyboardMapping || {},
-        spies.setCaretToPos || function ($el, pos) { setCaretCalls.push(pos); },
+        spyCaret,
         spies.focusNextElement || function () {},
         function () {},
         null,
-        { debug: function () {} }
+        { debug: function () {} },
+        commitCaretFn,
+        queueCaretRestoreFn
     );
     fn.__setCaretCalls = setCaretCalls;
     return fn;
@@ -173,8 +207,13 @@ describe('01 - #B134 source pins: the chord bail in the keydown interception', f
         assert.ok(active.indexOf('case 9:') > -1, 'Tab handling removed');
         assert.ok(active.indexOf('$_el.value = str.substring(0, posStart) + e.key') > -1,
             'the printable rebuild branch removed');
-        assert.ok(active.indexOf("setAttribute('readonly', 'readonly')") > -1,
-            'the transient-readonly dance removed');
+        // #B389 — the transient-readonly dance moved into queueCaretRestore
+        // (the handler queues it; the helper's own bytes carry the
+        // setAttribute — pinned in validator-autocomplete-caret.test.js 10.7).
+        assert.ok(active.indexOf('queueCaretRestore($_el)') > -1,
+            'the transient-readonly dance (via queueCaretRestore) removed');
+        assert.ok(stripComments(queueCaretRestoreText || '').indexOf("setAttribute('readonly', 'readonly')") > -1,
+            'queueCaretRestore no longer carries the readonly re-set');
     });
 });
 
@@ -223,7 +262,10 @@ describe('02 - #B134 behavioral: the REAL handler bytes, executed', function () 
             'the anti-autofill readonly re-set must still run for plain keys');
         await drainTimers();
         assert.ok(el.__calls.removeAttribute.indexOf('readonly') > -1, 'the readonly dance must complete');
-        assert.deepEqual(fn.__setCaretCalls, [4], 'caret restored after the typed char');
+        // #B389 — the caret is now committed SYNCHRONOUSLY after the rebuild
+        // AND re-asserted by the guarded deferred restore: two calls, same
+        // position (was: a single deferred call two macrotasks later).
+        assert.deepEqual(fn.__setCaretCalls, [4, 4], 'caret committed sync then re-asserted by the deferred restore');
     });
 
     it('02.5 - a plain printable key replaces an active selection', function () {

@@ -12,7 +12,7 @@
  * bundle child's `.cpuprofile` by acceleration-candidate bucket via
  * analyze-cpuprofile.js.
  *
- * The three arms mirror the 2026-07-28 assessment's prescription:
+ * The arms mirror the 2026-07-28 assessment's prescription:
  *   render — HTTP/2 HTML renders, deliberately UNCACHED (getAssets + swig +
  *            the whole-document replace passes — a warm-cache replay would
  *            bypass exactly the #P37 candidates);
@@ -20,26 +20,35 @@
  *            byte loop, #P35's target);
  *   ws     — WebSocket echo over HTTP/2 extended CONNECT (the RFC 6455
  *            unmask/encode codec in lib/ws-framing, #P36's target). Runs
- *            CODEC-ISOLATED against ws-codec-server.js rather than in-bundle:
- *            every ws-handler registration shape killed the isolated boot
- *            silently (staked bug candidates; see fixture()).
+ *            CODEC-ISOLATED against ws-codec-server.js — the right instrument
+ *            for isolating codec self-time (see the fixture() note for the
+ *            history: the bring-up reason for isolation was refuted, the
+ *            instrument itself was never wrong);
+ *   ws-bundle — the SAME echo load driven against the real bundle over its
+ *            declarative `method:"ws"` + channels/ route (#P36's re-arm
+ *            measurement: does the codec lead an IN-BUNDLE profile?). The
+ *            bundle child's profile includes its BOOT samples, so this arm
+ *            defaults to a much higher frame count (--ws-bundle-frames) so
+ *            the steady-state drive window dominates; stats record
+ *            bootWallMs so the residual dilution is stated, not guessed.
  *
  * The bundle serves h2 over https with a run-local self-signed cert triple
  * (private.key / certificate.crt / ca_bundle.crt) — h2c is NOT used because
  * the port allocator carries no `http/2.0 -> http` slot (measured).
  *
  * Operator-invoked ONLY — never wired into the test suite or CI. Expected
- * runtime: 2-5 minutes for all three arms. Results land in
+ * runtime: 2-5 minutes for all three baseline arms; the ws-bundle arm adds
+ * ~10-20s of drive. Results land in
  * ./tmp/perf-baseline-<stamp>/ (gitignored): per-arm .cpuprofile copies,
  * report.txt, report.json.
  *
  * Usage:
- *   node script/perf/profile-baseline.js                    # all arms
- *   node script/perf/profile-baseline.js --arm=render,ws    # subset
+ *   node script/perf/profile-baseline.js                    # render,upload,ws
+ *   node script/perf/profile-baseline.js --arm=ws,ws-bundle # #P36 re-arm pair
  *   node script/perf/profile-baseline.js --keep             # keep the temp home
  * Options (defaults): --requests=3000 --concurrency=8 --upload-count=200
  *   --upload-kb=1500 --ws-sessions=8 --ws-frames=1500 --ws-payload=4096
- *   --start-port-from=9860
+ *   --ws-bundle-frames=25000 --start-port-from=9860
  */
 
 var fs     = require('fs');
@@ -74,6 +83,12 @@ var UPLOAD_COUNT = parseInt(opt('upload-count', 200), 10);
 var UPLOAD_KB    = parseInt(opt('upload-kb', 1500), 10);
 var WS_SESSIONS  = parseInt(opt('ws-sessions', 8), 10);
 var WS_FRAMES    = parseInt(opt('ws-frames', 1500), 10);
+// The ws-bundle arm's per-session frame count is a SEPARATE knob with a much
+// higher default: the bundle child's .cpuprofile includes its whole BOOT
+// (~0.5-1s of samples), so the codec-arm default (1500 frames ≈ 0.5s drive)
+// would leave a profile that is ~half boot — a reading biased AGAINST the
+// codec leading for a reason that has nothing to do with the steady state.
+var WS_BUNDLE_FRAMES = parseInt(opt('ws-bundle-frames', 25000), 10);
 var WS_PAYLOAD   = parseInt(opt('ws-payload', 4096), 10);
 var PORT_START   = parseInt(opt('start-port-from', 9860), 10);
 var KEEP         = process.argv.indexOf('--keep') > -1;
@@ -270,24 +285,48 @@ function fixture() {
         ''
     ].join('\n'));
 
-    // NOTE — the scaffold's index.js is left UNTOUCHED and the ws arm profiles
-    // the codec standalone via ws-codec-server.js.
+    // NOTE — the scaffold's index.js is left UNTOUCHED. The `ws` arm profiles
+    // the codec standalone via ws-codec-server.js; the `ws-bundle` arm (below)
+    // drives the SAME load against the real bundle over the declarative
+    // `method:"ws"` + channels/ route — the #P36 re-arm measurement.
     //
-    // ⚠️ The bring-up reason for this was REFUTED on 2026-07-31 (#B182). The
-    // bring-up recorded that every WebSocket-handler registration shape — and
-    // even a pure onInitialize passthrough — made the isolated boot exit 0
-    // silently. A verbatim re-run of the documented shapes on fresh, uncontam-
-    // inated scenes booted ALIVE in 11/11 arms (seeded AND self-bootstrapping
-    // homes; dev/h1, prod/h1, prod/h2; stock, pure passthrough, the documented
-    // express-session wire-in, programmatic app.onWebSocket, and the declarative
-    // `method: "ws"` + channels/<name>.js route), each with a firing control.
-    // The bring-up's readings were almost certainly confounded by cumulative
-    // scene state — a project env.json left in place from an earlier arm, i.e.
-    // #B181, which IS real (unguarded envConf[bundle][env] at config.js:355).
+    // ⚠️ History: the bring-up ran the ws arm codec-isolated ONLY, recording
+    // that every WebSocket-handler registration shape — and even a pure
+    // onInitialize passthrough — made the isolated boot exit 0 silently. That
+    // reading was REFUTED on 2026-07-31 (#B182): a verbatim re-run of the
+    // documented shapes on fresh, uncontaminated scenes booted ALIVE in 11/11
+    // arms (seeded AND self-bootstrapping homes; dev/h1, prod/h1, prod/h2;
+    // stock, pure passthrough, the documented express-session wire-in,
+    // programmatic app.onWebSocket, and the declarative `method: "ws"` +
+    // channels/<name>.js route), each with a firing control. The bring-up's
+    // readings were almost certainly confounded by cumulative scene state — a
+    // project env.json left in place from an earlier arm, i.e. #B181, which IS
+    // real (unguarded envConf[bundle][env] at config.js:355).
     //
-    // So an IN-BUNDLE ws arm is available whenever one is wanted (it is what
-    // #P36's re-arm measurement needs); the standalone codec server remains the
-    // right instrument for isolating codec self-time, which is why it stays.
+    // The standalone codec server remains the right instrument for isolating
+    // codec SELF-time, which is why the `ws` arm keeps it.
+
+    // ws-bundle arm fixture — gated on the arm being requested so the
+    // render/upload/ws fixtures stay byte-identical to the baseline runs when
+    // it is not. Declarative shape (routing.json `method:"ws"` + a channels/
+    // module): the documented consumer path, and it needs no index.js edit.
+    // The channel handler byte-mirrors ws-codec-server.js's echo so the two ws
+    // arms differ ONLY in what wraps the codec.
+    if (ARMS.indexOf('ws-bundle') > -1) {
+        var routingPath = path.join(SRC, 'config', 'routing.json');
+        var routing = parseConfigJSON(routingPath);
+        routing['perf-live'] = { url: '/live', method: 'ws', param: { wsHandler: 'live' } };
+        fs.writeFileSync(routingPath, JSON.stringify(routing, null, 2));
+        fs.mkdirSync(path.join(SRC, 'channels'), { recursive: true });
+        fs.writeFileSync(path.join(SRC, 'channels', 'live.js'), [
+            'module.exports = function (session, request) {',
+            '    session.onMessage(function (data, isBinary) {',
+            '        session.send(\'echo: \' + data);',
+            '    });',
+            '};',
+            ''
+        ].join('\n'));
+    }
 
     // NOTE — deliberately NO render-cache config and NO env.json: a warm-cache
     // replay BYPASSES the #P37 candidates (getAssets + the replace passes), so
@@ -525,22 +564,83 @@ async function driveUpload(port) {
 }
 
 /**
- * WS arm: S extended-CONNECT sessions, each ping-ponging N masked TEXT frames
- * against the echo handler (client masks per RFC 6455 §5.1, so every inbound
- * payload byte exercises the server's unmask loop; every echo exercises the
- * encode side). The client codec is the framework's own lib/ws-framing.
+ * Resolves which ws path the server actually registered by attempting one
+ * throwaway extended-CONNECT handshake per candidate, first 200 wins. The
+ * bundle mounts routing.json urls under the bundle webroot (`/demo/live`),
+ * but the first-bundle webroot normalization in `bundle:add` makes the
+ * effective prefix an empirical question — so the instrument names its own
+ * path instead of assuming one (the winner is recorded in driver stats).
  *
- * @param   {number} port
+ * @param   {number}   port
+ * @param   {boolean}  secure     - TLS session (self-signed tolerated)
+ * @param   {string[]} candidates - paths to try, in order
+ * @returns {Promise<string>} the first candidate whose handshake returned 200
+ * @inner
+ */
+function probeWsPath(port, secure, candidates) {
+    function tryOne(idx) {
+        if (idx >= candidates.length) {
+            return Promise.reject(new Error('no ws path candidate handshook 200 (tried: ' + candidates.join(', ') + ')'));
+        }
+        return new Promise(function (resolve, reject) {
+            var origin = (secure ? 'https' : 'http') + '://127.0.0.1:' + port;
+            var client = http2.connect(origin, secure ? { rejectUnauthorized: false } : undefined);
+            var settle = function (ok) {
+                try { client.close(); } catch (e) { /* ignore */ }
+                resolve(ok);
+            };
+            client.on('error', reject);
+            client.on('remoteSettings', function () {
+                var req = client.request({
+                    ':method': 'CONNECT', ':protocol': 'websocket',
+                    ':scheme': secure ? 'https' : 'http',
+                    ':path': candidates[idx], ':authority': '127.0.0.1:' + port
+                });
+                req.on('error', function () { settle(false); });
+                req.on('response', function (h) {
+                    var ok = (h[':status'] === 200);
+                    try { req.close(); } catch (e) { /* ignore */ }
+                    settle(ok);
+                });
+            });
+        }).then(function (ok) {
+            if (ok) { return candidates[idx]; }
+            return tryOne(idx + 1);
+        });
+    }
+    return tryOne(0);
+}
+
+/**
+ * WS driver: S extended-CONNECT sessions, each ping-ponging N masked TEXT
+ * frames against the echo handler (client masks per RFC 6455 §5.1, so every
+ * inbound payload byte exercises the server's unmask loop; every echo
+ * exercises the encode side). The client codec is the framework's own
+ * lib/ws-framing. Serves both ws arms: with no `wsOpts` it behaves exactly as
+ * the codec-isolated baseline (cleartext, `/live`, --ws-frames); the
+ * ws-bundle arm passes TLS + the probed bundle path + --ws-bundle-frames.
+ *
+ * @param   {number}  port
+ * @param   {object}  [wsOpts]
+ * @param   {string}  [wsOpts.arm='ws']     - stats/report arm label
+ * @param   {boolean} [wsOpts.secure=false] - TLS session (self-signed tolerated)
+ * @param   {string}  [wsOpts.path='/live'] - ws path (probe first — see probeWsPath)
+ * @param   {number}  [wsOpts.frames]       - frames per session (default --ws-frames)
  * @returns {Promise<object>} driver stats
  */
-async function driveWs(port) {
+async function driveWs(port, wsOpts) {
+    var opts    = wsOpts || {};
+    var secure  = !!opts.secure;
+    var wsPath  = opts.path || '/live';
+    var frames  = opts.frames || WS_FRAMES;
     var wsf = require(path.join(FW, 'lib', 'ws-framing', 'src', 'main.js'));
     var payload = 'x'.repeat(WS_PAYLOAD);
-    var stats = { arm: 'ws', sessions: WS_SESSIONS, framesPerSession: WS_FRAMES, payloadBytes: WS_PAYLOAD, echoes: 0, startMs: Date.now() };
+    var stats = { arm: opts.arm || 'ws', sessions: WS_SESSIONS, framesPerSession: frames, payloadBytes: WS_PAYLOAD, path: wsPath, echoes: 0, startMs: Date.now() };
 
     function oneSession() {
         return new Promise(function (resolve, reject) {
-            var client = http2.connect('http://127.0.0.1:' + port);
+            var origin = (secure ? 'https' : 'http') + '://127.0.0.1:' + port;
+            var client = http2.connect(origin, secure ? { rejectUnauthorized: false } : undefined);
             var guard = setTimeout(function () {
                 try { client.close(); } catch (e) { /* ignore */ }
                 reject(new Error('ws session timed out (' + stats.echoes + ' echoes so far)'));
@@ -548,15 +648,16 @@ async function driveWs(port) {
             client.on('error', reject);
             client.on('remoteSettings', function () {
                 var req = client.request({
-                    ':method': 'CONNECT', ':protocol': 'websocket', ':scheme': 'http',
-                    ':path': '/live', ':authority': '127.0.0.1:' + port
+                    ':method': 'CONNECT', ':protocol': 'websocket',
+                    ':scheme': secure ? 'https' : 'http',
+                    ':path': wsPath, ':authority': '127.0.0.1:' + port
                 });
                 var sent = 0;
                 var parser = wsf.createParser({
                     isServer  : false,
                     onMessage : function () {
                         stats.echoes++;
-                        if (sent < WS_FRAMES) { pump(); }
+                        if (sent < frames) { pump(); }
                         else {
                             // Close: code 1000 + reason, masked like every client frame
                             req.write(wsf.encodeFrame({
@@ -712,14 +813,30 @@ function teardown() {
         }
     } catch (e) { /* ignore */ }
 
-    // stray self-symlink at the repo root
-    try {
-        var stray = path.join(GINA_ROOT, 'gina');
-        if (fs.existsSync(stray) && fs.lstatSync(stray).isSymbolicLink()) {
+    // Stray self-symlink at the repo root. The CLI auto-link step drops it under
+    // the bare package name AND under the checkout's own basename (a worktree
+    // named `gina-framework` gets `./gina-framework`), so both forms are swept —
+    // matching only `gina` left the basename form behind, and it is NOT
+    // gitignored, so a release cut's `git add --all` would absorb it into the
+    // tagged, immutably-published Release commit. Guarded twice: the entry must
+    // be a symlink (never a real directory) AND must resolve to the repo root
+    // (never an unrelated link a developer put there). readlinkSync is used
+    // rather than existsSync/realpathSync so a DANGLING stray is still swept.
+    var strayNames = ['gina'];
+    if (strayNames.indexOf(path.basename(GINA_ROOT)) === -1) { strayNames.push(path.basename(GINA_ROOT)); }
+    strayNames.forEach(function (name) {
+        var stray = path.join(GINA_ROOT, name);
+        var st;
+        try { st = fs.lstatSync(stray); } catch (e) { return; }          // absent
+        if (!st.isSymbolicLink()) { return; }                            // a real dir — never touch
+        var target;
+        try { target = path.resolve(path.dirname(stray), fs.readlinkSync(stray)); } catch (e) { return; }
+        if (target !== path.resolve(GINA_ROOT)) { return; }              // not a self-link
+        try {
             fs.unlinkSync(stray);
-            warnings.push('removed a stray `gina` self-symlink at the repo root');
-        }
-    } catch (e) { /* ignore */ }
+            warnings.push('removed a stray `' + name + '` self-symlink at the repo root');
+        } catch (e) { /* ignore */ }
+    });
     return warnings;
 }
 
@@ -728,11 +845,12 @@ function teardown() {
 // ---------------------------------------------------------------------------
 
 var DRIVERS = { render: driveRender, upload: driveUpload, ws: driveWs };
+var VALID_ARMS = ['render', 'upload', 'ws', 'ws-bundle'];
 
 async function main() {
-    var bad = ARMS.filter(function (a) { return !DRIVERS[a]; });
+    var bad = ARMS.filter(function (a) { return VALID_ARMS.indexOf(a) === -1; });
     if (bad.length) {
-        process.stderr.write('unknown arm(s): ' + bad.join(',') + ' — valid: render,upload,ws\n');
+        process.stderr.write('unknown arm(s): ' + bad.join(',') + ' — valid: ' + VALID_ARMS.join(',') + '\n');
         process.exit(2);
     }
     fs.mkdirSync(OUT, { recursive: true });
@@ -758,6 +876,22 @@ async function main() {
                     var wsRun = await runWsArm();   // standalone codec server, no bundle boot
                     stats = wsRun.stats;
                     profile = wsRun.profile;
+                } else if (arm === 'ws-bundle') {
+                    // #P36 re-arm: the ws echo load against the REAL bundle.
+                    // Boot wall is recorded so the report can state how much of
+                    // the profile is boot rather than steady state — if
+                    // boot+drain exceeds ~15% of the sampled span, re-run with
+                    // a higher --ws-bundle-frames before reading shares.
+                    var bootT0 = Date.now();
+                    handle = await bootArm(arm, port);
+                    var bootWallMs = Date.now() - bootT0;
+                    await warmup(port);
+                    var wsBPath = await probeWsPath(port, true, ['/' + BUNDLE + '/live', '/live']);
+                    log('[ws-bundle] ws path resolved: ' + wsBPath);
+                    stats = await driveWs(port, { arm: 'ws-bundle', secure: true, path: wsBPath, frames: WS_BUNDLE_FRAMES });
+                    stats.bootWallMs = bootWallMs;
+                    profile = await stopArm(arm, handle);
+                    handle = null;
                 } else {
                     handle = await bootArm(arm, port);
                     await warmup(port);
@@ -766,10 +900,14 @@ async function main() {
                     handle = null;
                 }
                 var analysis = analyzer.analyze(JSON.parse(fs.readFileSync(profile, 'utf8')));
-                var label = (arm === 'ws') ? 'ws (codec-isolated standalone server)' : arm + ' (bundle child)';
+                var label = (arm === 'ws') ? 'ws (codec-isolated standalone server)'
+                    : (arm === 'ws-bundle') ? 'ws-bundle (in-bundle, declarative method:"ws" route)'
+                    : arm + ' (bundle child)';
                 report.arms[arm] = {
                     driver  : stats,
-                    mode    : (arm === 'ws') ? 'codec-isolated standalone' : 'bundle child (prod, h2/https)',
+                    mode    : (arm === 'ws') ? 'codec-isolated standalone'
+                        : (arm === 'ws-bundle') ? 'bundle child (prod, h2/https, in-bundle ws)'
+                        : 'bundle child (prod, h2/https)',
                     profile : path.relative(GINA_ROOT, profile),
                     totalUs : analysis.totalUs,
                     buckets : analysis.buckets,

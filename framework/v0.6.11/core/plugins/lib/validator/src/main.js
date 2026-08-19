@@ -773,6 +773,69 @@ function ValidatorPlugin(rules, data, formId, culture) {
      */
     var isAnswerFocusInProgress = false;
 
+    /**
+     * #B387 — the asynchronous continuation of the #B319 exemption above.
+     *
+     * The answer's own focus move makes the answered field the active element,
+     * and BOTH display refreshers read "active element" as "the user is editing
+     * this field" and soften/hide the committed message:
+     *   - `refreshWarning`'s error->warning downgrade appends `hidden`;
+     *   - `handleErrorsDisplay`'s refresh branch re-creates the message born-hidden.
+     * The one-shot flag above only covers the SYNCHRONOUS focusin dispatched
+     * inside `.focus()`; a validation completion firing LATER in the same
+     * cascade (a live-check waiter woken by the reveal pass's deferred release,
+     * or the trailing silent global re-validation) runs after the `finally`
+     * cleared it — and re-hid the very message the answer had just rendered.
+     *
+     * This slot records WHICH field currently holds an answer-placed focus, so
+     * the two hide sites can tell answer-placed focus from user-placed focus,
+     * for ANY caller, however late. A single slot is exact: only one active
+     * element exists. Released on the first genuine user interaction (any
+     * trusted native event reaching a form proxy while the one-shot flag is
+     * down), so the deliberate mid-typing suppression re-engages the moment
+     * the user actually edits.
+     *
+     * @private
+     * @type {object|null} `{ formId, elName }` while an answer-placed focus is live, else `null`
+     */
+    var answerFocusHold = null;
+
+    /**
+     * #B387 — does `answerFocusHold` name this exact field?
+     *
+     * @private
+     * @param {string} formId - owning form id
+     * @param {string} elName - field name
+     * @returns {boolean} true while the answer-placed focus is live on this field
+     */
+    var isAnswerFocusHeldFor = function(formId, elName) {
+        return ( answerFocusHold
+            && answerFocusHold.formId === formId
+            && answerFocusHold.elName === elName ) ? true : false;
+    };
+
+    /**
+     * #B387 — release the hold on the first genuine user interaction.
+     *
+     * Trusted-only: framework-internal `triggerEvent` dispatches are untrusted
+     * CustomEvents and must not release it. The `isAnswerFocusInProgress`
+     * guard keeps the answer's OWN synchronous focusin (trusted — the UA
+     * generates it inside `.focus()`) from releasing the hold it is part of
+     * delivering.
+     *
+     * @private
+     * @param {object} event - the native event reaching a form proxy handler
+     * @returns {void}
+     */
+    var releaseAnswerFocusHold = function(event) {
+        if ( !answerFocusHold ) {
+            return;
+        }
+        if ( event && event.isTrusted && !isAnswerFocusInProgress ) {
+            answerFocusHold = null;
+        }
+    };
+
     var refreshWarning = function($el) {
         var formId = $el.form.id || $el.form.getAttribute('id');
         var elName = $el.name || $el.form.getAttribute('name');
@@ -789,7 +852,19 @@ function ValidatorPlugin(rules, data, formId, culture) {
         if ( /form\-item\-warning/.test($parent.className) && currentElName != elName ) {
             $parent.className = $parent.className.replace(/form\-item\-warning/, 'form-item-error');
 
-        } else if (/form\-item\-error/.test($parent.className) && currentElName == elName ) {
+        }
+        // #B387 — `currentElName == elName` reads "the user is editing this
+        // field", but the ANSWER's own focus move (#B319) also makes the field
+        // the active element — and unlike the synchronous focusin, the async
+        // completion callers arrive after the one-shot flag is already down.
+        // While the answer-focus hold names this field the focus is
+        // answer-placed, not user-placed: keep the message the answer just
+        // rendered.
+        // was: else if (/form\-item\-error/.test($parent.className) && currentElName == elName ) {
+        else if (
+            /form\-item\-error/.test($parent.className) && currentElName == elName
+            && !isAnswerFocusHeldFor(formId, elName)
+        ) {
             $parent.className = $parent.className.replace(/form\-item\-error/, 'form-item-warning');
             isErrorMessageHidden = true;
         }
@@ -1409,7 +1484,11 @@ function ValidatorPlugin(rules, data, formId, culture) {
                         // blur. This "refresh" re-create runs AFTER refreshWarning in the live-check
                         // global pass, so without this focus guard it re-shows the message mid-typing.
                         // On blur (field no longer active) the message is created shown (focusout commits).
-                        $err.setAttribute('class', ( document.activeElement && document.activeElement.name == name ) ? 'form-item-error-message hidden' : 'form-item-error-message');
+                        // #B387 — same provenance refinement as refreshWarning's downgrade:
+                        // an answer-placed focus (#B319) must not read as "being typed in",
+                        // or this re-create clips the very message the answer delivered.
+                        // was: ( document.activeElement && document.activeElement.name == name ) ?
+                        $err.setAttribute('class', ( document.activeElement && document.activeElement.name == name && !isAnswerFocusHeldFor(id, name) ) ? 'form-item-error-message hidden' : 'form-item-error-message');
                         // #A11Y5 — the branch below re-asserts aria-invalid="true" on this same
                         // field, so when the message is hidden it must stay resolvable: clip it
                         // out of view rather than out of the accessibility tree. Reads the class
@@ -5532,6 +5611,59 @@ function ValidatorPlugin(rules, data, formId, culture) {
     var setCaretToPos = function ($el, pos) {
         setSelectionRange($el, pos, pos);
     }
+    /**
+     * commitCaret
+     * #B389 — commits the caret SYNCHRONOUSLY after a programmatic value
+     * rebuild and records the position on the element. Assigning `.value`
+     * collapses the selection to the END of the field (measured on WebKit
+     * and Chromium), and the deferred restore of the transient-readonly
+     * dance only runs two macrotasks later — so without a synchronous
+     * commit, any keystroke arriving inside that window reads a stale
+     * `selectionStart` and inserts at the wrong offset (scrambled fast
+     * input). The recorded position (`_ginaAcCaret`) is what the keydown
+     * interception trusts while a deferred restore is still in flight.
+     *
+     * @param {object} $el - HTMLElement
+     * @param {number} pos - caret position to commit
+     */
+    var commitCaret = function ($el, pos) {
+        setCaretToPos($el, pos);
+        $el._ginaAcCaret = pos;
+    }
+    /**
+     * queueCaretRestore
+     * #B389 — re-applies the transient readonly (the Safari autofill/
+     * autosuggest suppression — mechanism kept identical to the original
+     * dance) and queues the deferred caret restore. The restore re-asserts
+     * the LATEST committed caret (`_ginaAcCaret`) rather than the position
+     * captured at its own keystroke: a later keystroke may have advanced
+     * the caret while this restore sat in the queue, and re-applying a
+     * stale capture is what scrambled fast typing. `_ginaAcPending` counts
+     * restores in flight so the keydown interception knows when the
+     * element's own selection can be trusted again; the tracker is handed
+     * back (nulled) once the last pending restore has fired.
+     *
+     * @param {object} $el - HTMLElement
+     */
+    var queueCaretRestore = function ($el) {
+        $el._ginaAcPending = ($el._ginaAcPending || 0) + 1;
+        $el.setAttribute('readonly', 'readonly');
+        setTimeout(() => {
+            $el.removeAttribute('readonly');
+            setTimeout(() => {
+                // Guard on typeof — never truthiness: 0 is a valid caret
+                // position, and the cleared tracker is null.
+                if ( typeof($el._ginaAcCaret) == 'number' ) {
+                    setCaretToPos($el, $el._ginaAcCaret);
+                }
+                $el._ginaAcPending--;
+                if ( $el._ginaAcPending <= 0 ) {
+                    $el._ginaAcPending = 0;
+                    $el._ginaAcCaret = null;
+                }
+            }, 0);
+        }, 0);
+    }
 
     var isElementVisible = function($el) {
         return ($el.offsetWidth > 0 || $el.offsetHeight > 0 || $el === document.activeElement) ? true : false;
@@ -5573,6 +5705,15 @@ function ValidatorPlugin(rules, data, formId, culture) {
      * Gated to REAL Safari at the registerForLiveChecking call site (#B135):
      * Chromium UAs carry the Safari token but were never this workaround's
      * target — they get native behavior.
+     *
+     * Caret integrity (#B389): every value rebuild commits the caret
+     * SYNCHRONOUSLY (commitCaret) and records it on the element; the
+     * deferred restore of the readonly dance (queueCaretRestore) re-asserts
+     * the LATEST committed position, and while a restore is in flight the
+     * keydown handler trusts the recorded caret over the element's own
+     * selection — a `.value` assignment parks the selection at the end of
+     * the field, so a fast next keystroke would otherwise read a stale
+     * position and compose scrambled text.
      * @param {object} $el HTMLElement
      * @param {number} [liveCheckTimer] - live-check debounce handle, cleared per intercepted keystroke
      */
@@ -5612,35 +5753,55 @@ function ValidatorPlugin(rules, data, formId, culture) {
                     var $_el = e.currentTarget;
                     var str = e.currentTarget.value;
                     var posStart = $_el.selectionStart, posEnd = $_el.selectionEnd;
+                    // #B389 — while a deferred caret restore is in flight, the
+                    // element's own selection is NOT trustworthy: the last
+                    // rebuild parked the caret at the end of the field and the
+                    // restore only runs two macrotasks later. Trust the
+                    // committed caret instead, so consecutive fast keystrokes
+                    // compose the same string a native field would.
+                    if ( ($_el._ginaAcPending || 0) > 0 && typeof($_el._ginaAcCaret) == 'number' ) {
+                        posStart = posEnd = $_el._ginaAcCaret;
+                    }
                     $_el.removeAttribute('readonly');
                     //console.debug('pressed: '+ e.key+'('+ e.keyCode+')', ' S:'+posStart, ' E:'+posEnd, ' MAP: '+ JSON.stringify(keyboardMapping));
                     switch (e.keyCode) {
                         case 46: //Delete
                             if (posStart != posEnd) {
                                 $_el.value = str.substring(0, posStart) + str.substring(posEnd);
-                                if (posStart == 0) {
-                                    $_el.value = str.substring(posEnd+1);
-                                }
+                                // #B391 — the posStart == 0 override below ate one
+                                // char MORE than the selection (native Delete
+                                // removes the selection only): "XY" with [0,1)
+                                // selected must give "Y", not "". The generic
+                                // rebuild above is already correct at position 0.
+                                // if (posStart == 0) {
+                                //     $_el.value = str.substring(posEnd+1);
+                                // }
                             } else if (posStart == 0) {
                                 $_el.value = str.substring(posStart+1);
                             } else {
                                 $_el.value = str.substring(0, posStart) + str.substring(posEnd+1);
                             }
 
-                            e.currentTarget.setAttribute('readonly', 'readonly');
-                            setTimeout(() => {
-                                $_el.removeAttribute('readonly');
-                                setTimeout(() => {
-                                    if (posStart != posEnd) {
-                                        setCaretToPos($_el, posStart);
-                                    } else if (posStart == 0) {
-                                        setCaretToPos($_el, posStart);
-                                    } else {
-                                        setCaretToPos($_el, posStart);
-                                    }
-                                }, 0)
-
-                            }, 0);
+                            // #B389 — synchronous caret commit + guarded deferred
+                            // restore (the retired tail below re-applied a stale
+                            // per-keystroke capture two macrotasks later; its
+                            // if/else chain always resolved to posStart anyway).
+                            // e.currentTarget.setAttribute('readonly', 'readonly');
+                            // setTimeout(() => {
+                            //     $_el.removeAttribute('readonly');
+                            //     setTimeout(() => {
+                            //         if (posStart != posEnd) {
+                            //             setCaretToPos($_el, posStart);
+                            //         } else if (posStart == 0) {
+                            //             setCaretToPos($_el, posStart);
+                            //         } else {
+                            //             setCaretToPos($_el, posStart);
+                            //         }
+                            //     }, 0)
+                            //
+                            // }, 0);
+                            commitCaret($_el, posStart);
+                            queueCaretRestore($_el);
                             break
                         case 8: //Backspace
                             if (posStart != posEnd) {
@@ -5649,25 +5810,36 @@ function ValidatorPlugin(rules, data, formId, culture) {
                                     $_el.value = str.substring(posEnd);
                                 }
                             } else if (posStart == 0) {
-                                $_el.value = str.substring(posStart+1);
+                                // #B390 — native Backspace at position 0 is a
+                                // NO-OP: nothing sits before the caret. The
+                                // retired rebuild below deleted the FIRST
+                                // character instead. No value change, no caret
+                                // move, no restore to queue.
+                                // $_el.value = str.substring(posStart+1);
+                                break;
                             } else {
                                 $_el.value = str.substring(0, posStart-1) + str.substring(posEnd);
                             }
 
-                            e.currentTarget.setAttribute('readonly', 'readonly');
-                            setTimeout(() => {
-                                $_el.removeAttribute('readonly');
-                                setTimeout(() => {
-                                    if (posStart != posEnd) {
-                                        setCaretToPos($_el, posStart);
-                                    } else if (posStart == 0) {
-                                        setCaretToPos($_el, posStart);
-                                    } else {
-                                        setCaretToPos($_el, posStart-1);
-                                    }
-                                }, 0)
-
-                            }, 0);
+                            // #B389 — synchronous caret commit + guarded deferred
+                            // restore (the retired tail below re-applied a stale
+                            // per-keystroke capture two macrotasks later).
+                            // e.currentTarget.setAttribute('readonly', 'readonly');
+                            // setTimeout(() => {
+                            //     $_el.removeAttribute('readonly');
+                            //     setTimeout(() => {
+                            //         if (posStart != posEnd) {
+                            //             setCaretToPos($_el, posStart);
+                            //         } else if (posStart == 0) {
+                            //             setCaretToPos($_el, posStart);
+                            //         } else {
+                            //             setCaretToPos($_el, posStart-1);
+                            //         }
+                            //     }, 0)
+                            //
+                            // }, 0);
+                            commitCaret($_el, (posStart != posEnd) ? posStart : posStart-1);
+                            queueCaretRestore($_el);
                             break;
                         case 9: // Tab
                             if (keyboardMapping[16] && keyboardMapping[9]) {
@@ -5681,11 +5853,19 @@ function ValidatorPlugin(rules, data, formId, culture) {
                             break;
                         case 37: // ArrowLeft
                             console.debug('moving left ', posStart-1);
-                            setCaretToPos($_el, posStart-1);
+                            // #B392 — setCaretToPos(-1) at position 0 coerces to
+                            // the unsigned maximum and clamps to the END of the
+                            // field (measured on WebKit and Chromium): floor at
+                            // 0. #B389 — commit through the tracker so a pending
+                            // deferred restore cannot undo the arrow move.
+                            // setCaretToPos($_el, posStart-1);
+                            commitCaret($_el, (posStart > 0) ? posStart-1 : 0);
                             break;
                         case 39: // ArrowRight
                             if (posStart+1 < str.length+1) {
-                                setCaretToPos($_el, posStart+1);
+                                // #B389 — through the tracker (see ArrowLeft).
+                                // setCaretToPos($_el, posStart+1);
+                                commitCaret($_el, posStart+1);
                             }
                             break;
                         // Shortcuts
@@ -5759,15 +5939,24 @@ function ValidatorPlugin(rules, data, formId, culture) {
                             } else {
                                 $_el.value = str.substring(0, posStart) + e.key + str.substring(posEnd);
                             }
-                            e.currentTarget.setAttribute('readonly', 'readonly');
-                            // Force restore last caret position
-                            setTimeout(() => {
-                                $_el.removeAttribute('readonly');
-                                setTimeout(() => {
-                                    setCaretToPos($_el, posStart+1);
-                                }, 0);
-
-                            }, 0);
+                            // #B389 — synchronous caret commit + guarded deferred
+                            // restore. The retired tail below only restored the
+                            // caret two macrotasks after the `.value` assignment
+                            // (which parks it at the end of the field), so a fast
+                            // second keystroke read a stale selectionStart and
+                            // inserted at the wrong offset — text landed at the
+                            // end instead of the caret (gh issue #63).
+                            // e.currentTarget.setAttribute('readonly', 'readonly');
+                            // // Force restore last caret position
+                            // setTimeout(() => {
+                            //     $_el.removeAttribute('readonly');
+                            //     setTimeout(() => {
+                            //         setCaretToPos($_el, posStart+1);
+                            //     }, 0);
+                            //
+                            // }, 0);
+                            commitCaret($_el, posStart+1);
+                            queueCaretRestore($_el);
                             break;
                     } //EO Switch
                 });
@@ -7793,6 +7982,7 @@ function ValidatorPlugin(rules, data, formId, culture) {
         // are guarded fallbacks that no-op on a control).
         var resetProxyHandler = function(event) {
             var $el = event.target;
+            releaseAnswerFocusHold(event); // #B387
             if (
                 typeof(event.defaultPrevented) != 'undefined'
                 && event.defaultPrevented
@@ -7811,6 +8001,7 @@ function ValidatorPlugin(rules, data, formId, culture) {
         };
         var keydownProxyHandler = function(event) {
             var $el = event.target;
+            releaseAnswerFocusHold(event); // #B387
             if ( typeof(event.defaultPrevented) != 'undefined' && event.defaultPrevented )
             return false;
 
@@ -7829,6 +8020,7 @@ function ValidatorPlugin(rules, data, formId, culture) {
         };
         var keyupProxyHandler = function(event) {
             var $el = event.target;
+            releaseAnswerFocusHold(event); // #B387
             if ( typeof(event.defaultPrevented) != 'undefined' && event.defaultPrevented )
             return false;
 
@@ -7848,6 +8040,7 @@ function ValidatorPlugin(rules, data, formId, culture) {
         };
         var focusinProxyHandler = function(event) {
             var $el = event.target;
+            releaseAnswerFocusHold(event); // #B387
             if ( typeof(event.defaultPrevented) != 'undefined' && event.defaultPrevented )
             return false;
 
@@ -7882,6 +8075,7 @@ function ValidatorPlugin(rules, data, formId, culture) {
         };
         var focusoutProxyHandler = function(event) {
             var $el = event.target;
+            releaseAnswerFocusHold(event); // #B387
             if ( typeof(event.defaultPrevented) != 'undefined' && event.defaultPrevented )
                 return false;
 
@@ -7899,6 +8093,7 @@ function ValidatorPlugin(rules, data, formId, culture) {
         };
         var changeProxyHandler = function(event) {
             var $el = event.target;
+            releaseAnswerFocusHold(event); // #B387
             if ( typeof(event.defaultPrevented) != 'undefined' && event.defaultPrevented )
             return false;
 
@@ -7915,6 +8110,7 @@ function ValidatorPlugin(rules, data, formId, culture) {
         };
         var clickProxyHandler = function(event) {
             var $el = event.target;
+            releaseAnswerFocusHold(event); // #B387
 
             // a click target removed from the DOM during its own dispatch
             // (e.g. an upload preview's reset/delete link) has no parent by
@@ -8286,6 +8482,8 @@ function ValidatorPlugin(rules, data, formId, culture) {
                                     // no-op on an unfocusable host that still passes the
                                     // typeof-function gate above.
                                     if ( typeof(document) === 'undefined' || !document || document.activeElement === _aField ) {
+                                        // #B387 — same provenance record as focusFirstInvalidField.
+                                        answerFocusHold = { formId: $a11yForm.getAttribute('id'), elName: _aName };
                                         break;
                                     }
                                 }
@@ -9128,6 +9326,10 @@ function ValidatorPlugin(rules, data, formId, culture) {
                     // so a failed submit announced nothing. Confirming it is also what makes the
                     // "skips unfocusable controls" contract above true rather than aspirational.
                     if ( typeof(document) === 'undefined' || !document || document.activeElement === $field ) {
+                        // #B387 — record the answer-placed focus so display
+                        // refreshes firing after the one-shot window (async
+                        // completion callers) can tell it from user focus.
+                        answerFocusHold = { formId: $form.getAttribute('id'), elName: name };
                         return true;
                     }
                 }
@@ -9167,12 +9369,22 @@ function ValidatorPlugin(rules, data, formId, culture) {
         var $target         = $formInstance.target;
         var validationInfo  = getFormValidationInfos($target, $formInstance.rules);
 
-        validate($target, validationInfo.fields, validationInfo.$fields, $formInstance.rules, function onDisabledTriggerReveal(result) {
+        var onDisabledTriggerReveal = function(result) {
             var errors = result['fields'] || result['error'];
             handleErrorsDisplay($target, errors, result['data']);
             focusFirstInvalidField($target, errors);
             updateSubmitTriggerState($formInstance, result.isValid());
-        });
+        };
+        // #B348 — completion identity. A reveal pass is un-latched, writes
+        // neither `isSubmitting` nor `isValidating`, and on a VALID form its
+        // verdict is clean — so with the async `query` field not declared
+        // last its waiter completion matched NO dispatch branch and this
+        // callback silently never ran: the documented self-heal + gate
+        // re-sync were dead on those forms. The marker rides the exact cb of
+        // the exact pass (the engine's own `cb._data`/`cb._errors` property
+        // idiom); the waiter's terminal-gated rescue branch consults it.
+        onDisabledTriggerReveal.isRevealCompletion = true;
+        validate($target, validationInfo.fields, validationInfo.$fields, $formInstance.rules, onDisabledTriggerReveal);
     };
 
     /**
@@ -9977,6 +10189,29 @@ function ValidatorPlugin(rules, data, formId, culture) {
                                 else if (/^true$/i.test(instance.$forms[formId].isValidating) && listedFields.length > 1 && listedFields[listedFields.length-1] != field ) {
                                     //console.debug(field +' is NOT the last element to be validated for formId: '+ formId);
                                     needsGlobalReValidation = true;
+                                }
+                                // #B348 — the reveal's rescue: a TERMINAL completion
+                                // (same condition as the errors>0 block above — the
+                                // guard is what stops a multi-query-field early wake,
+                                // where the first waiter fires at asyncCount 1)
+                                // carrying the reveal's completion identity, that
+                                // matched none of the branches above, must dispatch
+                                // its own pass or `onDisabledTriggerReveal` starves:
+                                // clean verdict + un-latched + not live-check +
+                                // query-not-last fell through EVERY branch, the gate
+                                // marker never re-synced, and a fully valid form ate
+                                // every later click. Chained LAST so every
+                                // previously-working shape (terminal errors>0, #B342
+                                // latch, last-field, live-check display-only) stays
+                                // byte-identical; an un-latched programmatic submit
+                                // (#B347) carries no marker and is deliberately
+                                // unaffected — its fix is gated on its own repro.
+                                else if (
+                                    hasParsedAllRules
+                                    && asyncCount <= 0
+                                    && cb && cb.isRevealCompletion
+                                ) {
+                                    triggerEvent(gina, $formOrElement, 'validated.' + formId, cb);
                                 }
 
                                 if (needsGlobalReValidation) {

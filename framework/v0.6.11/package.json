@@ -1,6 +1,6 @@
 {
   "name": "gina-framework",
-  "version": "0.6.10",
+  "version": "0.6.11",
   "dependencies": {
     "@rhinostone/busboy": "^1.6.1",
     "@rhinostone/swig": "^2.7.2",

@@ -20,6 +20,7 @@
  * Usage:
  *   node script/perf/analyze-cpuprofile.js <file.cpuprofile> [...more]
  *   node script/perf/analyze-cpuprofile.js --json <file.cpuprofile>
+ *   node script/perf/analyze-cpuprofile.js --callers JSONClone <file.cpuprofile>
  *
  * Standalone by design — no framework globals, require()-able by the
  * profile-baseline orchestrator (module.exports.analyze).
@@ -142,6 +143,109 @@ function format(label, result, topN) {
 }
 
 /**
+ * Attribute one function's self-time to its CALLERS — the §8 caller-attribution
+ * walk, promoted out of session scratch (audit `2026-07-28-rust-acceleration.md`
+ * § 8 harness micro-followup).
+ *
+ * Self-time is aggregated per *nearest non-recursive ancestor*: walking up from
+ * a matching node, ancestors bearing the SAME function name are skipped, so a
+ * self-recursive callee (`JSONClone` recursing through an object graph) is
+ * attributed to the frame that entered the recursion rather than to itself.
+ * Without that skip a recursive function reports itself as its own top caller
+ * and the reading is worthless.
+ *
+ * @param   {object} profile - parsed `.cpuprofile` JSON ({nodes, samples, timeDeltas})
+ * @param   {string} fnName  - exact `callFrame.functionName` to attribute
+ * @returns {{fn: string, totalUs: number, callers: Array<{fn: string, url: string, line: ?number, us: number}>}}
+ * @example
+ * // which call sites pay for the deep clone?
+ * callers(profile, 'JSONClone').callers[0];  // => { fn: 'getInstance', url: '.../swig-filters/src/main.js', us: 11050000 }
+ */
+function callers(profile, fnName) {
+    var byId     = {};
+    var parentOf = {};
+    var i;
+    for (i = 0; i < profile.nodes.length; i++) {
+        var n = profile.nodes[i];
+        byId[n.id] = n;
+        var kids = n.children || [];
+        for (var k = 0; k < kids.length; k++) { parentOf[kids[k]] = n.id; }
+    }
+
+    var selfUs  = {};
+    var samples = profile.samples || [];
+    var deltas  = profile.timeDeltas || [];
+    for (i = 0; i < samples.length; i++) {
+        var d = deltas[i] > 0 ? deltas[i] : 0;
+        selfUs[samples[i]] = (selfUs[samples[i]] || 0) + d;
+    }
+
+    var agg     = {};
+    var totalUs = 0;
+    Object.keys(selfUs).forEach(function (id) {
+        var node = byId[id];
+        if (!node) { return; }
+        if (((node.callFrame || {}).functionName || '') !== fnName) { return; }
+
+        var us = selfUs[id];
+        totalUs += us;
+
+        // nearest ancestor whose name differs — skips the recursive chain
+        var pid = parentOf[id];
+        var anc = null;
+        while (typeof pid !== 'undefined') {
+            var p = byId[pid];
+            if (!p) { break; }
+            if (((p.callFrame || {}).functionName || '') !== fnName) { anc = p; break; }
+            pid = parentOf[pid];
+        }
+
+        var cf  = anc ? (anc.callFrame || {}) : {};
+        var key = (cf.functionName || '(root)') + '\u0000' + (cf.url || '') + '\u0000' + (cf.lineNumber || '');
+        if (!agg[key]) {
+            agg[key] = {
+                fn   : cf.functionName || '(root)',
+                url  : cf.url || '',
+                line : (typeof cf.lineNumber === 'number') ? cf.lineNumber + 1 : null,
+                us   : 0
+            };
+        }
+        agg[key].us += us;
+    });
+
+    var rows = Object.keys(agg).map(function (k) { return agg[k]; });
+    rows.sort(function (a, b) { return b.us - a.us; });
+    return { fn: fnName, totalUs: totalUs, callers: rows };
+}
+
+/**
+ * Render a caller attribution as a human-readable table.
+ *
+ * @param   {string} label
+ * @param   {{fn: string, totalUs: number, callers: Array}} result
+ * @param   {number} [topN=15]
+ * @returns {string}
+ * @example
+ * formatCallers('render.cpuprofile', callers(profile, 'JSONClone'));
+ */
+function formatCallers(label, result, topN) {
+    topN = topN || 15;
+    var out = [];
+    out.push('== ' + label + ' - callers of `' + result.fn + '` - attributed self-time: '
+             + (result.totalUs / 1000).toFixed(1) + ' ms');
+    if (!result.totalUs) {
+        out.push('  (no samples matched `' + result.fn + '` - check the exact functionName)');
+        return out.join('\n');
+    }
+    result.callers.slice(0, topN).forEach(function (c) {
+        var pct = (100 * c.us / result.totalUs).toFixed(2);
+        var loc = c.url ? (shorten(c.url) + (c.line ? ':' + c.line : '')) : '';
+        out.push('  ' + pad(pct + '%', 8) + pad((c.us / 1000).toFixed(1) + ' ms', 12) + c.fn + (loc ? '  @ ' + loc : ''));
+    });
+    return out.join('\n');
+}
+
+/**
  * @param   {string} s
  * @param   {number} n
  * @returns {string} left-padded to n + two trailing spaces
@@ -162,19 +266,41 @@ function shorten(url) {
     return parts.slice(Math.max(0, parts.length - 3)).join('/');
 }
 
-module.exports = { analyze: analyze, format: format, BUCKETS: BUCKETS };
+module.exports = { analyze: analyze, format: format, callers: callers, formatCallers: formatCallers, BUCKETS: BUCKETS };
 
 if (require.main === module) {
-    var args   = process.argv.slice(2);
-    var asJson = args.indexOf('--json') > -1;
-    var files  = args.filter(function (a) { return a.indexOf('--') !== 0; });
+    var args       = process.argv.slice(2);
+    var asJson     = args.indexOf('--json') > -1;
+    var callersIdx = args.indexOf('--callers');
+    var callersFn  = (callersIdx > -1) ? args[callersIdx + 1] : null;
+    // `--callers` takes a value, so its operand must not be mistaken for a file
+    var files  = args.filter(function (a, i) {
+        if (a.indexOf('--') === 0) { return false; }
+        if (callersIdx > -1 && i === callersIdx + 1) { return false; }
+        return true;
+    });
+    var USAGE = 'usage: node script/perf/analyze-cpuprofile.js [--json] [--callers <functionName>] <file.cpuprofile> [...]\n';
+    if (callersIdx > -1 && (!callersFn || callersFn.indexOf('--') === 0)) {
+        process.stderr.write('--callers requires a functionName operand\n' + USAGE);
+        process.exit(2);
+    }
     if (!files.length) {
-        process.stderr.write('usage: node script/perf/analyze-cpuprofile.js [--json] <file.cpuprofile> [...]\n');
+        process.stderr.write(USAGE);
         process.exit(2);
     }
     var all = {};
     files.forEach(function (f) {
-        var result = analyze(JSON.parse(fs.readFileSync(f, 'utf8')));
+        var profile = JSON.parse(fs.readFileSync(f, 'utf8'));
+        if (callersFn) {
+            var attr = callers(profile, callersFn);
+            if (asJson) {
+                all[path.basename(f)] = { fn: attr.fn, totalUs: attr.totalUs, callers: attr.callers.slice(0, 20) };
+            } else {
+                process.stdout.write(formatCallers(path.basename(f), attr) + '\n\n');
+            }
+            return;
+        }
+        var result = analyze(profile);
         if (asJson) {
             all[path.basename(f)] = { totalUs: result.totalUs, buckets: result.buckets, top: result.frames.slice(0, 20) };
         } else {

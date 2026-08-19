@@ -100,9 +100,11 @@ describe('01 - main.js source pins (#B332/#B333/#B334)', function () {
         // 2 -> 3 on 2026-08-12 (#B342, operator-approved): the submit-latch-gated
         // clean-path dispatch is the third site, same target/shape as the pair
         // this pin was written for.
+        // 3 -> 4 on 2026-08-18 (#B348, operator-approved): the terminal-gated
+        // reveal-completion rescue is the fourth site, same target/shape.
         var active = mainSrc.match(/^\s*triggerEvent\(gina, \$formOrElement, 'validated\.' \+ formId, cb\);/mg) || [];
-        assert.strictEqual(active.length, 3,
-            'expected exactly 3 active $formOrElement-targeted validated dispatches, got ' + active.length);
+        assert.strictEqual(active.length, 4,
+            'expected exactly 4 active $formOrElement-targeted validated dispatches, got ' + active.length);
         var stale = mainSrc.match(/^\s*triggerEvent\(gina, \$currentForm, 'validated\.'/mg) || [];
         assert.strictEqual(stale.length, 0,
             'a form-targeted async validated dispatch is back — a single-element pass\'s listener cannot hear it');
