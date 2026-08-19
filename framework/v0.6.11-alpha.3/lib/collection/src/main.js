@@ -1061,6 +1061,10 @@ function Collection(content, options) {
 
     instance['replace'] = function() {
         var key         = '_uuid' // comparison key
+            // #B393 — whether the caller named the comparison key explicitly. An
+            // explicit key is honoured as given (no fallback, no refusal), exactly
+            // as before; only the DEFAULT `_uuid` path resolves a key below.
+            , keyExplicit = false
             , result    = null
             , filters   = null
             , set       = null
@@ -1070,6 +1074,7 @@ function Collection(content, options) {
 
         if ( typeof(arguments[arguments.length-1]) == 'string' ) {
             key = arguments[arguments.length - 1];
+            keyExplicit = true;
             delete arguments[arguments.length - 1];
             --arguments.length;
         }
@@ -1115,13 +1120,50 @@ function Collection(content, options) {
             for (var a = 0, aLen = arr.length; a < aLen; ++a) {
                 arr[a] = JSON.clone(set);
                 for (var r = 0, rLen = result.length; r < rLen; ++r) {
-                    if ( typeof(result[r][key]) == 'undefined' && key == '_uuid' && typeof(result[r]['id']) != 'undefined' ) {
-                        key = 'id';
-                    } else if (typeof(result[r][key]) == 'undefined' && key == '_uuid') {
-                        throw new Error('No comparison key defined !')
+                    // #B393 — resolve the comparison key from BOTH sides, per entry.
+                    //
+                    // Previously the key was chosen by inspecting the STORED entry
+                    // only, and was mutated in place. Two consequences, both fixed
+                    // here:
+                    //
+                    //  (a) When the stored entry carried a `_uuid` and the caller's
+                    //      `set` did not, neither the `id` fallback nor the refusal
+                    //      fired (both were gated on the STORED entry lacking the
+                    //      key), so the comparison was `<storedUuid> == undefined` —
+                    //      never true. Nothing matched, nothing was replaced, and the
+                    //      call returned a successful-looking result: a silent, lossy
+                    //      write. A stored `_uuid` is present exactly when the caller
+                    //      re-loaded an array a previous chained call had returned.
+                    //  (b) `key` was assigned rather than shadowed, so once any entry
+                    //      flipped it to `id` it stayed `id` for every later entry in
+                    //      the same call.
+                    //
+                    // `cmpKey` is derived per (a, r) pair and the outer `key` is never
+                    // written, so a fallback can no longer leak across iterations.
+                    var cmpKey = key;
+                    if ( !keyExplicit ) {
+                        if (
+                            typeof(result[r][cmpKey]) == 'undefined'
+                            || typeof(arr[a][cmpKey]) == 'undefined'
+                        ) {
+                            if (
+                                typeof(result[r]['id']) != 'undefined'
+                                && typeof(arr[a]['id']) != 'undefined'
+                            ) {
+                                cmpKey = 'id';
+                            }
+                        }
+                        // No key both sides carry: refuse loudly rather than return a
+                        // result that silently replaced nothing.
+                        if (
+                            typeof(result[r][cmpKey]) == 'undefined'
+                            || typeof(arr[a][cmpKey]) == 'undefined'
+                        ) {
+                            throw new Error('No comparison key defined !')
+                        }
                     }
 
-                    if ( result[r][key] == arr[a][key] ) {
+                    if ( result[r][cmpKey] == arr[a][cmpKey] ) {
                         result[r] = arr[a];
                         break;
                     }
