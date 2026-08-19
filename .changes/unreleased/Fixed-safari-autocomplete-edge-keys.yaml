@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'FormValidator: three position-0 edge defects in the same Safari `autocomplete="off"` keydown interception now match native field behavior — Backspace at the start of the field deleted the first character (native is a no-op), Delete with a selection starting at position 0 removed one character more than the selection, and ArrowLeft at position 0 teleported the caret to the end of the field (`setSelectionRange(-1)` wraps to the unsigned maximum). Browser-bundled: rebuild your bundles to pick it up.'
-time: 2026-08-17T16:28:19+01:00
