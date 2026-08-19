@@ -27916,6 +27916,42 @@ function Collection(content, options) {
     }
 
 
+    /**
+     * Replaces each matched entry with `set`, wholesale — unlike `.update()`,
+     * which merges. Matching is done in two stages: `filter` selects the entries
+     * (same syntax as `.find()`), then each selected entry is located in the
+     * result by comparing a single key against the same key on `set`.
+     *
+     * That comparison key is resolved per entry, from BOTH sides:
+     *
+     *  1. the internal `_uuid` when the stored entry AND `set` both carry one;
+     *  2. otherwise `id`, when both carry one;
+     *  3. otherwise the call throws — a `set` sharing no key with the stored
+     *     entry cannot be matched, and refusing is preferable to returning a
+     *     result that silently replaced nothing.
+     *
+     * Pass `key` to name the comparison key explicitly; it is then used as given,
+     * with no fallback and no refusal.
+     *
+     * N.B. a chained result carries the internal `_uuid` on every entry the call
+     * did not replace. Persist `.toRaw()` rather than the chained array if the
+     * data is going to be re-loaded into a new Collection later.
+     *
+     * @param {object|Array} filter    - Entry selector, as `.find()` — or an already-found result array
+     * @param {object}       set       - The replacement entry (replaces the match wholesale)
+     * @param {string}       [key]     - Explicit comparison key; skips the resolution above
+     * @returns {Array} the chainable result set
+     *
+     * @throws {Error} `No comparison key defined !` when neither side shares a usable key
+     *
+     * @example
+     * // matched by the internal _uuid when both sides carry it, else by id
+     * col.replace({ id: 1 }, { id: 1, name: 'Alicia' });
+     *
+     * @example
+     * // explicit comparison key
+     * col.replace({ ref: 'r1' }, { ref: 'r1', name: 'Alicia' }, 'ref');
+     */
     instance['replace'] = function() {
         var key         = '_uuid' // comparison key
             // #B393 — whether the caller named the comparison key explicitly. An
