@@ -217,20 +217,56 @@ function EntitySuper(conn, caller, injected) {
                                     // #M2 — queue check: buffer is now an array; treat missing/empty as "no buffer".
                                     if (!entity._arguments || !entity._arguments[events[i].shortName] || entity._arguments[events[i].shortName].length === 0) {
 
-                                        // #M2 — removeAllListeners removed: it was killing the queue
-                                        // dispatch listener registered by concurrent in-flight callers.
-                                        entity.once(events[i].shortName, function () { // cannot be `entity.on` for prod/stage
-                                            // check if not already fired
-                                            if (entity._callbacks[events[i].shortName]) {
+                                        // #B394 — FIFO parity with the Option B path below (2026-08-19).
+                                        //
+                                        // The fast-path used to register a SCALAR callback slot
+                                        // (`entity._callbacks[shortName] = cb`) plus a per-call `.once`
+                                        // guarded on that slot. Under concurrency a second in-flight
+                                        // caller OVERWROTE the first's slot: the first result to arrive
+                                        // was flushed to the LAST-registered callback (cross-delivery),
+                                        // and the displaced caller's `.once` then found its guard false
+                                        // and its promise NEVER settled (starvation — a hung request
+                                        // with nothing logged). Option B (entity-context calls) already
+                                        // fixed this with a FIFO queue + a single persistent dispatch
+                                        // listener (#M2); the fast-path kept the scalar because its own
+                                        // comment claimed it "bypasses queue". It no longer does.
+                                        //
+                                        // Push this invocation's callback onto the FIFO instead of
+                                        // overwriting, and register ONE persistent `.on` dispatcher
+                                        // (only when none is active) that shifts the OLDEST callback per
+                                        // emit and removes itself when the queue drains — the exact
+                                        // `_onQueueEmit` shape Option B uses further down. Concurrent
+                                        // callers now each receive a result in arrival order, and none
+                                        // can be orphaned.
+                                        //
+                                        // Residual, identical to Option B: when the underlying
+                                        // operations complete OUT OF call order, arrival-order pairing
+                                        // swaps results. A method that RETURNS a Promise (resolved via
+                                        // `_innerResult.then()` below) carries true per-call identity
+                                        // and is the documented way to avoid it.
+                                        var _fpShortName = events[i].shortName;
+                                        if ( !Array.isArray(entity._callbacks[_fpShortName]) ) {
+                                            entity._callbacks[_fpShortName] = [];
+                                        }
+                                        entity._callbacks[_fpShortName].push(cb);
 
-                                                console.log('\nDISPATCH:ONCE_LISTENER ' + events[i].shortName +'('+ events[i].index  +')');
-                                                cb.apply(this, arguments);
-                                            }
-                                        });
-
-
-                                        // backing up callback (scalar — promisify fast-path bypasses queue)
-                                        entity._callbacks[events[i].shortName] = cb;
+                                        // The custom emit routes an ARRAY slot straight to native emit
+                                        // (its third guard skips setListener when `!Array.isArray`), so
+                                        // this `.on` listener receives the emit arguments directly.
+                                        if ( entity.listenerCount(_fpShortName) === 0 ) {
+                                            var _onFpQueueEmit = function onFpQueueEmit() {
+                                                var _q = entity._callbacks[_fpShortName];
+                                                if ( !_q || _q.length === 0 ) { return; }
+                                                var _fn = _q.shift();
+                                                console.log('\nDISPATCH:CALLBACK_FLUSH ' + _fpShortName);
+                                                _fn.apply(this, arguments);
+                                                if ( !entity._callbacks[_fpShortName] || entity._callbacks[_fpShortName].length === 0 ) {
+                                                    delete entity._callbacks[_fpShortName];
+                                                    entity.removeListener(_fpShortName, _onFpQueueEmit);
+                                                }
+                                            };
+                                            entity.on(_fpShortName, _onFpQueueEmit);
+                                        }
                                     } else { // in case the event is not ready yet
                                         console.log('\nDISPATCH:BUFFER_CALLBACK ' + events[i].shortName);
                                         // #M2 — queue consume: shift oldest buffered result so concurrent
