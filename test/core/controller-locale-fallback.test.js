@@ -246,13 +246,21 @@ describe('02 - behavioural replica — REAL Collection + REAL region data (#B100
         assert.match(warns[0], /replacing by default: `zz`/, 'warn printed, then the .content deref threw');
     });
 
-    it('SUBTRACT — pre-fix schema-valid shape fell back by ACCIDENT with an `undefined` warn', function() {
-        // region present, no shortCode: findOne({lang: undefined}) match-alls to
-        // the FIRST record (JSON.stringify drops undefined filter keys), so the
-        // old shape returned the en content while warning `undefined`.
+    it('SUBTRACT — pre-fix schema-valid shape now THROWS at the undefined filter (#B396)', function() {
+        // region present, no shortCode: historically findOne({lang: undefined})
+        // match-alled to the FIRST record (JSON.stringify dropped undefined
+        // filter keys), so the old shape returned the en content while warning
+        // `undefined` — the accidental fallback #B100 was filed against. #B396
+        // closed the match-all at Collection.find()'s entry, so the same
+        // pre-fix bytes now refuse loudly at the lookup: the accident is
+        // structurally impossible. The warn still fires first — it precedes
+        // the lookup — so the historical `undefined` interpolation survives
+        // as the observable half of the old record.
         var warns = [];
-        var out = oldBridge(confNoIsoShort, 'xx', warns);
-        assert.equal(resolvedLang(out), 'en', 'accidental first-record fallback (readdir order puts en first)');
+        assert.throws(
+            function() { oldBridge(confNoIsoShort, 'xx', warns); },
+            /filter `lang` cannot be left undefined/
+        );
         assert.match(warns[0], /replacing by default: `undefined`/);
     });
 
@@ -380,10 +388,15 @@ describe('03 - country-locale lookup keys on isoShort (#B101)', function() {
         assert.deepEqual(oldLocaleLookup(EN_ROWS, 'US'), {}, 'no row carries `short`, so the lookup always missed');
     });
 
-    it('SUBTRACT — the pre-fix shape match-alled to an arbitrary first record without a country code', function() {
-        var junk = oldLocaleLookup(EN_ROWS, undefined);
-        assert.equal(typeof junk.countryName, 'string', 'a REAL (wrong) country record leaked through');
-        assert.deepEqual(junk, EN_ROWS[0], 'the accidental record is simply the first row');
+    it('SUBTRACT — the pre-fix shape now THROWS at the undefined country filter (#B396)', function() {
+        // historically findOne({ short: undefined }) match-alled to the FIRST
+        // region row — the junk-record leak #B101 guarded against. #B396
+        // closed the match-all at Collection.find()'s entry, so the same
+        // pre-fix bytes now refuse loudly: the leak is structurally impossible.
+        assert.throws(
+            function() { oldLocaleLookup(EN_ROWS, undefined); },
+            /filter `short` cannot be left undefined/
+        );
     });
 
 });

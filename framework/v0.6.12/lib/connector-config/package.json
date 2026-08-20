@@ -1,0 +1,17 @@
+{
+  "name": "gina-lib-connector-config",
+  "version": "1.0.0",
+  "description": "Pure connector-entry resolver — merge a project's shared + bundle connectors.json (bundle wins), select a single connector entry by name, and detect the `ai` subtype. Consumed by the connector:* runtime CLI handlers (connector:infer) to resolve a single connector conf outside a request.",
+  "authors": [
+    {
+      "name": "Martin Luther ETOUMAN NDAMBWE",
+      "email": "contact@gina.io"
+    }
+  ],
+  "copyright": "Copyright (c) 2009-2026 Rhinostone <contact@gina.io>",
+  "engines": {
+    "node": ">=0.10.22"
+  },
+  "main": "src/main",
+  "license": "MIT"
+}

@@ -270,5 +270,5 @@ Open a GitHub issue describing the use case **before** writing code. Features th
 
 | Name | Role | Profile |
 | --- | --- | --- |
-| Martin Luther | Lead maintainer | [rhinostone.com](https://rhinostone.com) |
+| Martin Luther ETOUMAN NDAMBWE | Lead maintainer | [rhinostone.com](https://rhinostone.com) |
 | Fabrice DELANEAU | Co-author | [fdelaneau.com](https://fdelaneau.com) |

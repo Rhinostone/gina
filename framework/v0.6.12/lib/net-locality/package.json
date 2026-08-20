@@ -1,0 +1,17 @@
+{
+  "name": "gina-lib-net-locality",
+  "version": "1.0.0",
+  "description": "Control-plane dial-host resolution: decides whether `host_v4` names one of this machine's own interfaces and which address a CLI-side client should dial (`bind_host` vs `host_v4`).",
+  "authors": [
+    {
+      "name": "Martin Luther ETOUMAN NDAMBWE",
+      "email": "contact@gina.io"
+    }
+  ],
+  "copyright": "Copyright (c) 2009-2026 Rhinostone <contact@gina.io>",
+  "engines": {
+    "node": ">=0.10.22"
+  },
+  "main": "src/main",
+  "license": "MIT"
+}

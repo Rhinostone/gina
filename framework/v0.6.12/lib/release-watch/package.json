@@ -1,0 +1,20 @@
+{
+  "name": "gina-lib-release-watch",
+  "version": "1.0.0",
+  "description": "releaseWatch — stale built-release watch primitives: source-tree fingerprinting, change classification, recursive tree watching, busy probes and the in-flight request gauge",
+
+  "author": {
+    "name": "Martin Luther ETOUMAN NDAMBWE",
+    "email": "contact@gina.io"
+  },
+  "copyright": "Copyright (c) 2009-2026 Rhinostone <contact@gina.io>",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "main": "src/main",
+  "scripts": {
+    "test": "node --test test"
+  },
+  "license": "MIT",
+  "readmeFilename": "README.md"
+}

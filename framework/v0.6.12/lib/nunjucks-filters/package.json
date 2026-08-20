@@ -1,0 +1,17 @@
+{
+  "name": "gina-lib-nunjucks-filters",
+  "version": "1.0.0",
+  "description": "Per-request filter registry for the nunjucks render path. Registered on the cached nunjucks.Environment via env.addFilter() in controller.render-nunjucks.js. Mirrors lib/swig-filters: same factory shape, same 7 public filters (getUrl, getWebroot, length, nl2br, addHours, addDays, addYears) — getConfig is internal and excluded from registration.",
+  "authors": [
+    {
+      "name": "Martin Luther ETOUMAN NDAMBWE",
+      "email": "contact@gina.io"
+    }
+  ],
+  "copyright": "Copyright (c) 2009-2026 Rhinostone <contact@gina.io>",
+  "engines": {
+    "node": ">=0.10.22"
+  },
+  "main": "src/main",
+  "license": "MIT"
+}
