@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Refreshed the external references carried by the framework READMEs. The country-codes locale README pointed at a Simple Data Format specification URL that no longer exists (404); it now names the Tabular Data Package specification that superseded it, matching the upstream dataset the file mirrors. Every remaining plain-HTTP reference in the locales and frontend-asset READMEs is now HTTPS, with the geonames.org link resolved to the www host because the bare domain redirects back down to HTTP. Documentation only; no runtime or API change.'
+time: 2026-08-20T15:50:55+01:00

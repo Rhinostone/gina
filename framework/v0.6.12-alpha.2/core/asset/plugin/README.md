@@ -4,8 +4,8 @@ Last updated October 16th, 2016
 
 ## Requirements
 
-- [Requirejs](http://requirejs.org/)
-- [sass](http://sass-lang.com/install)
+- [Requirejs](https://requirejs.org/)
+- [sass](https://sass-lang.com/install)
 - [sass-lint](https://www.npmjs.com/package/sass-lint)
 - [csso](https://github.com/css/csso)
 - Java (for [Google Closure Compiler](https://developers.google.com/closure/compiler/))

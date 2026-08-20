@@ -3,8 +3,8 @@ Ref.: https://datahub.io/core/country-codes
 https://github.com/datasets/country-codes
 
 Comprehensive country code information, including ISO 3166 codes, ITU dialing
-codes, ISO 4217 currency codes, and many others. Provided as a [Simple Data
-Format Data Package](http://dataprotocols.readthedocs.io/en/latest/simple-data-format.html).
+codes, ISO 4217 currency codes, and many others. Provided as a [Tabular Data
+Package](https://specs.frictionlessdata.io/tabular-data-package/).
 
 ## Data
 
@@ -15,20 +15,20 @@ Customary English short names are from
 Note: CLDR shorter names "ZZ-alt-short" are used when available
 
 ISO 3166 official English and French short names are from
-[United Nations Statistics Division](http://unstats.un.org/unsd/methods/m49/m49.htm)
+[United Nations Statistics Division](https://unstats.un.org/unsd/methods/m49/m49.htm)
 
 ISO 4217 currency codes are from
 [iso.org](https://www.iso.org/iso-4217-currency-codes.html)
 
 Many other country codes are from
-[statoids.com](http://www.statoids.com/wab.html)
+[statoids.com](https://www.statoids.com/wab.html)
 
 Special thanks to Gwillim Law for his excellent
-[statoids.com](http://www.statoids.com) site (some of the field descriptions
+[statoids.com](https://www.statoids.com) site (some of the field descriptions
 are excerpted from his site), which is more up-to-date than most similar
 resources and is much easier to scrape than multiple Wikipedia pages.
 
-Capital cities, languages, continents, TLDs, and geonameid are from [geonames.org](http://download.geonames.org/export/dump/countryInfo.txt)
+Capital cities, languages, continents, TLDs, and geonameid are from [geonames.org](https://download.geonames.org/export/dump/countryInfo.txt)
 
 EDGAR codes are from [sec.gov](https://www.sec.gov/edgar/searchedgar/edgarstatecodes.htm)
 
@@ -121,6 +121,6 @@ node src/make --target=currency
 A `dist/currency.json` file will be created.
 
 ### Languages
-1) Download [`iso-languagecodes.txt`](http://download.geonames.org/export/dump/iso-languagecodes.txt) from http://geonames.org
+1) Download [`iso-languagecodes.txt`](https://download.geonames.org/export/dump/iso-languagecodes.txt) from https://www.geonames.org
 2) Import it to `Numbers` or `Excel`, then export it as `resources/language.csv` using `;` separator
 3) Open a terminal to the current location and hit: `node src/make --target=language`: a `dist/language.json` file will be created.
