@@ -4,7 +4,7 @@
   "description": "Hardened session-cookie wrapper around express-session (#CSRF1 baseline)",
   "authors": [
     {
-      "name": "Maritn-Luther ETOUMAN",
+      "name": "Martin Luther ETOUMAN NDAMBWE",
       "email": "contact@gina.io"
     },
     {
