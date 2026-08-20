@@ -1430,7 +1430,14 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
         self[el]['isEmail'] = function() {
 
 
-            this.value      = local['data'][this.name] = (this.value) ? this.value.toLowerCase() : this.value;
+            // #B200 - TYPE-guarded, not merely truthy-guarded: a truthy non-string
+            // (a JSON body's 123 / true / [], or a checkbox boolean client-side —
+            // see the #B87 note on the `query` rule) reached .toLowerCase() and
+            // threw, and the rule driver RE-THROWS, so the whole validation pass
+            // died. Non-strings now pass through untouched and the regex below
+            // adjudicates them (measured: every non-string tests false, so this
+            // records an invalid — it does not open a #B199-style silent bypass).
+            this.value      = local['data'][this.name] = (this.value && typeof(this.value) == 'string') ? this.value.toLowerCase() : this.value;
             // Apply on current field upper -> lower
             if (
                 isGFFCtx
@@ -1476,7 +1483,9 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
         self[el]['isJsonWebToken'] = function() {
 
 
-            this.value      = local['data'][this.name] = (this.value) ? this.value.toLowerCase() : this.value;
+            // #B200 - TYPE-guarded, not merely truthy-guarded: see the isEmail
+            // note above. Same defect, same fix, same in-file precedent (#B87).
+            this.value      = local['data'][this.name] = (this.value && typeof(this.value) == 'string') ? this.value.toLowerCase() : this.value;
             // Apply on current field upper -> lower
             if (
                 isGFFCtx
@@ -2334,13 +2343,19 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
          * */
         self[el]['trim'] = function(isApplicable) {
             if ( typeof(isApplicable) == 'boolean' && isApplicable ) {
-                //if ( typeof(this.value) == 'string' ) {
+                // #B200 - the type guard below was present but COMMENTED OUT, which
+                // made this the widest of the three sites: with no truthy guard
+                // either, EVERY non-string threw (a falsy 0 included, unlike the
+                // isEmail/isJsonWebToken pair), and the driver re-throws, killing
+                // the whole pass. Restored — a non-string is now left untouched,
+                // matching how `isFloat` guards the identical .replace() call.
+                if ( typeof(this.value) == 'string' ) {
                     // was: this.value = this.value.replace(/^\s+|\s+$/, '');
                     // #B245 - without the global flag, replace() rewrote only the FIRST
                     // match: "  x  " came back "x  " (leading stripped, trailing kept).
                     this.value = this.value.replace(/^\s+|\s+$/g, '');
                     local.data[this.name] = local.data[this.name] = this.value;
-                //}
+                }
                 return self[this.name]
             }
         }
