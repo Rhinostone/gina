@@ -26872,6 +26872,13 @@ if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
 /**
  * In-memory document collection with query and mutation methods.
  *
+ * Filter values must be defined: `find`/`findOne`/`or`/`update` throw an
+ * `Error` naming the offending key when a filter object carries an
+ * `undefined` value — build such filters conditionally (add a key only when
+ * its value is defined). An explicitly empty `{}` filter is legal and
+ * matches every record; `null` is a legal needle comparing strictly
+ * against stored values.
+ *
  * @class Collection
  * @constructor
  * @this {Collection}
@@ -26898,6 +26905,7 @@ if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
  * col.or().find({ name: 'Alice' }, { name: 'Bob' });
  *
  * col.findOne({ id: 1 });                               // { id:1, … }
+ * col.findOne({ id: undefined });                       // throws — filter values must be defined
  * col.update({ id: 1 }, { name: 'Alicia' });
  * col.insert({ id: 3, name: 'Carol' });
  * col.delete({ id: 2 });
@@ -27098,6 +27106,25 @@ function Collection(content, options) {
     }
 
 
+    /**
+     * find
+     *
+     * Filters the collection content with one or more filter objects.
+     * Passing more than one filter object acts as an OR clause.
+     *
+     * Every filter value must be DEFINED. A key whose value is `undefined`
+     * makes the whole call throw an Error naming the offending key: the JSON
+     * round-trip below would otherwise silently drop the key, degrading the
+     * filter to a weaker one — a single-key filter degraded to `{}` and
+     * matched EVERY record (#B396, gh #65). An explicitly empty `{}` filter
+     * stays legal and matches everything (no constraint). `null` values are
+     * legal needles and compare strictly against stored values.
+     *
+     * @param {...object} filters - filter object(s); values compare with `===`
+     * @param {boolean} [withOrClause] - trailing boolean, forces OR mode
+     * @throws {Error} when any filter key's value is `undefined`
+     * @returns {array} result - decorated result set (chainable)
+     */
     instance['find'] = function() {
         // reset
         withOrClause = false;
@@ -27107,6 +27134,24 @@ function Collection(content, options) {
             delete arguments[arguments.length-1];
             --arguments.length;
         }
+
+        // #B396 (gh #65) — refuse undefined-valued filter keys BEFORE the JSON
+        // round-trip below: JSON.stringify() silently DROPS such keys, so the
+        // in-loop guard further down could never see them. `findOne`, `or` and
+        // `update` all delegate here, so this single gate covers the family
+        // (`update` would otherwise mass-mutate every record on such a filter).
+        var _fIdx = 0, _fLen = arguments.length, _fObj = null, _fKey = null;
+        for (; _fIdx < _fLen; ++_fIdx) {
+            _fObj = arguments[_fIdx];
+            if ( _fObj && typeof(_fObj) == 'object' && !Array.isArray(_fObj) ) {
+                for (_fKey in _fObj) {
+                    if ( typeof(_fObj[_fKey]) == 'undefined' ) {
+                        throw new Error('filter `'+ _fKey +'` cannot be left undefined');
+                    }
+                }
+            }
+        }
+        _fObj = null;
 
         var filtersStr      = null;
         var filters         = null;
@@ -27415,6 +27460,10 @@ function Collection(content, options) {
                         matched = 0;
 
                         for (var f in filter) {
+                            // Belt only since #B396: undefined-valued keys are refused at
+                            // the method entry, before the JSON round-trip that used to
+                            // strip them — and JSON.parse can never produce such a value
+                            // here, so this in-loop guard is unreachable by construction.
                             if ( typeof(filter[f]) == 'undefined' ) throw new Error('filter `'+f+'` cannot be left undefined');
 
                             localeLowerCase = ( filter[f] !== null && !/(boolean|number)/.test(typeof(filter[f])) ) ? filter[f].toLocaleLowerCase() : filter[f];
