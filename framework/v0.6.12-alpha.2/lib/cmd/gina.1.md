@@ -84,7 +84,7 @@ $ gina stop
 
 ## AUTHOR
 
-Martin-Luther ETOUMAN was the original Author of **gina**. Stephane HEAV joined the project since version 0.1.0.
+Martin Luther ETOUMAN NDAMBWE was the original Author of **gina**. Stephane HEAV joined the project since version 0.1.0.
 
 ## COPYRIGHT
 Copyright (c) 2009-{year} Rhinostone <{email}>

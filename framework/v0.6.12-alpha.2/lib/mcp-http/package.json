@@ -4,7 +4,7 @@
   "description": "Model Context Protocol Streamable HTTP transport (spec revision 2025-06-18). Wraps an mcp-server instance with an HTTP endpoint that speaks JSON-RPC 2.0 over POST, with Accept-based JSON / SSE negotiation, batch support, and Mcp-Session-Id lifecycle. Pure transport — auth and Origin checks land in a later session.",
   "authors": [
     {
-      "name": "Martin-Luther ETOUMAN",
+      "name": "Martin Luther ETOUMAN NDAMBWE",
       "email": "contact@gina.io"
     }
   ],

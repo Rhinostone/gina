@@ -4,7 +4,7 @@
   "description": "Single source of truth for the logical `connector` type → npm driver package + semver range mapping (DRIVER_MAP) and the AI `protocol` scheme → npm driver mapping (AI_DRIVER_MAP). Consumed by the `connector:*` CLI handlers to produce install hints and resolve install ranges.",
   "authors": [
     {
-      "name": "Martin-Luther ETOUMAN",
+      "name": "Martin Luther ETOUMAN NDAMBWE",
       "email": "contact@gina.io"
     }
   ],

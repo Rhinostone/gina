@@ -4,7 +4,7 @@
   "description": "Async template-loader extension point for the swig (and, later, nunjucks) render paths. Builds a built-in loader from its flat settings.template.<engine>.loader config (Slice 1: the in-memory loader) and wraps it with a CVE-2023-25345 segment-safety guard applied on every resolve(). Consumed by initSwigEngine (startup build + validation) and controller.render-swig-async.js (the isolated per-bundle swig engine).",
   "authors": [
     {
-      "name": "Martin-Luther ETOUMAN",
+      "name": "Martin Luther ETOUMAN NDAMBWE",
       "email": "contact@gina.io"
     }
   ],

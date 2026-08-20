@@ -4,7 +4,7 @@
   "description": "Comment-aware header/body splitter for JSON-with-comments config files. Finds the first STRUCTURAL `{` (skipping `//` and `/* */` comments) so a leading comment header can be preserved verbatim across a rewrite. Shared by the connector:add / connector:rm / connector:migrate CLI handlers.",
   "authors": [
     {
-      "name": "Martin-Luther ETOUMAN",
+      "name": "Martin Luther ETOUMAN NDAMBWE",
       "email": "contact@gina.io"
     }
   ],

@@ -47,7 +47,7 @@ $ gina dev:man --groff --html=/custom/path
 
 ## AUTHOR
 
-Martin-Luther ETOUMAN was the original author of **gina-dev**. Stephane HEAV joined the project since version 0.1.0.
+Martin Luther ETOUMAN NDAMBWE was the original author of **gina-dev**. Stephane HEAV joined the project since version 0.1.0.
 
 ## COPYRIGHT
 Copyright (c) 2009-{year} Rhinostone <{email}>

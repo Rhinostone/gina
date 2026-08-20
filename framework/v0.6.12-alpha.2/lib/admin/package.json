@@ -4,7 +4,7 @@
   "description": "Admin /_gina/* IP-allowlist gate (isClientAllowed). Single source of truth for the /_gina/info and /_gina/cache/stats access check; previously duplicated byte-identical in server.js and server.isaac.js.",
   "authors": [
     {
-      "name": "Martin-Luther ETOUMAN",
+      "name": "Martin Luther ETOUMAN NDAMBWE",
       "email": "contact@gina.io"
     }
   ],

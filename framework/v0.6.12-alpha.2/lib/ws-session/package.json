@@ -2,7 +2,7 @@
   "name": "gina-lib-ws-session",
   "version": "1.0.0",
   "description": "WebSocket-over-HTTP/2 session bridge (RFC 8441): accepts an extended-CONNECT request, marries the raw Http2Stream to the lib/ws-framing RFC 6455 codec, and exposes a send/ping/close API with auto-pong, backpressure passthrough, a timed close handshake, full teardown on stream close/error, and graceful-shutdown drain registration.",
-  "authors": [ { "name": "Martin-Luther ETOUMAN", "email": "contact@gina.io" } ],
+  "authors": [ { "name": "Martin Luther ETOUMAN NDAMBWE", "email": "contact@gina.io" } ],
   "copyright": "Copyright (c) 2009-2026 Rhinostone <contact@gina.io>",
   "engines": { "node": ">=18.14.0" },
   "main": "src/main",

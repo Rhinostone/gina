@@ -4,7 +4,7 @@
   "description": "Detects a project-installed @rhinostone/swig (or swig-twig) and semver-gates it against the framework floor. Returns a decision record the server wires into the template engine; falls back to the framework copy on any mismatch.",
   "authors": [
     {
-      "name": "Martin-Luther ETOUMAN",
+      "name": "Martin Luther ETOUMAN NDAMBWE",
       "email": "contact@gina.io"
     }
   ],

@@ -2,7 +2,7 @@
   "name": "gina-lib-ws-framing",
   "version": "1.0.0",
   "description": "RFC 6455 WebSocket framing codec — frame encoder + incremental parser (fragmentation reassembly, masking enforcement, UTF-8 validation, close-code validation, maxPayload/maxFragments caps). Transport-agnostic: works against an HTTP/2 extended-CONNECT stream (RFC 8441) or any duplex byte stream.",
-  "authors": [ { "name": "Martin-Luther ETOUMAN", "email": "contact@gina.io" } ],
+  "authors": [ { "name": "Martin Luther ETOUMAN NDAMBWE", "email": "contact@gina.io" } ],
   "copyright": "Copyright (c) 2009-2026 Rhinostone <contact@gina.io>",
   "engines": { "node": ">=18.14.0" },
   "main": "src/main",

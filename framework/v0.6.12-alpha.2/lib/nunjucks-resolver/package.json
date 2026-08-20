@@ -4,7 +4,7 @@
   "description": "Detects a project-installed nunjucks package and caches it on process.gina._nunjucks. Unlike swig-resolver, there is no framework-bundled fallback: nunjucks is opt-in via render.engine=\"nunjucks\", and load() throws NUNJUCKS_NOT_INSTALLED when the package is absent — the bundle fails at startup instead of mid-render.",
   "authors": [
     {
-      "name": "Martin-Luther ETOUMAN",
+      "name": "Martin Luther ETOUMAN NDAMBWE",
       "email": "contact@gina.io"
     }
   ],

@@ -4,7 +4,7 @@
   "description": "Emits TypeScript declarations from a DTO's canonical JSON Schema. Zero runtime deps, CJS. Consumed by the offline `gina bundle:types` CLI (the sibling of bundle:openapi / bundle:mcp) so a bundle's DTOs are authored once and reused for runtime validation, OpenAPI/MCP schemas, response shaping and static types.",
   "authors": [
     {
-      "name": "Martin-Luther ETOUMAN",
+      "name": "Martin Luther ETOUMAN NDAMBWE",
       "email": "contact@gina.io"
     }
   ],

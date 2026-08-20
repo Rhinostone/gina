@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Out-of-request push primitive (#B366) — deliver a payload to ONE named session's engine.io sockets from code with no live request (job handlers, cron, boot hooks). Recipient is a required argument with no fallback and no reachable broadcast; reports how many sockets were written. Backs the gina.pushToSession() global.",
   "author": {
-    "name": "Martin-Luther ETOUMAN",
+    "name": "Martin Luther ETOUMAN NDAMBWE",
     "email": "contact@gina.io"
   },
   "copyright": "Copyright (c) 2009-2026 Rhinostone <contact@gina.io>",

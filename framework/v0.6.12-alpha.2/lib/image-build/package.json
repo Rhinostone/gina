@@ -4,7 +4,7 @@
   "description": "Pure OCI packaging primitives for the image:build CLI command — Containerfile synthesis, build-context staging, deterministic port computation (bin/gina-init allocator replica) and container-host descriptor resolution.",
   "authors": [
     {
-      "name": "Martin-Luther ETOUMAN",
+      "name": "Martin Luther ETOUMAN NDAMBWE",
       "email": "contact@gina.io"
     }
   ],

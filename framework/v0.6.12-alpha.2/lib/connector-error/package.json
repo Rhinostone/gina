@@ -4,7 +4,7 @@
   "description": "Transient-vs-permanent classification for datastore connector errors (#CE1). Normalizes socket errno, driver codes/names, ANSI SQLSTATE, MongoDB error labels and Couchbase N1QL cause codes into err.isTransient + err.transientReason so a controller can render an honest retryable response without string-matching vendor error text. Pure, total (never throws), zero runtime deps, CJS.",
   "authors": [
     {
-      "name": "Martin-Luther ETOUMAN",
+      "name": "Martin Luther ETOUMAN NDAMBWE",
       "email": "contact@gina.io"
     }
   ],

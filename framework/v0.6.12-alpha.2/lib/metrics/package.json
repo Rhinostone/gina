@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Prometheus metrics primitive — wraps prom-client (peer dep). Exposes start/recordRequest/getMetrics/isEnabled. Backs the built-in /_gina/metrics endpoint and the request-lifecycle hook that populates the HTTP counter + histogram. Opt-in via app.json `metrics` block.",
   "author": {
-    "name": "Martin-Luther ETOUMAN",
+    "name": "Martin Luther ETOUMAN NDAMBWE",
     "email": "contact@gina.io"
   },
   "copyright": "Copyright (c) 2009-2026 Rhinostone <contact@gina.io>",
