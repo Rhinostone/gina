@@ -514,7 +514,7 @@
                 "store": {
                   "type": "string",
                   "minLength": 1,
-                  "description": "connectors.json entry name backing this namespace. The entry's `connector` field selects the implementation (core/connectors/<connector>/lib/kv-store.js); a connector without one refuses the boot rather than degrading silently to memory. Omit for the in-memory backend. The redis connector implements one; the others arrive demand-first."
+                  "description": "connectors.json entry name backing this namespace. The entry's `connector` field selects the implementation (core/connectors/<connector>/lib/kv-store.js); a connector without one refuses the boot rather than degrading silently to memory. Omit for the in-memory backend. The redis connector (shared across hosts) and the sqlite connector (zero-dependency, durable, shared across processes on one host) both implement one; the others arrive demand-first."
                 },
                 "failMode": {
                   "type": "string",

@@ -31,8 +31,10 @@ var console = require('./logger');
  * let `gna.js` wire it at boot (before the first request; namespace
  * installation is once-only).
  *
- * NOTE: `redis` is the first connector to ship an implementation
- * (`core/connectors/redis/lib/kv-store.js`); the others remain demand-gated
+ * NOTE: two connectors ship an implementation —
+ * `redis` (`core/connectors/redis/lib/kv-store.js`, shared across HOSTS) and
+ * `sqlite` (`core/connectors/sqlite/lib/kv-store.js`, zero-dependency and
+ * durable, shared across PROCESSES on one host). The rest remain demand-gated
  * (the `lib/audit-store` shipping order), and naming one of them as a
  * namespace's `store` refuses the boot with a clear message. The in-memory
  * backend (no `store` key) stays the zero-config path, and is
