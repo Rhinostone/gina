@@ -4514,6 +4514,50 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
             if ( !/http2/.test(httpLib) && /https/.test(options.scheme) ) {
                 httpLib += 's';
             }
+
+            // #MS5 — per-authority circuit breaker (opt-in: settings.json
+            // `server.query.circuitBreaker`, boot-resolved onto the engine
+            // instance by server.js `start()`). Gating happens HERE, above the
+            // protocol dispatch, so an open circuit rejects before any
+            // connection, retry or pre-flight machinery runs: the #B34/#B52/#B53
+            // invariants inside the handlers are untouched, and retries can
+            // never hammer an open circuit.
+            var _cbConf = self.serverInstance && self.serverInstance._queryCircuitBreaker;
+            if ( _cbConf && _cbConf.enabled ) {
+                var _cbAuthority = options.hostname + ':' + options.port;
+                var _cbEntry     = _getCircuitEntry(_cbAuthority);
+                var _cbGate      = _circuitAdmit(_cbEntry, _cbConf, isCritical);
+                if ( !_cbGate.admitted ) {
+                    var _cbErr = new GinaCircuitOpenError(_cbAuthority, _cbGate.retryAfterMs);
+                    if (!isCritical) {
+                        // mirror the H3 `_swallowIfNonCritical` contract: log-only, no callback
+                        console.warn('[QUERY][circuit-open][non-critical] swallowed '+ (options.method || '') +' '+ (options.path || '') +' to '+ _cbAuthority);
+                        return;
+                    }
+                    if (callback) {
+                        return callback(_cbErr);
+                    }
+                    return self.emit('query#complete', _cbErr);
+                }
+                if ( typeof(callback) == 'function' ) {
+                    var _cbOriginalCallback = callback;
+                    var _cbSettled = false;
+                    callback = function onCircuitObservedOutcome(err) {
+                        if (!_cbSettled) { // record once, whatever the terminal
+                            _cbSettled = true;
+                            _circuitRecord(_cbEntry, _cbConf, _cbGate.probe, err);
+                        }
+                        return _cbOriginalCallback.apply(this, arguments);
+                    };
+                } else if (_cbGate.probe) {
+                    // No callback → the outcome is unobservable (the shared
+                    // `query#complete` emitter would misattribute concurrent
+                    // queries) → release the probe slot immediately rather than
+                    // wedge the half-open state.
+                    _cbEntry.probeInFlight = false;
+                }
+            }
+
             browser = require(''+ httpLib);
             // #FI — capture query call start time for Flow timeline
             if (_isDev && local._timeline) {
@@ -4688,6 +4732,164 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
     //         err = error
     //     });
     // };
+
+    /**
+     * Error surfaced by `query()` when the target authority's circuit is OPEN (#MS5).
+     *
+     * Minted ABOVE the HTTP/1.x / HTTP/2 dispatch — before any connection attempt,
+     * retry or pre-flight PING runs — so it applies identically to both client
+     * paths. The field shape mirrors `GinaHttp2Error` (`code`, `retryable`,
+     * `status`, `retryCount`) so machine consumers can switch on `code` without
+     * caring which transport would have been used; the name is protocol-neutral
+     * on purpose.
+     *
+     * @constructor
+     * @param {string} authority    - `hostname:port` whose circuit is open
+     * @param {number} retryAfterMs - Milliseconds until the next half-open probe may be admitted (0 = a probe slot is free now)
+     */
+    function GinaCircuitOpenError(authority, retryAfterMs) {
+        Error.call(this);
+        this.name    = 'GinaCircuitOpenError';
+        this.message = 'Controller::query() circuit is OPEN for [ '+ authority +' ] — failing fast'+ ( retryAfterMs > 0 ? ' (next probe allowed in '+ retryAfterMs +'ms)' : '' );
+        if (Error.captureStackTrace) {
+            Error.captureStackTrace(this, GinaCircuitOpenError);
+        } else {
+            this.stack = (new Error(this.message)).stack;
+        }
+        this.code         = 'CIRCUIT_OPEN';
+        this.retryable    = false;
+        this.status       = 503;
+        this.retryCount   = 0;
+        this.authority    = authority;
+        this.retryAfterMs = retryAfterMs;
+    }
+    GinaCircuitOpenError.prototype             = Object.create(Error.prototype);
+    GinaCircuitOpenError.prototype.constructor = GinaCircuitOpenError;
+
+    /**
+     * Transport-failure classifier for the #MS5 circuit breaker.
+     *
+     * Counts ONLY errors that indicate the upstream (or the path to it) is
+     * unhealthy: every `GinaHttp2Error` (all of its codes are transport-class —
+     * post-#B34 an application response, whatever its status, flows through the
+     * SUCCESS terminus as data, never as `err`) plus the HTTP/1.x socket-level
+     * codes, checked on `err.code` and `err.cause.code` (the HTTP/1.x error path
+     * annotates both shapes). Anything else — a caller bug surfacing through the
+     * sync dispatch `catch`, a malformed option, an app-level error — is NEUTRAL:
+     * it neither trips nor resets the circuit, because it says nothing about
+     * upstream health.
+     *
+     * @inner
+     * @param   {*} err - Whatever the client path surfaced to the query callback
+     * @returns {boolean} `true` when the error counts toward opening the circuit
+     */
+    var _CB_TRANSPORT_CODES = /^(ECONNREFUSED|ECONNRESET|ETIMEDOUT|EPIPE|ECONNABORTED|EHOSTUNREACH|ENETUNREACH)$/;
+    var _isCircuitTransportFailure = function(err) {
+        if (!err) return false;
+        if (err.name === 'GinaHttp2Error') return true;
+        var code = err.code || (err.cause && err.cause.code);
+        return _CB_TRANSPORT_CODES.test(String(code || ''));
+    };
+
+    /**
+     * Lazily fetch (or mint) the per-authority breaker entry (#MS5).
+     *
+     * State lives on the SERVER instance — the same home as `_http2Sessions` —
+     * because dev mode re-requires this module per request (see the #B52 note):
+     * module- or controller-level state would reset on every hot-reload, while
+     * instance state survives reloads and dies on restart, which is exactly the
+     * lifetime circuit state wants. Entries are keyed per distinct
+     * `hostname:port`; query targets come from bundle config and app code (a
+     * trusted surface), so cardinality is not attacker-controlled.
+     *
+     * @inner
+     * @param   {string} authority - `hostname:port`
+     * @returns {object} `{ state, consecutiveFailures, openedAt, probeInFlight }`
+     */
+    var _getCircuitEntry = function(authority) {
+        if (!self.serverInstance._queryCircuitBreakers) {
+            self.serverInstance._queryCircuitBreakers = {};
+        }
+        var registry = self.serverInstance._queryCircuitBreakers;
+        if (!registry[authority]) {
+            registry[authority] = { state: 'closed', consecutiveFailures: 0, openedAt: 0, probeInFlight: false };
+        }
+        return registry[authority];
+    };
+
+    /**
+     * Admission decision for one outgoing query under the #MS5 breaker.
+     *
+     * Runs the lazy OPEN → HALF-OPEN transition first (the breaker owns NO
+     * timers: elapsed time is computed on access), then answers:
+     *
+     *  - CLOSED            → admit
+     *  - OPEN, cooling     → reject, reporting the remaining cooldown
+     *  - OPEN, cooled down → become HALF-OPEN and fall through
+     *  - HALF-OPEN         → admit exactly ONE probe, and only for a CRITICAL
+     *    request: a non-critical failure is swallowed by `_swallowIfNonCritical`
+     *    (its callback never fires), so a non-critical probe could never report
+     *    back and would wedge `probeInFlight` forever. Everything else is
+     *    rejected until the probe settles.
+     *
+     * @inner
+     * @param   {object}  entry      - Breaker entry from `_getCircuitEntry()`
+     * @param   {object}  conf       - Resolved policy (`failureThreshold`, `cooldownMs`)
+     * @param   {boolean} isCritical - The query's H3 criticality flag
+     * @returns {object}  `{ admitted, probe, retryAfterMs }`
+     */
+    var _circuitAdmit = function(entry, conf, isCritical) {
+        if (entry.state === 'open') {
+            var elapsed = Date.now() - entry.openedAt;
+            if (elapsed < conf.cooldownMs) {
+                return { admitted: false, probe: false, retryAfterMs: conf.cooldownMs - elapsed };
+            }
+            entry.state = 'half-open';
+            entry.probeInFlight = false;
+        }
+        if (entry.state === 'half-open') {
+            if (entry.probeInFlight || !isCritical) {
+                return { admitted: false, probe: false, retryAfterMs: 0 };
+            }
+            entry.probeInFlight = true;
+            return { admitted: true, probe: true, retryAfterMs: 0 };
+        }
+        return { admitted: true, probe: false, retryAfterMs: 0 };
+    };
+
+    /**
+     * Record one settled query outcome against its authority's circuit (#MS5).
+     *
+     *  - success             → CLOSED, counter reset (a settling probe closes the circuit)
+     *  - transport failure   → counter + 1; reaching `failureThreshold` — or failing
+     *                          the half-open probe — re-opens with a fresh cooldown
+     *  - neutral (non-transport) error → releases a probe slot but otherwise
+     *    changes nothing (see `_isCircuitTransportFailure`)
+     *
+     * @inner
+     * @param {object}  entry   - Breaker entry
+     * @param {object}  conf    - Resolved policy
+     * @param {boolean} isProbe - Whether this outcome settles the half-open probe
+     * @param {*}       err     - The callback's error argument (`false` on success — see §9's sentinel)
+     */
+    var _circuitRecord = function(entry, conf, isProbe, err) {
+        if (isProbe) {
+            entry.probeInFlight = false;
+        }
+        if (!err) {
+            entry.state = 'closed';
+            entry.consecutiveFailures = 0;
+            return;
+        }
+        if ( !_isCircuitTransportFailure(err) ) {
+            return; // neutral — caller bug or app-level error
+        }
+        entry.consecutiveFailures++;
+        if (isProbe || entry.consecutiveFailures >= conf.failureThreshold) {
+            entry.state = 'open';
+            entry.openedAt = Date.now();
+        }
+    };
 
     /**
      * #B53 — Idempotency guard for inter-bundle client retries.

@@ -2144,6 +2144,36 @@ function Server(options) {
     }
 
     /**
+     * #MS5 — resolve and validate the `server.query.circuitBreaker` block ONCE at
+     * engine start, for the stamp below that `controller.query()` reads (the same
+     * boot-resolved-once pattern as `_cacheName` / #B238). Dormant contract: an
+     * absent block, or `enabled` not strictly `true`, resolves to
+     * `{ enabled: false }` and the breaker path in `query()` is never entered.
+     * Structurally invalid values on an ENABLED block are a boot refusal (throw),
+     * not a warn-and-disable: silently running without the protection the operator
+     * asked for is exactly the fail-open shape the storage/kv boot bands refuse.
+     *
+     * @inner
+     * @param {object} [serverConf] - Post-fold `server` block (env.json keys win, settings.json fills — see the config.js #MS5 fold)
+     * @returns {object} `{ enabled: false }` or `{ enabled: true, failureThreshold, cooldownMs }`
+     */
+    var resolveQueryCircuitBreakerConf = function(serverConf) {
+        var block = serverConf && serverConf.query && serverConf.query.circuitBreaker;
+        if ( !block || block.enabled !== true ) {
+            return { enabled: false };
+        }
+        var threshold = ( typeof(block.failureThreshold) == 'undefined' ) ? 5 : block.failureThreshold;
+        if ( typeof(threshold) != 'number' || threshold !== ~~threshold || threshold < 1 ) {
+            throw new Error('[SERVER][#MS5] `server.query.circuitBreaker.failureThreshold` must be an integer >= 1 — got `'+ threshold +'`');
+        }
+        var cooldownMs = parseTimeout( ( typeof(block.cooldown) == 'undefined' ) ? '30s' : block.cooldown );
+        if ( typeof(cooldownMs) != 'number' || cooldownMs < 1 ) {
+            throw new Error('[SERVER][#MS5] `server.query.circuitBreaker.cooldown` must be a positive timeout (e.g. "30s", 500) — got `'+ block.cooldown +'`');
+        }
+        return { enabled: true, failureThreshold: threshold, cooldownMs: cooldownMs };
+    };
+
+    /**
      * Attaches the server engine instance, injects helper references
      * (`throwError`, `getAssets`, `completeHeaders`) onto it, and returns
      * `onRequest()` to begin serving HTTP traffic.
@@ -2186,6 +2216,15 @@ function Server(options) {
             // `_cacheIsEnabled`).
             if ( typeof(instance._cacheName) == 'undefined' ) {
                 instance._cacheName = lib.RenderCache.resolveCacheName(self.conf[self.appName][self.env].server.cache);
+            }
+
+            // #MS5 — per-authority query circuit-breaker policy, resolved ONCE
+            // from the post-fold `server.query.circuitBreaker` and stamped where
+            // `controller.query()` reads it (mirrors the `_cache*` scalars above;
+            // breaker STATE lives separately on `instance._queryCircuitBreakers`,
+            // minted lazily by the controller).
+            if ( typeof(instance._queryCircuitBreaker) == 'undefined' ) {
+                instance._queryCircuitBreaker = resolveQueryCircuitBreakerConf(self.conf[self.appName][self.env].server);
             }
 
             // #B115 — publish the engine so the form-validator's server-side `query`

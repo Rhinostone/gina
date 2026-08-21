@@ -3086,6 +3086,19 @@ function Config(opt, contextResetNeeded) {
             conf[bundle][env].server.cache = merge(conf[bundle][env].server.cache, conf[bundle][env].content.settings.cache);
         }
 
+        // #MS5 — fold settings.json's `server.query` block (circuit-breaker policy)
+        // into `server.query`, with the same fill semantics as the #B114 cache fold
+        // above: env.json's `server.query` keys WIN, settings.json fills what
+        // env.json lacks. Without this fold the documented settings surface would
+        // be inert — `server.*` is otherwise env.json-derived (see the sibling
+        // per-key copies above).
+        if ( conf[bundle][env].content.settings && conf[bundle][env].content.settings.server && conf[bundle][env].content.settings.server.query ) {
+            if ( typeof(conf[bundle][env].server.query) == 'undefined' ) {
+                conf[bundle][env].server.query = {};
+            }
+            conf[bundle][env].server.query = merge(conf[bundle][env].server.query, conf[bundle][env].content.settings.server.query);
+        }
+
         conf[bundle][env].hostname = scheme + '://' + conf[bundle][env].host + ':' + conf[bundle][env].server.port;
 
         // if ( /^true$/i.test( getContext('isProxyHost') ) ) {

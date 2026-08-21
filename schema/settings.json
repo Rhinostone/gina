@@ -336,6 +336,36 @@
               "description": "How a rebuild restarts the process. daemon (default): drain, then spawn `gina bundle:restart` (needs the framework daemon). supervisor: drain, then exit(0) for a container/orchestrator to respawn — the daemonless `gina-container` launch path; requires a restart-on-clean-exit policy (a k8s Deployment or `docker run --restart=always` qualifies; `--restart=on-failure` does not)."
             }
           }
+        },
+        "query": {
+          "type": "object",
+          "description": "Outbound client policy for Controller::query(). Folded from settings.json into the runtime server block (env.json keys win, settings.json fills what env.json lacks).",
+          "additionalProperties": false,
+          "properties": {
+            "circuitBreaker": {
+              "type": "object",
+              "description": "Per-authority circuit breaker for query() (#MS5). Opt-in: dormant unless `enabled` is strictly true. Gates BOTH client paths (HTTP/1.x and HTTP/2) above the protocol dispatch, so an open circuit rejects with a machine-readable CIRCUIT_OPEN error (status 503, retryable false) before any connection, retry or pre-flight attempt. State is per `hostname:port`, lives on the engine instance (resets on bundle restart) and transitions closed -> open -> half-open lazily, with a single critical-request probe per cooldown. Config changes need a bundle restart (resolved once at engine start).",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Arm the breaker. Must be strictly true; any other value (including the string \"true\") leaves it dormant.",
+                  "default": false
+                },
+                "failureThreshold": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "Consecutive transport-class failures (per authority, after each call's own retries are exhausted) that open the circuit. A structurally invalid value on an enabled block refuses the boot.",
+                  "default": 5
+                },
+                "cooldown": {
+                  "type": ["string", "integer"],
+                  "description": "How long an open circuit rejects before admitting one half-open probe. Accepts \"30s\", \"500ms\", \"1m\" or a number of milliseconds; an unparseable value on an enabled block refuses the boot.",
+                  "default": "30s"
+                }
+              }
+            }
+          }
         }
       }
     },
