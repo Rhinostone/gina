@@ -21,8 +21,14 @@
   Notes:
 
     `@gina` is the only project currently supported by `service:list`.
-    Services live under the framework's `services/` directory and are
-    bundles of the @gina project: `proxy` and `inspector`.
+    Services are bundles of the @gina project under the framework's
+    `services/` directory — a maintainer-side tree that is NOT part of the
+    published package, so a released install lists nothing until that tree
+    exists locally. `inspector` is the one maintained service.
+
+    gina ships no edge / reverse proxy, by design: run one in front of your
+    bundles (nginx, Traefik, an ingress controller). That is the topology the
+    authentication, rate-limiting and Kubernetes guidance already assume.
 
     Running state is derived from ~/.gina/run/<service>@gina.pid combined
     with `process.kill(pid, 0)` — a stale pidfile (process gone) reports

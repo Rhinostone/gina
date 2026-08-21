@@ -592,7 +592,7 @@ gina bundle:list @<project> --format=json  # JSON payload with ports, running, p
 gina bundle:status <bundle> @<project>   # Status of one bundle (running/stopped, pid, port, env)
 gina project:status @<project>           # Status of every bundle in a project (all projects if omitted)
 gina project:status --format=json        # JSON payload: per-project array of bundle status objects
-gina service:list                       # List framework-internal services (@gina-only)
+gina service:list                       # List framework-internal services (@gina-only; the services/ tree is CLI-generated, gitignored AND npmignored, so a released install lists nothing until it exists locally — `inspector` is the one maintained service. gina ships NO edge/reverse proxy by design (#MS8): front bundles with nginx/Traefik/ingress, the topology the auth, rate-limiting and K8s guidance already assume)
 gina service:list --format=json         # JSON payload with ports, running, pid per service
 gina connector:list                     # List connectors across every registered project (read-only)
 gina connector:list @<project>          # List one project (shared + all bundles)

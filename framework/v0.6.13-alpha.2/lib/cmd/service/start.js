@@ -11,7 +11,7 @@ var CmdHelper = require('./../helper');
  */
 /**
  * Starts a framework-internal service — a bundle registered under the @gina
- * project (today: `inspector`, `proxy`). The service is launched via the
+ * project (today: `inspector`). The service is launched via the
  * daemon-free `bin/gina-container` foreground launcher spawned detached, so no
  * `gina start` socket server (port 8124) is required. The service is started in
  * the @gina project's own `dev`/`local` defaults (the current shell's
