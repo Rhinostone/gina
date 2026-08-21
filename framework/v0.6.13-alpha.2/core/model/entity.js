@@ -254,11 +254,19 @@ function EntitySuper(conn, caller, injected) {
                                         // (its third guard skips setListener when `!Array.isArray`), so
                                         // this `.on` listener receives the emit arguments directly.
                                         if ( entity.listenerCount(_fpShortName) === 0 ) {
+                                            // #B395 — these DISPATCH:* dispatch diagnostics use console.debug,
+                                            // NOT console.log, and the distinction is load-bearing: in gina
+                                            // console.log is the logger's raw `process.stdout.write` path, which
+                                            // bypasses container dispatch (file/mq) AND the level gate, while a
+                                            // daemon-spawned bundle's stdout is filtered by lib/cmd/bundle/start.js
+                                            // — so as console.log they reached neither the bundle log nor docker
+                                            // logs, and only flooded a foreground boot. Levelled, they are off by
+                                            // default and appear when a consumer raises the hierarchy to debug.
                                             var _onFpQueueEmit = function onFpQueueEmit() {
                                                 var _q = entity._callbacks[_fpShortName];
                                                 if ( !_q || _q.length === 0 ) { return; }
                                                 var _fn = _q.shift();
-                                                console.log('\nDISPATCH:CALLBACK_FLUSH ' + _fpShortName);
+                                                console.debug('[ MODEL ][ ENTITY ] DISPATCH:CALLBACK_FLUSH ' + _fpShortName);
                                                 _fn.apply(this, arguments);
                                                 if ( !entity._callbacks[_fpShortName] || entity._callbacks[_fpShortName].length === 0 ) {
                                                     delete entity._callbacks[_fpShortName];
@@ -268,7 +276,7 @@ function EntitySuper(conn, caller, injected) {
                                             entity.on(_fpShortName, _onFpQueueEmit);
                                         }
                                     } else { // in case the event is not ready yet
-                                        console.log('\nDISPATCH:BUFFER_CALLBACK ' + events[i].shortName);
+                                        console.debug('[ MODEL ][ ENTITY ] DISPATCH:BUFFER_CALLBACK ' + events[i].shortName);
                                         // #M2 — queue consume: shift oldest buffered result so concurrent
                                         // callers each receive their own result, not a shared stale one.
                                         var _firing2Args = entity._arguments[events[i].shortName].shift();
@@ -529,7 +537,7 @@ function EntitySuper(conn, caller, injected) {
                     self
                         //.off(events[i].shortName, function(){ delete self._callbacks[trigger]; })
                         .on(events[i].shortName, function () {
-                            console.log('\nDISPATCH:ALIAS_TRIGGER ' + trigger);
+                            console.debug('[ MODEL ][ ENTITY ] DISPATCH:ALIAS_TRIGGER ' + trigger);
                             this._callbacks[trigger.replace(/[0-9]/g, '')].apply(this[method], arguments);
                             delete self._callbacks[trigger];
                         })
@@ -537,7 +545,7 @@ function EntitySuper(conn, caller, injected) {
 
             } else {
                 if ( typeof(self._callbacks[trigger]) != 'undefined' ) {
-                    console.log('\nDISPATCH:CALLBACK_FLUSH ' + trigger);
+                    console.debug('[ MODEL ][ ENTITY ] DISPATCH:CALLBACK_FLUSH ' + trigger);
                     self._callbacks[trigger].apply(this, args);
                     delete self._callbacks[trigger];
                 } else {
@@ -562,7 +570,7 @@ function EntitySuper(conn, caller, injected) {
                             if (!this._arguments[trigger]) {
                                 this._arguments[trigger] = [];
                             }
-                            console.log('\nDISPATCH:PREEMPTIVE_BUFFER ' + trigger);
+                            console.debug('[ MODEL ][ ENTITY ] DISPATCH:PREEMPTIVE_BUFFER ' + trigger);
                             this._arguments[trigger].push(arguments);
 
                         })
