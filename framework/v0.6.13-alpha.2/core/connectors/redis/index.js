@@ -31,7 +31,14 @@
  *
  * The boot-time model scan is satisfied by the no-op `lib/connector.js`
  * (no connection is opened at boot — each store owns its client).
- * ORM / entity support is planned for a future release.
+ * No entity/ORM wiring is currently planned — the store-backend split is
+ * the design, not a stopgap. The same stance covers a general-purpose KV
+ * facade (get/set/del/TTL): deliberately not provided, because the right
+ * client policy (timeouts, offline queueing, fail-open vs fail-closed)
+ * differs per subsystem — the three stores above demonstrate exactly that
+ * divergence. App code that needs raw key-value access reads its
+ * `connectors.json` entry via `getConfig()` and mints its own client with
+ * the failure policy its use case requires.
  *
  * Because there is no entity path, redis operations do NOT appear in the
  * Inspector's query log: `_devQueryLog` capture hangs off the entity query
@@ -43,7 +50,7 @@
  * @constructor
  */
 var Redis = function Redis() {
-    // v1: no entity wiring — session store + job store only
+    // no entity wiring — a store backend only (sessions, jobs, render-cache L2)
 };
 
 module.exports = Redis;
