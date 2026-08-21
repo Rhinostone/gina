@@ -32,16 +32,19 @@
  * The boot-time model scan is satisfied by the no-op `lib/connector.js`
  * (no connection is opened at boot — each store owns its client).
  * No entity/ORM wiring is currently planned — the store-backend split is
- * the design, not a stopgap. The same stance covers a general-purpose KV
- * facade (get/set/del/TTL): deliberately not provided, because the right
- * client policy (timeouts, offline queueing, fail-open vs fail-closed)
- * differs per subsystem — the three stores above demonstrate exactly that
- * divergence. App code that needs raw key-value access reads its
- * `connectors.json` entry via `getConfig()` and mints its own client with
- * the failure policy its use case requires.
+ * the design, not a stopgap. A general-purpose KV facade exists since #KV1
+ * (`lib/kv`, `settings.json > kv`, reached as `gina.kv('<namespace>')`) with
+ * per-NAMESPACE failure policy, precisely because the right client policy
+ * (timeouts, offline queueing, fail-open vs fail-closed) differs per use —
+ * the three stores above demonstrate exactly that divergence. This connector
+ * does not implement a `lib/kv-store.js` backend (a kv namespace naming a
+ * redis entry refuses the boot); redis-backed KV therefore means reading
+ * your `connectors.json` entry via `getConfig()` and minting your own
+ * client, and NON-KV redis use (data structures, queue libraries) stays
+ * app-owned by design.
  *
  * Because there is no entity path, redis operations do NOT appear in the
- * Inspector's query log: `_devQueryLog` capture hangs off the entity query
+ * Inspector's query log: its dev-mode capture hangs off the entity query
  * path, which this connector deliberately does not implement. A render-cache
  * L2 hit is observable per response via the RFC 9211 `Cache-Status` header,
  * not in the Inspector.

@@ -492,6 +492,46 @@
         }
       }
     },
+    "kv": {
+      "type": "object",
+      "description": "General-purpose key-value primitive (#KV1) — strict-declared NAMESPACES reached from application code as gina.kv('<name>') / gina.kv(). Values are JSON-serialized; null and undefined are refused on every write (a stored null would be indistinguishable from a miss). TTLs are MILLISECONDS and must be positive — ttl: 0 refuses rather than meaning no-expiry. Namespaces are process-global, read once at boot from the STARTING bundle's settings; the whole feature is dormant when this block is absent, and gina.kv() then throws a named error. Deliberately NOT a redis client: no data structures, no batch ops, no key scanning, no binary values.",
+      "additionalProperties": false,
+      "properties": {
+        "default": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Namespace returned by a no-argument gina.kv(). Must name an entry in `namespaces` — a default pointing at an undeclared namespace refuses the boot. Omit it and every call must name its namespace explicitly."
+        },
+        "namespaces": {
+          "type": "object",
+          "description": "KV namespaces, keyed by name (^[A-Za-z][A-Za-z0-9._-]*$). Each namespace owns its backend and failure policy; {} declares a plain in-memory namespace. Unknown per-namespace keys are ignored with a boot warning naming them, because a silently-dropped key reads as configured behaviour that never happens.",
+          "additionalProperties": false,
+          "patternProperties": {
+            "^[A-Za-z][A-Za-z0-9._-]*$": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "store": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "connectors.json entry name backing this namespace. The entry's `connector` field selects the implementation (core/connectors/<connector>/lib/kv-store.js); a connector without one refuses the boot rather than degrading silently to memory. Omit for the in-memory backend. No connector ships a kv-store implementation yet — they arrive demand-first."
+                },
+                "failMode": {
+                  "type": "string",
+                  "enum": ["closed", "open"],
+                  "description": "Backend-error policy. closed (default): a backend error rejects the call. open: every op degrades to its miss-shaped result with a warning — for cache-like namespaces where availability beats consistency. Consulted on backend errors only (validation errors always reject); the in-memory backend does not error, so the knob becomes operative with connector-backed stores."
+                },
+                "sweepInterval": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "Milliseconds between expired-entry sweeps for the in-memory backend (default 30000). Expired entries are also dropped lazily on read, so the sweep bounds memory, not correctness."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "storage": {
       "type": "object",
       "description": "Pluggable object storage (#STO1) — an adapter (where bytes live) crossed with a strategy (how keys are laid out), behind one callback-shaped contract. Reached from application code as gina.storage() / gina.storage('<name>'). Keys are OPAQUE: store the key a put() returns, never parse or compose one. Boot config — changes need a bundle restart, and every shape here is linted UNCONDITIONALLY, because unlike a cache a storage layer has no safe degraded mode: a driver that cannot build would leave put() writing nowhere. Since slice 1 an upload group may route its self.store() step through a driver (upload.groups.<name>.driver); the multipart parse/staging path is otherwise untouched.",

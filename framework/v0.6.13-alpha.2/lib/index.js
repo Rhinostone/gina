@@ -104,6 +104,12 @@ function Lib() {
         // to protect from eviction). No connector ships an implementation yet —
         // demand-gated, the audit-store shipping order.
         StorageStore    : _require('./storage-store'),
+        // #KV1 — connector-backed KV namespace-store factory (lib/kv,
+        // `settings.kv.namespaces.<name>.store`). Stateless dispatcher invoked
+        // once per store-backed namespace at boot; _require like JobStore /
+        // StorageStore. No connector ships an implementation yet — naming one
+        // refuses the boot (the audit-store shipping order).
+        KvStore         : _require('./kv-store'),
         SwigFilters     : _require('./swig-filters'),
         Cache           : require('./cache'),    // #B32-residual — plain require (leaf class held at gen-0 via server.isaac.js:35; Cache._events is a Collection). See Collection note above.
         RenderCache     : require('./render-cache'), // #B32-residual — plain require (server-only render-cache strategy dispatcher; wraps lib/cache and is held at gen-0 in server.isaac.js + the render delegates). See Cache above.
@@ -334,6 +340,12 @@ function Lib() {
         // the same reason job / State / audit are plain requires. Plain require =
         // cache hit = the singleton survives.
         storage         : require('./storage'),
+        // #KV1 — general-purpose KV primitive (strict-declared namespaces
+        // behind gina.kv()). PLAIN require, like job / State / logger /
+        // storage: a singleton holding the namespace registry and per-
+        // namespace sweep timers — it must survive dev-mode refreshCore(),
+        // and re-requiring it would orphan live timers and state.
+        kv              : require('./kv'),
     };
 
     /**

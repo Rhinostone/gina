@@ -1748,6 +1748,62 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
                                     console.warn('[storage] config validation skipped: ' + (stoErr.message || stoErr));
                                 }
 
+                                // #KV1 — general-purpose KV primitive. Validate the starting
+                                // bundle's `kv` block, build any connector-backed namespace stores,
+                                // then install the namespaces before the first request. FATAL on an
+                                // unbuildable config (the #STO1 shape above): a namespace whose
+                                // declared store cannot build would leave gina.kv() handing out a
+                                // backend the operator did not ask for. Dormant — zero cost — when
+                                // the block is absent.
+                                try {
+                                    var _kvAll      = config.getInstance();
+                                    var _kvSettings = null;
+                                    try {
+                                        _kvSettings = _kvAll[gna.core.startingApp][env].content.settings.kv;
+                                    } catch (kvConfErr) { _kvSettings = null; }
+                                    if ( _kvSettings ) {
+                                        var _kvCheck = lib.kv.validateConfig(_kvSettings);
+                                        for (var _kvW = 0; _kvW < _kvCheck.warnings.length; _kvW++) {
+                                            console.warn('[kv] ' + _kvCheck.warnings[_kvW]);
+                                        }
+                                        if (_kvCheck.fatal) {
+                                            var _kvFatalMsg = '[kv] invalid kv configuration — aborting boot: ' + _kvCheck.fatal;
+                                            console.emerg(_kvFatalMsg);
+                                            // boot-exit-flush: process.exit() truncates async stdio on a pipe.
+                                            try { fs.writeSync(2, _kvFatalMsg + '\n'); } catch (_e) {}
+                                            process.exit(1);
+                                        }
+                                        if (_kvCheck.namespaceCount > 0) {
+                                            var _kvNamespaces = _kvSettings.namespaces;
+                                            var _kvStores     = {};
+                                            for (var _kvN in _kvNamespaces) {
+                                                if ( typeof(_kvNamespaces[_kvN].store) == 'string' && _kvNamespaces[_kvN].store.length > 0 ) {
+                                                    try {
+                                                        // the namespace name is passed so an implementation
+                                                        // prefixes its keys — two namespaces may share one
+                                                        // connectors.json entry without colliding
+                                                        _kvStores[_kvN] = lib.KvStore(_kvNamespaces[_kvN].store, _kvN);
+                                                    } catch (kvStoreErr) {
+                                                        var _kvStoreMsg = '[kv] namespace `' + _kvN + '` names store `' + _kvNamespaces[_kvN].store + '`, which could not be built — aborting boot: ' + (kvStoreErr.message || kvStoreErr);
+                                                        console.emerg(_kvStoreMsg + '\n' + (kvStoreErr.stack || ''));
+                                                        try { fs.writeSync(2, _kvStoreMsg + '\n'); } catch (_e) {}
+                                                        process.exit(1);
+                                                    }
+                                                }
+                                            }
+                                            if ( lib.kv.start(_kvSettings, { stores: _kvStores, warn: function(kvWarnMsg) { console.warn('[kv] ' + kvWarnMsg); } }) ) {
+                                                // console.info, NOT debug — an operator needs to see
+                                                // which namespaces went live (the #STO1 precedent).
+                                                console.info('[kv] ' + _kvCheck.namespaceCount + ' namespace(s) ready' + ( _kvSettings.default ? ' (default: ' + _kvSettings.default + ')' : '' ));
+                                            } else {
+                                                console.warn('[kv] namespaces were already installed — this boot wiring was ignored');
+                                            }
+                                        }
+                                    }
+                                } catch (kvErr) {
+                                    console.warn('[kv] setup skipped: ' + (kvErr.message || kvErr));
+                                }
+
                                 // #CE1 — `server.transientErrors` boot-time shape check
                                 // (warn-only, NEVER fatal: the opt-in governs how a
                                 // transient datastore error RENDERS — a bad value must
@@ -2559,6 +2615,35 @@ gna.registerBusyProbe = lib.releaseWatch.registerBusyProbe;
  */
 gna.storage = function(name) {
     return lib.storage.get(name);
+};
+
+/**
+ * #KV1 — get a configured KV namespace.
+ *
+ * The general-purpose key-value surface (counters, one-shot tokens,
+ * fetch-or-compute caching, lease primitives) — strict-declared: a namespace
+ * must exist under `settings.json > kv.namespaces` or this throws at the
+ * call site, which is what surfaces a typo (the `gna.storage` stance).
+ *
+ * Assigned UNCONDITIONALLY, so a bundle with no `kv` block gets a named
+ * error naming the fix instead of `gna.kv is not a function` — and so the
+ * declaration is a plain function rather than one the caller must narrow.
+ *
+ * @param {string} [name] - Namespace name; omitted returns the `kv.default` namespace.
+ * @returns {object} The namespace handle (`get` / `set` / `del` / `has` / `ttl` /
+ *                   `expire` / `setnx` / `consume` / `incr` / `decr` /
+ *                   `delIfEquals` / `clear` / `getOrSet` — all promise-returning).
+ * @throws {Error} When kv is not configured, when no default is declared and `name`
+ *                 was omitted, or when `name` is not a declared namespace.
+ * @example
+ *   gna.kv('tokens').consume('t:' + hash).then(function (record) {
+ *       if (record === null) { return self.throwError(410, 'link already used'); }
+ *   });
+ * @example
+ *   gina.kv();  // the `kv.default` namespace
+ */
+gna.kv = function(name) {
+    return lib.kv.get(name);
 };
 
 /**

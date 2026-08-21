@@ -796,6 +796,8 @@ declare namespace gina {
         Domain: any;
         /** Job persistence dispatcher (`app.json > jobs.store`). */
         JobStore: any;
+        /** Connector-backed KV namespace-store dispatcher (`settings.json > kv.namespaces.<name>.store`) (#KV1). */
+        KvStore: any;
         Model: any;
         Proc: any;
         /**
@@ -862,6 +864,8 @@ declare namespace gina {
         instrument: any;
         /** Async-job primitive behind `self.startJob()` / `/_gina/jobs/:id`. */
         job: any;
+        /** General-purpose KV primitive — strict-declared namespaces behind gina.kv() (`settings.json > kv`) (#KV1). */
+        kv: any;
         jsonConfigHeader: any;
         logger: any;
         /**
@@ -1030,6 +1034,9 @@ declare namespace gina {
 
     /** Get a configured object-storage driver; omit `name` for `storage.default`. Throws when storage is unconfigured or the name is unknown (#STO1). */
     function storage(name?: string): any;
+
+    /** Get a configured KV namespace; omit `name` for `kv.default`. Throws when kv is unconfigured or the name is unknown (#KV1). */
+    function kv(name?: string): any;
 
     /**
      * Push a payload to ONE named session from outside a request (#B366) — for

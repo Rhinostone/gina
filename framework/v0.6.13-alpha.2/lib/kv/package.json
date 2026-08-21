@@ -1,0 +1,7 @@
+{
+    "name": "kv",
+    "description": "General-purpose key-value primitive (#KV1): strict-declared namespaces behind gina.kv(), promise-native 13-op surface (get/set/del/has/ttl/expire/setnx/consume/incr/decr/delIfEquals/clear/getOrSet) over pluggable per-namespace backends. Ships the in-memory backend",
+    "version": "0.0.1",
+    "private": true,
+    "main": "src/main"
+}
