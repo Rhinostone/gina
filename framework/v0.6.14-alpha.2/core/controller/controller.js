@@ -4284,6 +4284,28 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
     };
 
     /**
+     * Owns a SYNCHRONOUS app-callback throw on a transport-error delivery (#B402).
+     * The error-path deliveries had no try/catch at all: on the event/timer-frame
+     * sites a sync throw escaped to the process handler (lib/proc.js emerg + SIGTERM
+     * -- a whole-bundle kill on both engines for consumer bundles), and on the
+     * caller-frame sites it re-entered the query-scope catch, invoking the app
+     * callback a second time with its own exception. Same exception shape as the
+     * sync-delivery catches, distinct marker, flat 500; the #ERRREF ref and pairing
+     * line are minted inside throwError itself.
+     *
+     * @inner
+     * @param {*} syncErr - whatever the app callback threw
+     * @returns {boolean|undefined} the self.throwError(exception) return value
+     */
+    var _ownSyncCbThrow = function(syncErr) {
+        var infos = local.options, controllerName = infos.controller.substring(infos.controller.lastIndexOf('/'));
+        var msg = 'Controller Query Exception on transport-error callback throw.\nBundle: '+ infos.bundle +'\nController File: /controllers'+ controllerName +'\nControl: this.'+ infos.control +'(...)\n\r' + ( syncErr && (syncErr.stack || syncErr.message) || String(syncErr) );
+        var exception = new Error(msg);
+        exception.status = 500;
+        return self.throwError(exception);
+    };
+
+    /**
      * Make an outbound HTTP/HTTPS request from a controller action.
      *
      * Accepts arguments in any of these forms:
@@ -4376,7 +4398,11 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
         if ( !options.host && !options.hostname ) {
             err = new Error('SuperController::query() needs at least a `host IP` or a `hostname`');
             if (callback) {
-                return _ownAsyncCbRejection(callback(err))
+                try {
+                    return _ownAsyncCbRejection(callback(err))
+                } catch (_syncCbErr) {
+                    return _ownSyncCbThrow(_syncCbErr);
+                }
             }
             self.emit('query#complete', err)
         }
@@ -4578,7 +4604,11 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                         return;
                     }
                     if (callback) {
-                        return _ownAsyncCbRejection(callback(_cbErr));
+                        try {
+                            return _ownAsyncCbRejection(callback(_cbErr));
+                        } catch (_syncCbErr) {
+                            return _ownSyncCbThrow(_syncCbErr);
+                        }
                     }
                     return self.emit('query#complete', _cbErr);
                 }
@@ -4614,7 +4644,11 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
 
         } catch(err) {
             if (callback) {
-                return _ownAsyncCbRejection(callback(err))
+                try {
+                    return _ownAsyncCbRejection(callback(err))
+                } catch (_syncCbErr) {
+                    return _ownSyncCbThrow(_syncCbErr);
+                }
             }
             self.emit('query#complete', err)
         }
@@ -4998,7 +5032,11 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                 }
             } catch(err) {
                 if ( typeof(callback) != 'undefined' ) {
-                    return _ownAsyncCbRejection(callback(err))
+                    try {
+                        return _ownAsyncCbRejection(callback(err))
+                    } catch (_syncCbErr) {
+                        return _ownSyncCbThrow(_syncCbErr);
+                    }
                 }
 
                 return self.emit('query#complete', err);
@@ -5045,7 +5083,11 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                     };
 
                     if ( typeof(callback) != 'undefined' ) {
-                        return _ownAsyncCbRejection(callback(err))
+                        try {
+                            return _ownAsyncCbRejection(callback(err))
+                        } catch (_syncCbErr) {
+                            return _ownSyncCbThrow(_syncCbErr);
+                        }
                     }
 
                     return self.emit('query#complete', err)
@@ -5142,7 +5184,11 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
             //  - you are trying to query using: `enctype="multipart/form-data"`
             //  -
             if ( typeof(callback) != 'undefined' ) {
-                return _ownAsyncCbRejection(callback(err))
+                try {
+                    return _ownAsyncCbRejection(callback(err))
+                } catch (_syncCbErr) {
+                    return _ownSyncCbThrow(_syncCbErr);
+                }
             }
 
             self.emit('query#complete', {
@@ -5318,7 +5364,11 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                 }
             } catch(err) {
                 if ( typeof(callback) != 'undefined' ) {
-                    return _ownAsyncCbRejection(callback(err))
+                    try {
+                        return _ownAsyncCbRejection(callback(err))
+                    } catch (_syncCbErr) {
+                        return _ownSyncCbThrow(_syncCbErr);
+                    }
                 }
 
                 return self.emit('query#complete', err);
@@ -5702,7 +5752,11 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
             // H3: if non-critical, swallow and return
             if (_swallowIfNonCritical(_timeoutErr)) return;
             if (typeof callback === 'function') {
-                _ownAsyncCbRejection(callback(_timeoutErr));
+                try {
+                    _ownAsyncCbRejection(callback(_timeoutErr));
+                } catch (_syncCbErr) {
+                    _ownSyncCbThrow(_syncCbErr);
+                }
             } else {
                 self.emit('query#complete', { status: 503, error: _timeoutErr });
             }
@@ -5788,7 +5842,11 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
             // H3: if non-critical, swallow and return
             if (_swallowIfNonCritical(_ginaErr)) return;
             if (typeof callback !== 'undefined') {
-                _ownAsyncCbRejection(callback(_ginaErr));
+                try {
+                    _ownAsyncCbRejection(callback(_ginaErr));
+                } catch (_syncCbErr) {
+                    _ownSyncCbThrow(_syncCbErr);
+                }
             } else {
                 self.emit('query#complete', { status: _ginaStatus, error: _ginaErr });
             }
@@ -5836,7 +5894,11 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
             // H3: if non-critical, swallow and return
             if (_swallowIfNonCritical(prematureCloseErr)) return;
             if (typeof callback !== 'undefined') {
-                _ownAsyncCbRejection(callback(prematureCloseErr));
+                try {
+                    _ownAsyncCbRejection(callback(prematureCloseErr));
+                } catch (_syncCbErr) {
+                    _ownSyncCbThrow(_syncCbErr);
+                }
             } else {
                 self.emit('query#complete', { status: 503, error: prematureCloseErr });
             }
@@ -5897,7 +5959,11 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                 // H3: if non-critical, swallow and return
                 if (_swallowIfNonCritical(_badGatewayErr)) return;
                 if (typeof callback !== 'undefined') {
-                    _ownAsyncCbRejection(callback(_badGatewayErr));
+                    try {
+                        _ownAsyncCbRejection(callback(_badGatewayErr));
+                    } catch (_syncCbErr) {
+                        _ownSyncCbThrow(_syncCbErr);
+                    }
                 } else {
                     self.emit('query#complete', { status: 502, error: _badGatewayErr });
                 }
@@ -5911,7 +5977,14 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
             // 3. Exception filter for ALPN or protocol mismatches
             if (typeof data === 'string' && /^Unknown ALPN Protocol/.test(data)) {
                 const err = { status: 500, error: new Error(data) };
-                return (typeof callback !== 'undefined') ? _ownAsyncCbRejection(callback(err)) : self.emit('query#complete', err);
+                if (typeof callback !== 'undefined') {
+                    try {
+                        return _ownAsyncCbRejection(callback(err));
+                    } catch (_syncCbErr) {
+                        return _ownSyncCbThrow(_syncCbErr);
+                    }
+                }
+                return self.emit('query#complete', err);
             }
 
             // 4. Data Parsing & Validation
@@ -6188,7 +6261,13 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                     code: 'PREFLIGHT_TIMEOUT', retryable: false, status: 503, retryCount: retryCount
                 });
                 if (_swallowIfNonCritical(_pfErr)) return;
-                if (typeof callback === 'function') return _ownAsyncCbRejection(callback(_pfErr));
+                if (typeof callback === 'function') {
+                    try {
+                        return _ownAsyncCbRejection(callback(_pfErr));
+                    } catch (_syncCbErr) {
+                        return _ownSyncCbThrow(_syncCbErr);
+                    }
+                }
                 self.emit('query#complete', { status: 503, error: _pfErr });
             }, HTTP2_PREFLIGHT_DEADLINE_MS);
 
@@ -6216,7 +6295,13 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                         code: 'PREFLIGHT_FAILED', retryable: false, status: 503, retryCount: retryCount
                     });
                     if (_swallowIfNonCritical(_pfErr2)) return;
-                    if (typeof callback === 'function') return _ownAsyncCbRejection(callback(_pfErr2));
+                    if (typeof callback === 'function') {
+                        try {
+                            return _ownAsyncCbRejection(callback(_pfErr2));
+                        } catch (_syncCbErr) {
+                            return _ownSyncCbThrow(_syncCbErr);
+                        }
+                    }
                     self.emit('query#complete', { status: 503, error: _pfErr2 });
                     return;
                 }
