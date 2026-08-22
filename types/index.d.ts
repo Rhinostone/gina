@@ -888,6 +888,8 @@ declare namespace gina {
         netLocality: any;
         nunjucksFilters: any;
         nunjucksResolver: any;
+        /** Identified-caller quota gate — fixed-window counters over the kv primitive, run by the router between authz and the DTO pipe (#MS6). */
+        rateLimit: any;
         /** Stale built-release watch primitives — source-tree fingerprints, change classification, busy probes and the in-flight request gauge (#RWATCH). */
         releaseWatch: any;
         routing: {

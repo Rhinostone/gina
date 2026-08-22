@@ -5794,6 +5794,14 @@ function Routing() {
             if ( typeof(routeObject.negotiate) != 'undefined' ) {
                 params.negotiate = routeObject.negotiate;
             }
+            // #MS6 — propagate the per-route rate-limit override/exempt to
+            // req.routing.rateLimit (top-level, NOT req.routing.param.* — the
+            // #CSRF2 trap). typeof-guarded so `false` (exempt) survives the copy;
+            // assigned only when declared, so a routing.json that never mentions
+            // `rateLimit` produces a byte-identical params object.
+            if ( typeof(routeObject.rateLimit) != 'undefined' ) {
+                params.rateLimit = routeObject.rateLimit;
+            }
 
             // isRoute
             return self.compareUrls(params, routeObject.url, req);

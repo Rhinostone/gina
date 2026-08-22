@@ -201,6 +201,12 @@ function Lib() {
         // per-request require() can never grow a dead-`children` tail (#B32-residual).
         // It also keeps a security gate out of the dev-mode hot-reload path entirely.
         authzGate       : require('./authz-gate'),
+        // #MS6 — identified-caller quota gate, run by core/router.js between the
+        // authz gate and the DTO pipe. require() — NOT _require — for the same
+        // reason as dtoPipe/authzGate above: router-bound, load-once, no
+        // per-request require() (#B32-residual), and its policy/state live on the
+        // engine instance + in the kv store, so hot-reload would gain nothing.
+        rateLimit       : require('./rate-limit'),
         // #COMPLY3 — authentication hardening primitives (password hashing +
         // verification, password policy, lockout, TOTP). require() — NOT _require —
         // for the authzGate reason above: a security primitive stays out of the

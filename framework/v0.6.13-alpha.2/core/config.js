@@ -3099,6 +3099,19 @@ function Config(opt, contextResetNeeded) {
             conf[bundle][env].server.query = merge(conf[bundle][env].server.query, conf[bundle][env].content.settings.server.query);
         }
 
+        // #MS6 — fold settings.json's `server.rateLimit` block (identified-caller
+        // quota policy) into `server.rateLimit`, with the same fill semantics as
+        // the #MS5 query fold above: env.json's `server.rateLimit` keys WIN,
+        // settings.json fills what env.json lacks. Without this fold the
+        // documented settings surface would be inert — `server.*` is otherwise
+        // env.json-derived.
+        if ( conf[bundle][env].content.settings && conf[bundle][env].content.settings.server && conf[bundle][env].content.settings.server.rateLimit ) {
+            if ( typeof(conf[bundle][env].server.rateLimit) == 'undefined' ) {
+                conf[bundle][env].server.rateLimit = {};
+            }
+            conf[bundle][env].server.rateLimit = merge(conf[bundle][env].server.rateLimit, conf[bundle][env].content.settings.server.rateLimit);
+        }
+
         conf[bundle][env].hostname = scheme + '://' + conf[bundle][env].host + ':' + conf[bundle][env].server.port;
 
         // if ( /^true$/i.test( getContext('isProxyHost') ) ) {

@@ -20,6 +20,9 @@ var fs                  = require('fs')
     // #COMPLY1 — the default-on route authorization gate (plain-required in
     // lib/index.js, so this gen-0 binding IS the live module).
     , authzGate         = lib.authzGate
+    // #MS6 — the identified-caller quota gate (plain-required in lib/index.js,
+    // so this gen-0 binding IS the live module).
+    , rateLimit         = lib.rateLimit
     , SuperController   = require('./controller')
     , Config            = require('./config')
 ;
@@ -962,41 +965,70 @@ function Router(env, scope) {
                             return;
                         }
 
-                        // #DTO2 — default-on request-payload validation. A strict NO-OP
-                        // unless the route declares `param.dto`. Placed BEFORE the
-                        // reservedActions loop so a 422 short-circuits the whole controller
-                        // invocation (`onReady` never runs for a rejected request). Route
-                        // middleware has already drained here, so auth (401) still precedes
-                        // validation (422).
-                        if ( !dtoPipe.validateRequestPayload(controller, request, response) ) {
-                            return;
-                        }
-
-                        // handle superController events
-                        for (let e=0; e<reservedActions.length; ++e) {
-                            if ( typeof(controller[reservedActions[e]]) == 'function' ) {
-                                controller[reservedActions[e]](request, response, next)
+                        // #MS6 — identified-caller quota gate. AFTER authz (authorizeRequest
+                        // is the principal resolver — the only writer of req.machineCaller,
+                        // and session identity is its own predicate) and BEFORE the DTO pipe
+                        // (a throttled caller must not receive a 422 field map — the same
+                        // disclosure ordering that puts the 401 above the 422). The band
+                        // below is wrapped so the armed path can defer it behind the store
+                        // read; DORMANT (`enabled` not strictly true, exempt route, or no
+                        // principal) mints ZERO promises — the wrapped band runs on today's
+                        // exact synchronous path (the #B383 family: async-ness in a gate is
+                        // a behaviour change, so it is confined to callers who armed it).
+                        var _dispatchControllerAction = function() {
+                            // #DTO2 — default-on request-payload validation. A strict NO-OP
+                            // unless the route declares `param.dto`. Placed BEFORE the
+                            // reservedActions loop so a 422 short-circuits the whole controller
+                            // invocation (`onReady` never runs for a rejected request). Route
+                            // middleware has already drained here, so auth (401) still precedes
+                            // validation (422).
+                            if ( !dtoPipe.validateRequestPayload(controller, request, response) ) {
+                                return;
                             }
-                        }
 
-                        try {
-                            var _result = controller[action](request, response, next);
-                            if (_result && typeof _result.then === 'function') {
-                                _result.catch(function(err) {
-                                    serverInstance.throwError(response, 500, err.stack || err.message || String(err));
+                            // handle superController events
+                            for (let e=0; e<reservedActions.length; ++e) {
+                                if ( typeof(controller[reservedActions[e]]) == 'function' ) {
+                                    controller[reservedActions[e]](request, response, next)
+                                }
+                            }
+
+                            try {
+                                var _result = controller[action](request, response, next);
+                                if (_result && typeof _result.then === 'function') {
+                                    _result.catch(function(err) {
+                                        serverInstance.throwError(response, 500, err.stack || err.message || String(err));
+                                    });
+                                }
+                            } catch (err) {
+                                var superController = new SuperController(options);
+                                // Required before setting options
+                                superController.serverInstance = serverInstance;
+                                superController.setOptions(request, response, next, options);
+                                if (typeof (controller) != 'undefined' && typeof (controller[action]) == 'undefined') {
+                                    return serverInstance.throwError(response, 500, (new Error('control not found: `' + action + '`. Please, check your routing.json ('+ options.rule +') or the related control in your `' + controllerFile + '`.')).stack);
+                                }
+
+                                return serverInstance.throwError(response, 500, err.stack);
+                            }
+                        };
+                        var _rlConf = serverInstance._rateLimit;
+                        if ( _rlConf && _rlConf.enabled === true ) {
+                            var _rlGate = rateLimit.gate(request, response, controller, _rlConf);
+                            if ( _rlGate ) {
+                                // Every terminal of this promise is owned: allow -> the band,
+                                // deny/outage -> answered inside the gate; this catch is the
+                                // last-resort belt (an unowned rejection in the dispatch spine
+                                // is a hung request with no visible log line).
+                                _rlGate.then(function onRateLimitVerdict(proceed) {
+                                    if (proceed) { _dispatchControllerAction(); }
+                                }).catch(function onRateLimitError(rlErr) {
+                                    serverInstance.throwError(response, 500, (rlErr && rlErr.stack) || String(rlErr));
                                 });
+                                return;
                             }
-                        } catch (err) {
-                            var superController = new SuperController(options);
-                            // Required before setting options
-                            superController.serverInstance = serverInstance;
-                            superController.setOptions(request, response, next, options);
-                            if (typeof (controller) != 'undefined' && typeof (controller[action]) == 'undefined') {
-                                return serverInstance.throwError(response, 500, (new Error('control not found: `' + action + '`. Please, check your routing.json ('+ options.rule +') or the related control in your `' + controllerFile + '`.')).stack);
-                            }
-
-                            return serverInstance.throwError(response, 500, err.stack);
                         }
+                        _dispatchControllerAction();
 
                     });
             } else {
@@ -1011,34 +1043,52 @@ function Router(env, scope) {
                     return;
                 }
 
-                // #DTO2 — default-on request-payload validation (see the with-middleware
-                // site above). A strict NO-OP unless the route declares `param.dto`.
-                if ( !dtoPipe.validateRequestPayload(controller, request, response) ) {
-                    return;
-                }
+                // #MS6 — identified-caller quota gate (see the with-middleware site
+                // above for the full rationale: after authz, before the DTO pipe;
+                // dormant mints ZERO promises and runs the band synchronously).
+                var _dispatchControllerAction = function() {
+                    // #DTO2 — default-on request-payload validation (see the with-middleware
+                    // site above). A strict NO-OP unless the route declares `param.dto`.
+                    if ( !dtoPipe.validateRequestPayload(controller, request, response) ) {
+                        return;
+                    }
 
-                // handle superController events
-                // e.g.: inside your controller, you can defined: `this.onReady = function(){...}` which will always be called before the main action
-                for (let e=0; e<reservedActions.length; ++e) {
-                    if ( typeof(controller[reservedActions[e]]) == 'function' ) {
-                        controller[reservedActions[e]](request, response, next)
+                    // handle superController events
+                    // e.g.: inside your controller, you can defined: `this.onReady = function(){...}` which will always be called before the main action
+                    for (let e=0; e<reservedActions.length; ++e) {
+                        if ( typeof(controller[reservedActions[e]]) == 'function' ) {
+                            controller[reservedActions[e]](request, response, next)
+                        }
                     }
-                }
-                try {
-                    var _result = controller[action](request, response, next);
-                    if (_result && typeof _result.then === 'function') {
-                        _result.catch(function(err) {
-                            serverInstance.throwError(response, 500, err.stack || err.message || String(err));
+                    try {
+                        var _result = controller[action](request, response, next);
+                        if (_result && typeof _result.then === 'function') {
+                            _result.catch(function(err) {
+                                serverInstance.throwError(response, 500, err.stack || err.message || String(err));
+                            });
+                        }
+                    } catch (err) {
+                        if ( typeof(controller) != 'undefined' && typeof (controller[action]) == 'undefined') {
+                            serverInstance.throwError(response, 500, (new Error('control not found: `' + action + '`. Please, check your routing.json or the related control in your `' + controllerFile + '`.')).stack);
+                        } else {
+                            serverInstance.throwError(response, 500, err.stack);
+                        }
+                        return;
+                    }
+                };
+                var _rlConf = serverInstance._rateLimit;
+                if ( _rlConf && _rlConf.enabled === true ) {
+                    var _rlGate = rateLimit.gate(request, response, controller, _rlConf);
+                    if ( _rlGate ) {
+                        _rlGate.then(function onRateLimitVerdict(proceed) {
+                            if (proceed) { _dispatchControllerAction(); }
+                        }).catch(function onRateLimitError(rlErr) {
+                            serverInstance.throwError(response, 500, (rlErr && rlErr.stack) || String(rlErr));
                         });
+                        return;
                     }
-                } catch (err) {
-                    if ( typeof(controller) != 'undefined' && typeof (controller[action]) == 'undefined') {
-                        serverInstance.throwError(response, 500, (new Error('control not found: `' + action + '`. Please, check your routing.json or the related control in your `' + controllerFile + '`.')).stack);
-                    } else {
-                        serverInstance.throwError(response, 500, err.stack);
-                    }
-                    return;
                 }
+                _dispatchControllerAction();
             }
 
             // controller = null;

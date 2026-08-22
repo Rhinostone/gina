@@ -2227,6 +2227,24 @@ function Server(options) {
                 instance._queryCircuitBreaker = resolveQueryCircuitBreakerConf(self.conf[self.appName][self.env].server);
             }
 
+            // #MS6 — identified-caller quota policy, resolved ONCE from the
+            // post-fold `server.rateLimit` and stamped where the router reads it
+            // (the same instance-scalars family as the breaker above: survives
+            // dev-mode hot reloads, dies on restart). The resolver is fail-closed
+            // on an enabled block (a bad value refuses the boot) and verifies the
+            // named kv namespace is DECLARED — the kv boot band installed the
+            // namespaces before the first request, upstream of this engine start.
+            if ( typeof(instance._rateLimit) == 'undefined' ) {
+                var _rlContent = self.conf[self.appName][self.env].content;
+                instance._rateLimit = lib.rateLimit.resolveConf(self.conf[self.appName][self.env].server, {
+                    kv         : lib.kv,
+                    kvSettings : _rlContent && _rlContent.settings && _rlContent.settings.kv,
+                    connectors : _rlContent && _rlContent.connectors,
+                    routing    : _rlContent && _rlContent.routing,
+                    warn       : function(rlWarnMsg) { console.warn('[rate-limit] ' + rlWarnMsg); }
+                });
+            }
+
             // #B115 — publish the engine so the form-validator's server-side `query`
             // rule can hand its hand-built controller the LIVE instance (one engine
             // per process). Without this, queryFromBackend mints a second `_cached`
@@ -7500,6 +7518,10 @@ function Server(options) {
                     queryTimeout        : parseTimeout(routing[name].queryTimeout) || null,
                     // #CSRF2 — per-route opt-out for the Csrf middleware (webhook receivers, etc.)
                     csrfExempt          : routing[name].csrfExempt || false,
+                    // #MS6 — per-route rate-limit override/exempt. typeof-guarded,
+                    // NOT `||`: `false` is a MEANINGFUL value (exempt) that `|| null`
+                    // would erase into the default policy.
+                    rateLimit           : ( typeof(routing[name].rateLimit) != 'undefined' ) ? routing[name].rateLimit : null,
                     // #I18N1 slice 3 — per-route culture-prefix opt-in.
                     // When true, the i18n negotiator reads
                     // req.routing.param.culture as the highest-priority
