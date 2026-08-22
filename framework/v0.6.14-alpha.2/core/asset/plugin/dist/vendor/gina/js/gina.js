@@ -26895,12 +26895,15 @@ if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
 /**
  * In-memory document collection with query and mutation methods.
  *
- * Filter values must be defined: `find`/`findOne`/`or`/`update` throw an
- * `Error` naming the offending key when a filter object carries an
- * `undefined` value — build such filters conditionally (add a key only when
- * its value is defined). An explicitly empty `{}` filter is legal and
- * matches every record; `null` is a legal needle comparing strictly
- * against stored values.
+ * Filter values must be defined. Every method that accepts a filter object
+ * throws an `Error` naming the offending key when that object carries an
+ * `undefined` value: `find`, `findOne`, `or`, `update`, `replace`, `max`,
+ * `notIn` and `delete`. The last two are covered transitively — `notIn`
+ * routes a filter-object argument through `find`, and `delete` delegates to
+ * `notIn` — so only `notIn`'s array form, `notIn(rows, key)`, is exempt.
+ * Build such filters conditionally (add a key only when its value is
+ * defined). An explicitly empty `{}` filter is legal and matches every
+ * record; `null` is a legal needle comparing strictly against stored values.
  *
  * @class Collection
  * @constructor
