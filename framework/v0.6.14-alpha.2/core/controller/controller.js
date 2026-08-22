@@ -5477,17 +5477,25 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                             console.error('[HTTP2] Error while enhancing connect-error message: ' + (_enhErr.stack || _enhErr.message));
                         }
                     }
-                    // local.req/res may be null when the error fires outside a request context
-                    // (background socket event) — log and return instead of crashing
-                    if (!local.req || !local.res) {
-                        console.error('[HTTP2] Session error outside request context — cannot send error response.\n' + (error && (error.stack || error.message) || error));
-                        return;
-                    }
-                    try {
-                        self.throwError(error);
-                    } catch (_throwErr) {
-                        console.error('[HTTP2] self.throwError failed in error handler: ' + (_throwErr.stack || _throwErr.message));
-                    }
+                    // #B403 — the session-level answer is RETIRED: every live stream on a
+                    // failing session self-delivers through its own handlers (request
+                    // 'error' / 'close' / 'end' typed terminals), so this throwError only
+                    // raced the app callback's own response for the SAME failure — and on
+                    // a REUSED session this closure's local/req belong to the CREATING
+                    // query, so it could answer with a stale request's context. Session
+                    // cleanup and the error log above stay; request notification is owned
+                    // by the stream-level deliveries.
+                    // // local.req/res may be null when the error fires outside a request context
+                    // // (background socket event) — log and return instead of crashing
+                    // if (!local.req || !local.res) {
+                    // console.error('[HTTP2] Session error outside request context — cannot send error response.\n' + (error && (error.stack || error.message) || error));
+                    // return;
+                    // }
+                    // try {
+                    // self.throwError(error);
+                    // } catch (_throwErr) {
+                    // console.error('[HTTP2] self.throwError failed in error handler: ' + (_throwErr.stack || _throwErr.message));
+                    // }
                 } catch (_handlerErr) {
                     // Last-resort swallow — throwing from an 'error' listener crashes the
                     // process. Log and return so the session failure stays contained.
