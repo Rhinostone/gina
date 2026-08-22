@@ -10,9 +10,14 @@
  * exactly on this input — was dead code, because the serialization stripped the
  * keys before the loop could see them.
  *
- * The fix hoists the refusal to `find()`'s entry, BEFORE the round-trip.
- * `findOne`, `or` and `update` all delegate to `find`, so one gate covers the
- * family. Deliberately unchanged: an explicitly empty `{}` filter still means
+ * The fix hoists the refusal to `find()`'s entry, BEFORE the round-trip. EIGHT
+ * public methods reach that gate: `findOne`, `or` and `update` delegate to
+ * `find` directly, `replace` (:1199) and `max` (:1373) call it, `notIn` (:869)
+ * routes a filter-OBJECT argument through it, and `delete` (:1297) delegates
+ * wholly to `notIn`. Only `notIn`'s ARRAY form skips `find` and stays exempt.
+ * (The 0.6.12 release notes named only the first four - see section 06.)
+ *
+ * Deliberately unchanged: an explicitly empty `{}` filter still means
  * "no constraint" (match-all), and `null` stays a legal needle comparing
  * strictly against stored values.
  *
@@ -145,5 +150,43 @@ describe('05 - dist fidelity: the gate ships in the browser bundle', function ()
 
     it('control: the bundle still carries find()\'s non-object refusal', function () {
         assert.ok(MIN.split('filter must be an object').length - 1 >= 1);
+    });
+});
+
+
+describe('06 - the transitively-covered family: notIn/delete/replace/max', function () {
+
+    // These four reach the same single gate but were absent from the 0.6.12
+    // release notes, which enumerated find/findOne/or/update only. Pinned here
+    // so the prose can never drift from the contract again.
+
+    it('delete({ id: undefined }) throws (was: returned an EMPTY collection - every record removed)', function () {
+        assert.throws(function () { mk().delete({ id: undefined }); }, MSG);
+    });
+
+    it('notIn({ id: undefined }) throws - the filter-object form routes through find()', function () {
+        assert.throws(function () { mk().notIn({ id: undefined }); }, MSG);
+    });
+
+    it('replace({ id: undefined }, set) throws (was: replaced against a match-all)', function () {
+        assert.throws(function () { mk().replace({ id: undefined }, { id: 'r1', title: 'x' }); }, MSG);
+    });
+
+    it('max({ rate: undefined }) throws (was: aggregated over EVERY record)', function () {
+        assert.throws(function () { mk().max({ rate: undefined }); }, /filter `rate` cannot be left undefined/);
+    });
+
+    it('EXEMPT control: notIn(rows, key) - the array form skips find() and still filters', function () {
+        assert.equal(JSON.parse(JSON.stringify(mk().notIn([ { id: 'r1' } ], 'id'))).length, ROWS.length - 1);
+    });
+
+    it('control: delete({ id: "r1" }) with a defined key still removes exactly its row', function () {
+        assert.equal(JSON.parse(JSON.stringify(mk().delete({ id: 'r1' }))).length, ROWS.length - 1);
+    });
+
+    it('delete() returns a filtered COPY - the source collection is never mutated in place', function () {
+        var col = mk();
+        col.delete({ id: 'r1' });
+        assert.equal(col.toRaw().length, ROWS.length);
     });
 });
