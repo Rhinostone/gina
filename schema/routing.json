@@ -126,6 +126,36 @@
             "enum": ["local", "beta", "production", "testing"]
           }
         },
+        "csrfExempt": {
+          "type": "boolean",
+          "default": false,
+          "description": "Per-route opt-out for the Csrf middleware (#CSRF2) -- webhook receivers and other endpoints that legitimately arrive without the double-submit token. Propagated to `req.routing.csrfExempt` (top-level, not under `param`)."
+        },
+        "rateLimit": {
+          "description": "Per-route override for the #MS6 identified-caller quota gate (active only when settings.json `server.rateLimit.enabled` is true). `false` exempts the route entirely. An object REPLACES the default policy for this route -- its requests count in their OWN bucket, not against the global one; a partial object inherits the missing key from the default. Shapes are linted at boot: a malformed value refuses the boot, a typo surfaces at deploy rather than at first request. Top-level on the route, not under `param`.",
+          "oneOf": [
+            {
+              "type": "boolean",
+              "enum": [false],
+              "description": "Exempt this route from quota enforcement."
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "limit": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "Requests allowed per principal per window on this route."
+                },
+                "window": {
+                  "type": ["string", "integer"],
+                  "description": "Window length for this route (\"30s\", \"1m\", or milliseconds)."
+                }
+              }
+            }
+          ]
+        },
         "negotiate": {
           "type": "boolean",
           "default": false,

@@ -1,0 +1,6 @@
+{
+    "name": "gina-rate-limit",
+    "version": "1.0.0",
+    "description": "Identified-caller quota enforcement at the router band (#MS6) — fixed-window counters over the kv primitive, 429 + RateLimit header fields",
+    "main": "src/main"
+}

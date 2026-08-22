@@ -336,6 +336,67 @@
               "description": "How a rebuild restarts the process. daemon (default): drain, then spawn `gina bundle:restart` (needs the framework daemon). supervisor: drain, then exit(0) for a container/orchestrator to respawn — the daemonless `gina-container` launch path; requires a restart-on-clean-exit policy (a k8s Deployment or `docker run --restart=always` qualifies; `--restart=on-failure` does not)."
             }
           }
+        },
+        "rateLimit": {
+          "type": "object",
+          "description": "Identified-caller quota enforcement at the router band (#MS6). Opt-in: dormant unless `enabled` is strictly true. Runs AFTER route authorization (the principal resolver) and BEFORE DTO validation, so the order is 401 -> 429 -> 422; a request with NO resolvable principal (no session user, no machine caller) is SKIPPED, never bucketed -- anonymous flood control belongs to the edge proxy and the HTTP/2 rapid-reset guard, not here. Fixed-window counters live in the kv namespace this block names, so choosing the namespace's backend chooses the quota's SCOPE: in-memory counts per process; replica-shared quotas need a redis- or sqlite-backed namespace (the resolver warns about a memory backend, and about a redis entry missing `enableOfflineQueue: false` + `commandTimeout` -- with ioredis defaults an outage QUEUES gated requests instead of degrading). Outage policy is the namespace's own `failMode`: `open` allows without headers, `closed` answers 503 + Retry-After. Denials answer 429 + Retry-After plus the draft-ietf-httpapi-ratelimit-headers-11 structured fields (`RateLimit`, `RateLimit-Policy`); allowed limited requests carry them too (without `t`). Per-route overrides ride routing.json's top-level `rateLimit` key (`false` = exempt; `{limit, window}` REPLACES the default for that route in its own bucket). Folded from settings.json into the runtime server block (env.json keys win); resolved once at engine start, so changes need a bundle restart. Structurally invalid values on an enabled block refuse the boot.",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false,
+              "description": "Arm the quota gate. Must be strictly true; any other value (including the string \"true\") leaves it dormant."
+            },
+            "namespace": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The kv namespace holding the counters. Must be DECLARED under `kv.namespaces` -- an undeclared name refuses the boot. Give the limiter its OWN namespace: its `failMode` is then unambiguously the limiter's outage policy."
+            },
+            "keyField": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The `session.user` property that identifies a signed-in caller (e.g. \"id\"). Required because the session user is app-owned shape -- a guessed default would mis-key silently. Machine callers (#MS3) key on their registered name automatically; a user record where this field is absent/empty is unidentified and SKIPPED."
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Requests allowed per principal per window (the default policy). A structurally invalid value on an enabled block refuses the boot."
+            },
+            "window": {
+              "type": ["string", "integer"],
+              "description": "Window length. Accepts \"1m\", \"30s\", \"500ms\" or a number of milliseconds; must be positive. An unparseable value on an enabled block refuses the boot."
+            }
+          }
+        },
+        "query": {
+          "type": "object",
+          "description": "Outbound client policy for Controller::query(). Folded from settings.json into the runtime server block (env.json keys win, settings.json fills what env.json lacks).",
+          "additionalProperties": false,
+          "properties": {
+            "circuitBreaker": {
+              "type": "object",
+              "description": "Per-authority circuit breaker for query() (#MS5). Opt-in: dormant unless `enabled` is strictly true. Gates BOTH client paths (HTTP/1.x and HTTP/2) above the protocol dispatch, so an open circuit rejects with a machine-readable CIRCUIT_OPEN error (status 503, retryable false) before any connection, retry or pre-flight attempt. State is per `hostname:port`, lives on the engine instance (resets on bundle restart) and transitions closed -> open -> half-open lazily, with a single critical-request probe per cooldown. Config changes need a bundle restart (resolved once at engine start).",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Arm the breaker. Must be strictly true; any other value (including the string \"true\") leaves it dormant.",
+                  "default": false
+                },
+                "failureThreshold": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "Consecutive transport-class failures (per authority, after each call's own retries are exhausted) that open the circuit. A structurally invalid value on an enabled block refuses the boot.",
+                  "default": 5
+                },
+                "cooldown": {
+                  "type": ["string", "integer"],
+                  "description": "How long an open circuit rejects before admitting one half-open probe. Accepts \"30s\", \"500ms\", \"1m\" or a number of milliseconds; an unparseable value on an enabled block refuses the boot.",
+                  "default": "30s"
+                }
+              }
+            }
+          }
         }
       }
     },
@@ -486,6 +547,46 @@
               "simulateWriteError": {
                 "type": "boolean",
                 "description": "TEST-ONLY fault injector (#B144): every upload tagged with this group fails deterministically with a guarded 500 through the real write-error path, so the crash-guard can be probed on your own upload surface after a pickup. Ignored in production scope; a boot warning names it either way."
+              }
+            }
+          }
+        }
+      }
+    },
+    "kv": {
+      "type": "object",
+      "description": "General-purpose key-value primitive (#KV1) — strict-declared NAMESPACES reached from application code as gina.kv('<name>') / gina.kv(). Values are JSON-serialized; null and undefined are refused on every write (a stored null would be indistinguishable from a miss). TTLs are MILLISECONDS and must be positive — ttl: 0 refuses rather than meaning no-expiry. Namespaces are process-global, read once at boot from the STARTING bundle's settings; the whole feature is dormant when this block is absent, and gina.kv() then throws a named error. Deliberately NOT a redis client: no data structures, no batch ops, no key scanning, no binary values.",
+      "additionalProperties": false,
+      "properties": {
+        "default": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Namespace returned by a no-argument gina.kv(). Must name an entry in `namespaces` — a default pointing at an undeclared namespace refuses the boot. Omit it and every call must name its namespace explicitly."
+        },
+        "namespaces": {
+          "type": "object",
+          "description": "KV namespaces, keyed by name (^[A-Za-z][A-Za-z0-9._-]*$). Each namespace owns its backend and failure policy; {} declares a plain in-memory namespace. Unknown per-namespace keys are ignored with a boot warning naming them, because a silently-dropped key reads as configured behaviour that never happens.",
+          "additionalProperties": false,
+          "patternProperties": {
+            "^[A-Za-z][A-Za-z0-9._-]*$": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "store": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "connectors.json entry name backing this namespace. The entry's `connector` field selects the implementation (core/connectors/<connector>/lib/kv-store.js); a connector without one refuses the boot rather than degrading silently to memory. Omit for the in-memory backend. The redis connector (shared across hosts) and the sqlite connector (zero-dependency, durable, shared across processes on one host) both implement one; the others arrive demand-first."
+                },
+                "failMode": {
+                  "type": "string",
+                  "enum": ["closed", "open"],
+                  "description": "Backend-error policy. closed (default): a backend error rejects the call. open: every op degrades to its miss-shaped result with a warning — for cache-like namespaces where availability beats consistency. Consulted on backend errors only (validation errors always reject); the in-memory backend does not error, so the knob becomes operative with connector-backed stores."
+                },
+                "sweepInterval": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "Milliseconds between expired-entry sweeps for the in-memory backend (default 30000). Expired entries are also dropped lazily on read, so the sweep bounds memory, not correctness."
+                }
               }
             }
           }
