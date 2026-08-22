@@ -4250,6 +4250,40 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
     };
 
     /**
+     * #B399 — own an async app-callback rejection at every query delivery seam.
+     * `query()` delivers outcomes to the app through a Node-style callback (or
+     * the `{onComplete}` facade registering one): a SYNC throw inside that
+     * callback is caught by the success-delivery guards, but an `async`
+     * callback's rejected promise passed through every bare `callback(...)` /
+     * `cb(...)` delivery unowned — no response, the request hung to
+     * client/proxy timeout, and the only trace floated to the process-level
+     * rejection handler (same class as the reserved-action hook half of
+     * #B399). Every app-callback delivery expression is wrapped with this
+     * helper: a thenable return gets a `.catch` routing to the same
+     * `throwError` shape the sync-delivery catches build (flat 500 — parity
+     * with those guards). Sync behaviour at every wrapped site is
+     * byte-unchanged, plain callbacks mint zero promises, and a callback that
+     * already responded before rejecting is absorbed by the #B31
+     * released-response guard (warn + ignore).
+     *
+     * @inner
+     * @param {*} result - the app callback's return value
+     * @returns {*} `result`, unchanged
+     */
+    var _ownAsyncCbRejection = function(result) {
+        if ( result && typeof(result.then) == 'function' ) {
+            result.catch(function(asyncErr) {
+                var infos = local.options, controllerName = infos.controller.substring(infos.controller.lastIndexOf('/'));
+                var msg = 'Controller Query Exception on async callback rejection.\nBundle: '+ infos.bundle +'\nController File: /controllers'+ controllerName +'\nControl: this.'+ infos.control +'(...)\n\r' + ( asyncErr && (asyncErr.stack || asyncErr.message) || String(asyncErr) );
+                var exception = new Error(msg);
+                exception.status = 500;
+                self.throwError(exception);
+            });
+        }
+        return result;
+    };
+
+    /**
      * Make an outbound HTTP/HTTPS request from a controller action.
      *
      * Accepts arguments in any of these forms:
@@ -4333,7 +4367,7 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
         if ( !options.host && !options.hostname ) {
             err = new Error('SuperController::query() needs at least a `host IP` or a `hostname`');
             if (callback) {
-                return callback(err)
+                return _ownAsyncCbRejection(callback(err))
             }
             self.emit('query#complete', err)
         }
@@ -4535,7 +4569,7 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                         return;
                     }
                     if (callback) {
-                        return callback(_cbErr);
+                        return _ownAsyncCbRejection(callback(_cbErr));
                     }
                     return self.emit('query#complete', _cbErr);
                 }
@@ -4571,7 +4605,7 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
 
         } catch(err) {
             if (callback) {
-                return callback(err)
+                return _ownAsyncCbRejection(callback(err))
             }
             self.emit('query#complete', err)
         }
@@ -4955,7 +4989,7 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                 }
             } catch(err) {
                 if ( typeof(callback) != 'undefined' ) {
-                    return callback(err)
+                    return _ownAsyncCbRejection(callback(err))
                 }
 
                 return self.emit('query#complete', err);
@@ -5002,7 +5036,7 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                     };
 
                     if ( typeof(callback) != 'undefined' ) {
-                        return callback(err)
+                        return _ownAsyncCbRejection(callback(err))
                     }
 
                     return self.emit('query#complete', err)
@@ -5028,10 +5062,10 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                             // preventing controllers from implementing graceful degradation (e.g. degraded
                             // mode when a non-critical upstream service fails). Pass the error to the
                             // callback so the caller decides whether to degrade or surface it. (#Q1)
-                            return callback(data);
+                            return _ownAsyncCbRejection(callback(data));
                         }
 
-                        return callback( false, data );
+                        return _ownAsyncCbRejection(callback( false, data ));
                     } catch (e) {
                         var infos = local.options, controllerName = infos.controller.substring(infos.controller.lastIndexOf('/'));
                         var msg = 'Controller Query Exception while catching back.\nBundle: '+ infos.bundle +'\nController File: /controllers'+ controllerName +'\nControl: this.'+ infos.control +'(...)\n\r' + e.stack;
@@ -5099,7 +5133,7 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
             //  - you are trying to query using: `enctype="multipart/form-data"`
             //  -
             if ( typeof(callback) != 'undefined' ) {
-                return callback(err)
+                return _ownAsyncCbRejection(callback(err))
             }
 
             self.emit('query#complete', {
@@ -5139,10 +5173,10 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
 
                     try {
                         if ( data.status && !/^2/.test(data.status) && typeof(local.options.conf.server.coreConfiguration.statusCodes[data.status]) != 'undefined') {
-                            return cb(data)
+                            return _ownAsyncCbRejection(cb(data))
                         }
 
-                        return cb(err, data)
+                        return _ownAsyncCbRejection(cb(err, data))
                     } catch (e) {
                         var infos = local.options, controllerName = infos.controller.substring(infos.controller.lastIndexOf('/'));
                         var msg = 'Controller Query Exception while catching back.\nBundle: '+ infos.bundle +'\nController File: /controllers'+ controllerName +'\nControl: this.'+ infos.control +'(...)\n\r' + e.stack;
@@ -5275,7 +5309,7 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                 }
             } catch(err) {
                 if ( typeof(callback) != 'undefined' ) {
-                    return callback(err)
+                    return _ownAsyncCbRejection(callback(err))
                 }
 
                 return self.emit('query#complete', err);
@@ -5659,7 +5693,7 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
             // H3: if non-critical, swallow and return
             if (_swallowIfNonCritical(_timeoutErr)) return;
             if (typeof callback === 'function') {
-                callback(_timeoutErr);
+                _ownAsyncCbRejection(callback(_timeoutErr));
             } else {
                 self.emit('query#complete', { status: 503, error: _timeoutErr });
             }
@@ -5745,7 +5779,7 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
             // H3: if non-critical, swallow and return
             if (_swallowIfNonCritical(_ginaErr)) return;
             if (typeof callback !== 'undefined') {
-                callback(_ginaErr);
+                _ownAsyncCbRejection(callback(_ginaErr));
             } else {
                 self.emit('query#complete', { status: _ginaStatus, error: _ginaErr });
             }
@@ -5793,7 +5827,7 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
             // H3: if non-critical, swallow and return
             if (_swallowIfNonCritical(prematureCloseErr)) return;
             if (typeof callback !== 'undefined') {
-                callback(prematureCloseErr);
+                _ownAsyncCbRejection(callback(prematureCloseErr));
             } else {
                 self.emit('query#complete', { status: 503, error: prematureCloseErr });
             }
@@ -5854,7 +5888,7 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                 // H3: if non-critical, swallow and return
                 if (_swallowIfNonCritical(_badGatewayErr)) return;
                 if (typeof callback !== 'undefined') {
-                    callback(_badGatewayErr);
+                    _ownAsyncCbRejection(callback(_badGatewayErr));
                 } else {
                     self.emit('query#complete', { status: 502, error: _badGatewayErr });
                 }
@@ -5868,7 +5902,7 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
             // 3. Exception filter for ALPN or protocol mismatches
             if (typeof data === 'string' && /^Unknown ALPN Protocol/.test(data)) {
                 const err = { status: 500, error: new Error(data) };
-                return (typeof callback !== 'undefined') ? callback(err) : self.emit('query#complete', err);
+                return (typeof callback !== 'undefined') ? _ownAsyncCbRejection(callback(err)) : self.emit('query#complete', err);
             }
 
             // 4. Data Parsing & Validation
@@ -5903,7 +5937,7 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                     const statusCodes = local.options.conf.server.coreConfiguration.statusCodes;
                     if (data.status && !/^2/.test(data.status) && typeof statusCodes[data.status] !== 'undefined') {
                         if (/^5/.test(data.status)) {
-                            return callback(data);
+                            return _ownAsyncCbRejection(callback(data));
                         } else {
                             self.throwError(data);
                             return;
@@ -5943,7 +5977,7 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                                 delete data.__ginaFlow;
                             }
                         }
-                        return callback(false, data);
+                        return _ownAsyncCbRejection(callback(false, data));
                     }
                 } catch (e) {
                     const infos = local.options;
@@ -6145,7 +6179,7 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                     code: 'PREFLIGHT_TIMEOUT', retryable: false, status: 503, retryCount: retryCount
                 });
                 if (_swallowIfNonCritical(_pfErr)) return;
-                if (typeof callback === 'function') return callback(_pfErr);
+                if (typeof callback === 'function') return _ownAsyncCbRejection(callback(_pfErr));
                 self.emit('query#complete', { status: 503, error: _pfErr });
             }, HTTP2_PREFLIGHT_DEADLINE_MS);
 
@@ -6173,7 +6207,7 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                         code: 'PREFLIGHT_FAILED', retryable: false, status: 503, retryCount: retryCount
                     });
                     if (_swallowIfNonCritical(_pfErr2)) return;
-                    if (typeof callback === 'function') return callback(_pfErr2);
+                    if (typeof callback === 'function') return _ownAsyncCbRejection(callback(_pfErr2));
                     self.emit('query#complete', { status: 503, error: _pfErr2 });
                     return;
                 }
@@ -6207,7 +6241,7 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
 
                     try {
                         if ( data.status && !/^2/.test(data.status) && typeof(local.options.conf.server.coreConfiguration.statusCodes[data.status]) != 'undefined') {
-                            cb(data)
+                            _ownAsyncCbRejection(cb(data))
                         } else {
                             // required when control is used in an halted state
                             // Ref.: resumeRequest()
@@ -6215,7 +6249,7 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                                 local.onHaltedRequestResumed(err);
                             }
 
-                            cb(err, data)
+                            _ownAsyncCbRejection(cb(err, data))
                         }
                     } catch (e) {
                         var infos = local.options, controllerName = infos.controller.substring(infos.controller.lastIndexOf('/'));
