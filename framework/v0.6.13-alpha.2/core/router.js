@@ -918,9 +918,13 @@ function Router(env, scope) {
                             Setup.requireController     = controller.requireController;
 
 
-                            Setup.apply(Setup, arguments);
-
-                            return Setup;
+                            // #B399 — return the app setup's own result instead of the
+                            // function object (the wrapper's return had zero consumers):
+                            // an async `setup.js`'s promise was discarded right here, so
+                            // the dispatch-loop guard could never own its rejection.
+                            // was: Setup.apply(Setup, arguments);
+                            //      return Setup;
+                            return Setup.apply(Setup, arguments);
                         }(request, response, next)
                     }
                 }
@@ -987,13 +991,31 @@ function Router(env, scope) {
                             }
 
                             // handle superController events
-                            for (let e=0; e<reservedActions.length; ++e) {
-                                if ( typeof(controller[reservedActions[e]]) == 'function' ) {
-                                    controller[reservedActions[e]](request, response, next)
-                                }
-                            }
-
                             try {
+                                // #B399 — the reserved-action hooks (`onReady`, `setup`) were dispatched
+                                // BARE here, OUTSIDE the try, while the main action below owns its
+                                // promise: an async hook rejection was unowned — no response, the
+                                // request hung to client/proxy timeout, and the only trace was a
+                                // levelled line in the daemon-dropped stdout — and a sync hook throw
+                                // escaped to process level (isaac: uncaughtException → emerg + SIGTERM,
+                                // the whole bundle dies; express: its layer-catch answers its own 500 —
+                                // engine-asymmetric). Inside the try, a sync throw is this catch's 500;
+                                // the thenable capture gives an async rejection the SAME .catch → 500
+                                // the action carries. throwError is `!headersSent`-guarded, so a
+                                // rejection landing after the action responded degrades to the #ERRREF
+                                // pairing line. Sync/absent hooks mint ZERO promises (the band's
+                                // dormancy rule).
+                                for (let e=0; e<reservedActions.length; ++e) {
+                                    if ( typeof(controller[reservedActions[e]]) == 'function' ) {
+                                        let _hookResult = controller[reservedActions[e]](request, response, next);
+                                        if ( _hookResult && typeof _hookResult.then === 'function' ) {
+                                            _hookResult.catch(function(err) {
+                                                serverInstance.throwError(response, 500, 'reserved action `'+ reservedActions[e] +'` rejected: '+ ( err && (err.stack || err.message) || String(err) ));
+                                            });
+                                        }
+                                    }
+                                }
+
                                 var _result = controller[action](request, response, next);
                                 if (_result && typeof _result.then === 'function') {
                                     _result.catch(function(err) {
@@ -1055,12 +1077,31 @@ function Router(env, scope) {
 
                     // handle superController events
                     // e.g.: inside your controller, you can defined: `this.onReady = function(){...}` which will always be called before the main action
-                    for (let e=0; e<reservedActions.length; ++e) {
-                        if ( typeof(controller[reservedActions[e]]) == 'function' ) {
-                            controller[reservedActions[e]](request, response, next)
-                        }
-                    }
                     try {
+                        // #B399 — the reserved-action hooks (`onReady`, `setup`) were dispatched
+                        // BARE here, OUTSIDE the try, while the main action below owns its
+                        // promise: an async hook rejection was unowned — no response, the
+                        // request hung to client/proxy timeout, and the only trace was a
+                        // levelled line in the daemon-dropped stdout — and a sync hook throw
+                        // escaped to process level (isaac: uncaughtException → emerg + SIGTERM,
+                        // the whole bundle dies; express: its layer-catch answers its own 500 —
+                        // engine-asymmetric). Inside the try, a sync throw is this catch's 500;
+                        // the thenable capture gives an async rejection the SAME .catch → 500
+                        // the action carries. throwError is `!headersSent`-guarded, so a
+                        // rejection landing after the action responded degrades to the #ERRREF
+                        // pairing line. Sync/absent hooks mint ZERO promises (the band's
+                        // dormancy rule).
+                        for (let e=0; e<reservedActions.length; ++e) {
+                            if ( typeof(controller[reservedActions[e]]) == 'function' ) {
+                                let _hookResult = controller[reservedActions[e]](request, response, next);
+                                if ( _hookResult && typeof _hookResult.then === 'function' ) {
+                                    _hookResult.catch(function(err) {
+                                        serverInstance.throwError(response, 500, 'reserved action `'+ reservedActions[e] +'` rejected: '+ ( err && (err.stack || err.message) || String(err) ));
+                                    });
+                                }
+                            }
+                        }
+
                         var _result = controller[action](request, response, next);
                         if (_result && typeof _result.then === 'function') {
                             _result.catch(function(err) {

@@ -1057,3 +1057,220 @@ describe('12 - #B67 engine-agnostic proxy-host refresh + cross-bundle toUrl reso
     });
 
 });
+
+
+// 13 — source structure: reserved-actions guard (#B399)
+// An async onReady/setup rejection was unowned (no response, invisible trace) and a
+// sync hook throw escaped the local catch to process level (isaac: bundle death).
+// The fix moves both reservedActions loops INSIDE their try and gives each hook the
+// same thenable-capture → .catch → throwError(500) shape the action dispatch carries.
+describe('13 - source structure: reserved-actions guard (#B399)', function() {
+
+    var src = fs.readFileSync(SOURCE, 'utf8');
+
+    function countOf(hay, needle) {
+        return hay.split(needle).length - 1;
+    }
+
+    it('each hook result is captured at both sites', function() {
+        assert.equal(
+            countOf(src, 'let _hookResult = controller[reservedActions[e]](request, response, next);'),
+            2, 'expected the hook-result capture at BOTH dispatch sites'
+        );
+    });
+
+    it('each captured result is thenable-checked at both sites', function() {
+        assert.equal(
+            countOf(src, "if ( _hookResult && typeof _hookResult.then === 'function' )"),
+            2, 'expected the thenable check at BOTH dispatch sites'
+        );
+    });
+
+    it('each thenable hook result gets a .catch routing to throwError at both sites', function() {
+        assert.equal(
+            countOf(src, '_hookResult.catch(function(err)'),
+            2, 'expected the rejection handler at BOTH dispatch sites'
+        );
+    });
+
+    it('the rejection message names the failing hook (diagnosis is the point of #B399)', function() {
+        assert.equal(
+            countOf(src, "'reserved action `'+ reservedActions[e] +'` rejected: '"),
+            2, 'expected the hook-naming message prefix at BOTH sites'
+        );
+    });
+
+    it('both reservedActions loops sit INSIDE their try (sync hook throw -> local 500, not process death)', function() {
+        // Structural, not char-distance: in each _dispatchControllerAction slice the
+        // try must open BEFORE the loop, which must precede the action dispatch.
+        var re = /var _dispatchControllerAction = function/g, m, seen = 0;
+        while ((m = re.exec(src)) !== null) {
+            var after   = src.slice(m.index);
+            var tryIdx  = after.indexOf('try {');
+            var loopIdx = after.indexOf('reservedActions.length');
+            var actIdx  = after.indexOf('controller[action](');
+            assert.ok(tryIdx > -1 && loopIdx > -1 && actIdx > -1, 'landmarks missing');
+            assert.ok(tryIdx < loopIdx,  'the try must open BEFORE the reservedActions loop');
+            assert.ok(loopIdx < actIdx,  'the loop must still precede the action dispatch');
+            seen++;
+        }
+        assert.equal(seen, 2);
+    });
+
+    it('the synthesized setup wrapper returns the app call result so the loop guard can own it', function() {
+        // The wrapper used to `return Setup` (the function object — zero consumers),
+        // discarding an async setup.js's promise before the guard could see it.
+        assert.ok(
+            src.indexOf('return Setup.apply(Setup, arguments);') > -1,
+            'expected `return Setup.apply(Setup, arguments);` — the wrapper must propagate the app result'
+        );
+    });
+
+});
+
+
+// Replica of the #B399 reserved-actions guard + action dispatch band (both sites).
+// Pinned to source by describe 13's literal assertions: the guard lines here must
+// keep matching router.js, or the replica drifts from what ships.
+function dispatchReservedActionsThenAction(serverInstance, controller, reservedActions, action, request, response, next) {
+    for (let e=0; e<reservedActions.length; ++e) {
+        if ( typeof(controller[reservedActions[e]]) == 'function' ) {
+            let _hookResult = controller[reservedActions[e]](request, response, next);
+            if ( _hookResult && typeof _hookResult.then === 'function' ) {
+                _hookResult.catch(function(err) {
+                    serverInstance.throwError(response, 500, 'reserved action `'+ reservedActions[e] +'` rejected: '+ ( err && (err.stack || err.message) || String(err) ));
+                });
+            }
+        }
+    }
+    var _result = controller[action](request, response, next);
+    if (_result && typeof _result.then === 'function') {
+        return _result.catch(function(err) {
+            serverInstance.throwError(response, 500, err.stack || err.message || String(err));
+        });
+    }
+}
+
+
+// 14 — reserved-actions hook guard: pure dispatch logic (#B399)
+describe('14 - reserved-actions hook guard: pure dispatch logic (#B399)', function() {
+
+    var RESERVED = ['onReady', 'setup'];
+
+    function makeSetup() {
+        var calls = { thrown: [], actionCalled: 0 };
+        var serverInstance = {
+            throwError: function(response, status, msg) {
+                calls.thrown.push({ status: status, msg: msg });
+            }
+        };
+        return { calls: calls, serverInstance: serverInstance };
+    }
+
+    function settle() {
+        return new Promise(function(resolve) { setImmediate(resolve); });
+    }
+
+    it('an async rejecting onReady answers 500 through throwError, naming the hook', async function() {
+        var s = makeSetup();
+        var controller = {
+            onReady: function() { return Promise.reject(new Error('hook boom')); },
+            list: function() { s.calls.actionCalled++; }
+        };
+        dispatchReservedActionsThenAction(s.serverInstance, controller, RESERVED, 'list', {}, {}, function(){});
+        await settle();
+        assert.equal(s.calls.thrown.length, 1, 'the rejection must reach throwError');
+        assert.equal(s.calls.thrown[0].status, 500);
+        assert.ok(/reserved action `onReady` rejected: /.test(s.calls.thrown[0].msg), 'message must name the hook');
+        assert.ok(/hook boom/.test(s.calls.thrown[0].msg), 'message must carry the error detail');
+    });
+
+    it('a rejecting hook does NOT prevent the action dispatch (microtask ordering)', async function() {
+        var s = makeSetup();
+        var controller = {
+            setup: function() { return Promise.reject(new Error('late')); },
+            list: function() { s.calls.actionCalled++; }
+        };
+        dispatchReservedActionsThenAction(s.serverInstance, controller, RESERVED, 'list', {}, {}, function(){});
+        assert.equal(s.calls.actionCalled, 1, 'the action is dispatched in the same sync frame');
+        await settle();
+        assert.equal(s.calls.thrown.length, 1);
+    });
+
+    it('sync hooks + sync action mint zero promises and never touch throwError (dormancy)', function() {
+        var s = makeSetup();
+        var ranHooks = [];
+        var controller = {
+            onReady: function() { ranHooks.push('onReady'); },
+            setup:   function() { ranHooks.push('setup'); },
+            list:    function() { s.calls.actionCalled++; }
+        };
+        var out = dispatchReservedActionsThenAction(s.serverInstance, controller, RESERVED, 'list', {}, {}, function(){});
+        assert.deepEqual(ranHooks, ['onReady', 'setup']);
+        assert.equal(s.calls.actionCalled, 1);
+        assert.equal(s.calls.thrown.length, 0);
+        assert.equal(typeof out, 'undefined', 'no promise minted on the all-sync path');
+    });
+
+    it('a non-function reserved slot is skipped, not invoked', function() {
+        var s = makeSetup();
+        var controller = {
+            onReady: 'not-a-function',
+            list: function() { s.calls.actionCalled++; }
+        };
+        assert.doesNotThrow(function() {
+            dispatchReservedActionsThenAction(s.serverInstance, controller, RESERVED, 'list', {}, {}, function(){});
+        });
+        assert.equal(s.calls.actionCalled, 1);
+    });
+
+    it('a null-reason rejection is coerced, never a TypeError inside the catch', async function() {
+        var s = makeSetup();
+        var controller = {
+            onReady: function() { return Promise.reject(null); },
+            list: function() {}
+        };
+        dispatchReservedActionsThenAction(s.serverInstance, controller, RESERVED, 'list', {}, {}, function(){});
+        await settle();
+        assert.equal(s.calls.thrown.length, 1);
+        assert.ok(/rejected: null$/.test(s.calls.thrown[0].msg), 'String(null) must land in the message');
+    });
+
+    it('a resolving async hook stays silent (catch is a no-op on resolve)', async function() {
+        var s = makeSetup();
+        var controller = {
+            onReady: function() { return Promise.resolve('fine'); },
+            list: function() { s.calls.actionCalled++; }
+        };
+        dispatchReservedActionsThenAction(s.serverInstance, controller, RESERVED, 'list', {}, {}, function(){});
+        await settle();
+        assert.equal(s.calls.thrown.length, 0);
+        assert.equal(s.calls.actionCalled, 1);
+    });
+
+    it('SUBTRACT — the pre-#B399 bare dispatch discards the rejection (throwError never called)', async function() {
+        // The pre-fix loop shape: bare invocation, result discarded. Same inputs as
+        // the guarded tests above, guard absent -> the throwError count must flip to
+        // 0, proving the capture+catch is load-bearing. (The promise is pre-absorbed
+        // for the harness: node:test fails the active test on any REAL unhandled
+        // rejection, so the floats-to-process-handler half of the pre-fix behaviour
+        // is pinned at source level — gna.js's process handler — not re-proven here.)
+        var s = makeSetup();
+        var p = Promise.reject(new Error('unowned'));
+        p.catch(function(){});
+        var controller = {
+            onReady: function() { return p; },
+            list: function() { s.calls.actionCalled++; }
+        };
+        for (let e=0; e<RESERVED.length; ++e) {
+            if ( typeof(controller[RESERVED[e]]) == 'function' ) {
+                controller[RESERVED[e]]({}, {}, function(){});
+            }
+        }
+        controller.list({}, {}, function(){});
+        await settle();
+        assert.equal(s.calls.thrown.length, 0, 'bare dispatch: the rejection never reaches throwError — the pre-fix failure mode');
+        assert.equal(s.calls.actionCalled, 1);
+    });
+
+});
