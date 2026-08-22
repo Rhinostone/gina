@@ -4818,6 +4818,17 @@ describe('40b - #B399 query delivery seams: behavioral, real bytes', function() 
         });
     }
 
+    // Deterministic teardown for the real-server arms: the framework caches
+    // the HTTP/2 client session (serverInstance._cached) and node keeps h1
+    // keep-alive sockets alive — on node 22 the lingering handles held the
+    // file's event loop open past the 120s file timeout (all subtests green,
+    // file not ok). Destroy both sides explicitly; harmless when nothing is
+    // cached.
+    function destroyClientHandles(h) {
+        try { h.inst.serverInstance._cached.forEach(function(v) { if (v && typeof v.destroy === 'function') { v.destroy(); } }); } catch (e) {}
+        try { (h.inst.serverInstance._http2Sessions || []).forEach(function(sess) { if (sess && typeof sess.destroy === 'function') { sess.destroy(); } }); } catch (e) {}
+    }
+
     function makeInst40() {
         var inst = SuperController40.createTestInstance({
             req: { url: '/x', method: 'GET', headers: {}, routing: { rule: 'r40', namespace: 'default', param: {} }, params: {}, get: {}, post: {} },
@@ -4903,6 +4914,7 @@ describe('40b - #B399 query delivery seams: behavioral, real bytes', function() 
         assert.equal(m.length, 1, 'the rejection must reach throwError through the HTTP/2 facade');
         assert.match(m[0].msg, /Controller Query Exception on async callback rejection\./);
         assert.equal(m[0].status, 500);
+        destroyClientHandles(h);
     });
 
     it('facade: an async callback that RESOLVES stays silent — no false positive', async function() {
@@ -4957,11 +4969,17 @@ describe('40b - #B399 query delivery seams: behavioral, real bytes', function() 
             assert.equal(m.length, 1, 'the rejection must reach throwError (pre-fix measured: floated)');
             assert.match(m[0].msg, /Controller Query Exception on async callback rejection\./);
             assert.equal(m[0].status, 500);
-        } finally { srv.close(); }
+        } finally {
+            destroyClientHandles(h);
+            if (typeof srv.closeAllConnections === 'function') { srv.closeAllConnections(); }
+            srv.close();
+        }
     });
 
     it('DIRECT callback, HTTP/2, real upstream 200: an async rejection is owned', async function() {
         var srv = http240.createServer();
+        var srvSessions = [];
+        srv.on('session', function(sess) { srvSessions.push(sess); });
         srv.on('stream', function(stream) { stream.respond({ ':status': 200, 'content-type': 'application/json' }); stream.end('{"ok":true}'); });
         await new Promise(function(res) { srv.listen(0, '127.0.0.1', res); });
         try {
@@ -4978,7 +4996,11 @@ describe('40b - #B399 query delivery seams: behavioral, real bytes', function() 
             assert.equal(m.length, 1, 'the rejection must reach throwError');
             assert.match(m[0].msg, /Controller Query Exception on async callback rejection\./);
             assert.equal(m[0].status, 500);
-        } finally { srv.close(); }
+        } finally {
+            destroyClientHandles(h);
+            srvSessions.forEach(function(sess) { try { sess.destroy(); } catch (e) {} });
+            srv.close();
+        }
     });
 
     it('DIRECT callback, HTTP/1, transport-error delivery (dead port): an async rejection is owned', async function() {
@@ -4995,6 +5017,7 @@ describe('40b - #B399 query delivery seams: behavioral, real bytes', function() 
         assert.equal(m.length, 1, 'the rejection must reach throwError (pre-fix measured: floated)');
         assert.match(m[0].msg, /Controller Query Exception on async callback rejection\./);
         assert.equal(m[0].status, 500);
+        destroyClientHandles(h);
     });
 
     it('DIRECT callback, HTTP/2, transport-error delivery (dead port): an async rejection is owned', async function() {
@@ -5011,6 +5034,7 @@ describe('40b - #B399 query delivery seams: behavioral, real bytes', function() 
         assert.equal(m.length, 1, 'the rejection must reach throwError');
         assert.match(m[0].msg, /Controller Query Exception on async callback rejection\./);
         assert.equal(m[0].status, 500);
+        destroyClientHandles(h);
     });
 
     it('SUBTRACT — the pre-fix bare dispatch discards the rejection (inline pre-fix listener shape)', async function() {
