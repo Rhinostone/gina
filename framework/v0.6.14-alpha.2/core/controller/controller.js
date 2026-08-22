@@ -4289,12 +4289,21 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
      * Accepts arguments in any of these forms:
      * - `query(options, data, callback)`
      * - `query(options, callback)`
-     * - `query(options, data)` — returns a Promise when the last arg is not a function
+     * - `query(options, data)` — returns a handle exposing `onComplete(cb)`.
+     *   The handle is NOT a thenable — to `await`, promisify the call the way
+     *   the framework does internally:
+     *   `await require('util').promisify(self.query)(options, {})`.
+     *   A non-2xx upstream status rejects the promisified call with the plain
+     *   `{status, error, message}` object; a connection failure rejects with a
+     *   native `Error`.
+     *
+     * An `async` callback's rejected promise is owned at every delivery seam
+     * (#B399): it answers 500 instead of leaving the request hanging.
      *
      * @param {object}   options          - Request options (host, port, path, method, …)
      * @param {object}   [data]           - Request body / query params
-     * @param {function} [callback]       - `callback(err, result)` — omit to get a Promise
-     * @returns {void|Promise}
+     * @param {function} [callback]       - `callback(err, result)` — omit to get the onComplete handle
+     * @returns {void|object} `undefined` in callback form; the `{onComplete}` handle otherwise
      */
     // replaced: arguments object — use named params (#P23)
     this.query = function(options, data, callback) {
