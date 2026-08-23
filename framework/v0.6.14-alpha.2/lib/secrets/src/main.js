@@ -69,6 +69,9 @@
 var defaultBackend = require('./backends/env');
 var fileBackend    = require('./backends/file');
 var envFile        = require('./env-file');
+// Declaration validation is shared with the secrets:check CLI gate (#B408) —
+// pure and require-free, so it adds nothing to the zero-setup load path.
+var declaration    = require('./declaration');
 // The config-source walk (./sources) is a FACTORY over this module's own
 // getRequiredKeys — instantiated here, at the composition root, so the two
 // files never require each other in a cycle. `getRequiredKeys` is a hoisted
@@ -329,8 +332,9 @@ function getRequiredKeys(config) {
  * @function selectBackend
  * @param {object} config - The merged per-bundle config (`envConf[bundle][env]`)
  * @returns {{resolve: function(string): string}} The env backend, or an env-over-file backend
- * @throws {Error} If a declared path is not a non-empty string, still carries an
- *   unsubstituted `${…}` token, or contains a `${secret:…}` placeholder.
+ * @throws {Error} If a declared entry fails the shared declaration guards
+ *   (./declaration): a non-string or whitespace-only entry, a `${secret:…}`
+ *   placeholder, an unresolved `${…}` token, or an empty path segment (`//`).
  *
  * @example
  * // settings.json:
@@ -365,44 +369,16 @@ function selectBackend(config) {
         return defaultBackend;
     }
 
-    for (var i = 0; i < paths.length; i++) {
-        var p = paths[i];
-        // #B271 — trim before the empty check: the schema's `minLength: 1` counts a
-        // space, so `[" "]` cleared both layers and built a tier that could never
-        // resolve anything, visible only as a suppressed debug line.
-        if (typeof p !== 'string' || p.trim() === '') {
-            throw new Error('`settings.secrets.file` must be a non-empty string or an array of them');
-        }
-        // A secrets file cannot itself be named by a secret — the backend that
-        // would resolve the placeholder is the one being built.
-        if (p.indexOf('${secret:') > -1) {
-            throw new Error('`settings.secrets.file` cannot contain a `${secret:…}` placeholder');
-        }
-        // Fail loudly on a token the substitution pass did not know: unknown
-        // tokens are preserved verbatim by design, so a typo would otherwise
-        // become a silent lookup for a literally-named file that never exists,
-        // and every secret would fall through to a confusing fail-closed error.
-        if (/\$\{[^}]*\}/.test(p)) {
-            throw new Error('`settings.secrets.file` contains an unresolved `${…}` token: ' + p);
-        }
-        // #B272 — a token that resolved to an EMPTY string leaves nothing for the
-        // check above to catch: `${homedir}/${scope}/secrets.env` with an empty
-        // scope collapses to `<home>//secrets.env`, which POSIX reads as
-        // `<home>/secrets.env` — a silent read of the WRONG file, one directory up
-        // from the intended one. The empty segment is the only surviving trace.
-        //
-        // This CANNOT distinguish that from the benign cause — a token carrying a
-        // trailing slash, e.g. GINA_HOMEDIR=/opt/gina/ (operator-supplied, and
-        // nothing in the path chain normalises it) — because by here both have
-        // collapsed to the same string. It refuses either way, deliberately: the
-        // dangerous case runs the bundle on the wrong credential in silence, and
-        // this file already refuses on the same reasoning when a declared layer
-        // exists but cannot be read. The benign case costs one character to fix
-        // and the message names it, so the error must NOT assert a cause it
-        // cannot know.
-        if (p.indexOf('//') > -1) {
-            throw new Error('`settings.secrets.file` contains an empty path segment (`//`), so it does not name the file it appears to — POSIX reads `<a>//<b>` as `<a>/<b>`. Either a `${…}` token resolved to an empty value (the path then silently drops a directory), or a token carries a trailing slash. Remove the doubled separator or fix the token: ' + p);
-        }
+    // The per-entry guards (#B271 entry shape incl. trim, the `secret:`
+    // placeholder refusal, the unresolved-token refusal, #B272's empty path
+    // segment) live in ./declaration, SHARED with the secrets:check CLI gate.
+    // #B408: two of those guards had drifted out of the checker's own copy —
+    // the gate green-lit configs this function refuses to boot — so the loop
+    // moved to one home, the same cure #B263 applied to the config-source
+    // walk. The full rationale for each guard travels with it.
+    var declErrors = declaration.validateFilePaths(paths);
+    if (declErrors.length) {
+        throw new Error(declErrors[0].message);
     }
 
     return fileBackend.build(paths);
@@ -425,6 +401,10 @@ module.exports = {
     getResolvedPaths: getResolvedPaths,
     getRequiredKeys: getRequiredKeys,
     selectBackend: selectBackend,
+    // Declaration validation, re-exported from ./declaration so the
+    // secrets:check gate validates with the RUNTIME's own guards rather than
+    // a hand-kept copy — the copy drifted twice (#B408; drift class #B263).
+    validateFilePaths: declaration.validateFilePaths,
     SECRET_RE: SECRET_RE,
     // `.env`-style parsing, re-exported from ./env-file so that every reader
     // of a given file agrees on what it means. See that module's header for

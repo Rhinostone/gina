@@ -610,8 +610,24 @@ describe('09 - scope overlay + env-file', function () {
     });
 
     it('check.js skips the file tier on an unresolved token rather than statting a literal path', function () {
-        assert.match(checkSrc, /UNRESOLVED_TOKEN\.test\(\s*path\s*\)/);
-        assert.match(checkSrc, /unresolved token in/);
+        // #B408 realignment (approved) — the behaviour this test NAMES is
+        // unchanged; the mechanic moved. The guard now lives in the SHARED
+        // validator (lib/secrets/src/declaration.js), consumed by check.js
+        // through secrets.validateFilePaths BEFORE any layer read — one
+        // implementation with the runtime, so the gate cannot drift lax
+        // again. Comment-stripped view: check.js's retirement comment
+        // legitimately names the old UNRESOLVED_TOKEN constant.
+        var stripped = checkSrc.split('\n').map(function (l) {
+            if (/^\s*(\/\/|\*|\/\*)/.test(l)) { return ''; }
+            return l.replace(/\/\/.*$/, '');
+        }).join('\n');
+        var callAt = stripped.indexOf('secrets.validateFilePaths(');
+        var readAt = stripped.indexOf('secrets.readEnvFile(path)');
+        assert.ok(callAt > -1, 'check.js must consume the shared validation');
+        assert.ok(readAt > -1, 'stripping emptied the source — pin would pass vacuously');
+        assert.ok(callAt < readAt, 'validation must precede the layer reads, as it does at boot');
+        // The CLI-only hint survives on the unresolved-token verdict:
+        assert.match(checkSrc, /pass --scope\/--env if it names one/);
     });
 
     it('check.js only seeds a reps key from a NON-EMPTY string (an empty one substitutes silently)', function () {

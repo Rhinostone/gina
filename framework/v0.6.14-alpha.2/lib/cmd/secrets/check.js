@@ -70,16 +70,12 @@ function Check(opt, cmd) {
     var secrets = lib.secrets;
     var merge   = lib.merge;
 
-    /**
-     * Matches any `${…}` token the substitution pass did not resolve. Mirrors
-     * the guard in `lib/secrets/src/main.js` so this command rejects exactly
-     * what the runtime would reject.
-     *
-     * @inner
-     * @constant
-     * @type {RegExp}
-     */
-    var UNRESOLVED_TOKEN = /\$\{[^}]*\}/;
+    // The declaration guards (entry shape, `secret:` placeholder, unresolved
+    // token, empty path segment) are consumed via secrets.validateFilePaths —
+    // the RUNTIME's own implementation (lib/secrets/src/declaration.js), not a
+    // local mirror. A hand-kept copy lived here and drifted twice (#B408: the
+    // trim and empty-segment guards never reached it, so this gate green-lit
+    // configs boot refuses); the local UNRESOLVED_TOKEN constant retired with it.
 
     /**
      * Parses `--format`, resolves project + optional bundle via CmdHelper,
@@ -340,11 +336,16 @@ function Check(opt, cmd) {
      * readable files into one map, later entries winning — the same ordering
      * `lib/secrets/backends/file.js` applies.
      *
-     * Validation mirrors `secrets.selectBackend` so this command accepts and
-     * rejects exactly what a boot would: a non-string or empty entry, a
-     * `${secret:…}` placeholder (unresolvable by definition — the backend that
-     * would resolve it is the one being built), and any token the dictionary
-     * did not know.
+     * Validation is `secrets.validateFilePaths` — the SAME implementation
+     * `secrets.selectBackend` runs at boot (lib/secrets/src/declaration.js),
+     * so this command accepts and rejects exactly what a boot would, by
+     * construction rather than by mirroring: a non-string or whitespace-only
+     * entry, a `${secret:…}` placeholder (unresolvable by definition — the
+     * backend that would resolve it is the one being built), any token the
+     * dictionary did not know, and an empty path segment (`//`). It runs on
+     * the POST-substitution values, as the runtime's does, and BEFORE any
+     * layer is read — the runtime reads no file on an invalid declaration,
+     * so neither does this report (#B408).
      *
      * @inner
      * @private
@@ -370,17 +371,6 @@ function Check(opt, cmd) {
         if (!raw.length) return out;
         out.declared = true;
 
-        for (var i = 0; i < raw.length; i++) {
-            if (typeof raw[i] !== 'string' || raw[i] === '') {
-                out.errors.push('`settings.secrets.file` must be a non-empty string or an array of them');
-                return out;
-            }
-            if (raw[i].indexOf('${secret:') > -1) {
-                out.errors.push('`settings.secrets.file` cannot contain a `${secret:…}` placeholder');
-                return out;
-            }
-        }
-
         var resolved;
         try {
             resolved = whisper(buildReps(projectPath, manifest, bundleName), JSON.clone(raw));
@@ -389,20 +379,27 @@ function Check(opt, cmd) {
             return out;
         }
 
+        // The runtime's own declaration guards, run before any layer read —
+        // one shared implementation, so this gate cannot drift lax again
+        // (#B408). On the unresolved-token verdict, append the CLI-only hint:
+        // the runtime reads --scope/--env from whatever launches the bundle,
+        // which an offline report cannot see (§14.3), so under-reading stays
+        // stricter than the runtime, never laxer.
+        var declErrors = secrets.validateFilePaths(resolved);
+        if (declErrors.length) {
+            var declMsg = declErrors[0].message;
+            if (declErrors[0].code === 'file-unresolved-token') {
+                declMsg += ' — pass --scope/--env if it names one, since the runtime'
+                    + ' reads those from whatever launches the bundle';
+            }
+            out.errors.push(declMsg);
+            return out;
+        }
+
         var map    = Object.create(null);
         var origin = Object.create(null);
         for (var p = 0; p < resolved.length; p++) {
             var path = resolved[p];
-            if (UNRESOLVED_TOKEN.test(path)) {
-                // Skip the whole tier rather than stat a literally-named path.
-                // Under-reading can only make this gate stricter than the
-                // runtime; guessing could make it laxer, which is the failure
-                // this command exists to prevent.
-                out.errors.push('unresolved token in `' + path + '`'
-                    + ' — pass --scope/--env if it names one, since the runtime'
-                    + ' reads those from whatever launches the bundle');
-                return out;
-            }
             var layerRead = secrets.readEnvFile(path);
             out.layers.push({
                 path       : path,
