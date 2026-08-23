@@ -1,4 +1,3 @@
-var fs      = require('fs');
 var console = lib.logger;
 
 var CmdHelper = require('./../helper');
@@ -81,16 +80,6 @@ function Check(opt, cmd) {
      * @type {RegExp}
      */
     var UNRESOLVED_TOKEN = /\$\{[^}]*\}/;
-
-    /**
-     * Config files are JSON. The loader globs every `.json` in a config
-     * dir; this matches that, then drops dotfiles and `* copy` siblings.
-     *
-     * @inner
-     * @constant
-     * @type {RegExp}
-     */
-    var JSON_EXT = /\.json$/;
 
     /**
      * Parses `--format`, resolves project + optional bundle via CmdHelper,
@@ -180,8 +169,11 @@ function Check(opt, cmd) {
     };
 
     /**
-     * Reads a JSON file with comment tolerance via `requireJSON`. Returns
-     * `null` on any I/O or parse error.
+     * Delegates to `lib.secrets.readJsonSafe` rather than reading here: the
+     * scoped-settings and env.json reads below must tolerate exactly the
+     * comment shapes the shared walk tolerates, or the two sides could
+     * disagree about what a config file contains — the drift class the
+     * shared sources module exists to prevent.
      *
      * @inner
      * @private
@@ -189,12 +181,7 @@ function Check(opt, cmd) {
      * @returns {object|null}
      */
     var readJsonSafe = function (filePath) {
-        try {
-            if ( !fs.existsSync(filePath) ) return null;
-            return requireJSON(filePath);
-        } catch (e) {
-            return null;
-        }
+        return secrets.readJsonSafe(filePath);
     };
 
     /**
@@ -223,7 +210,7 @@ function Check(opt, cmd) {
 
     /**
      * Reads one named config file with the `--scope` overlay applied, using
-     * the same merge direction as `collectKeysFromConfigDir` (scope wins,
+     * the same merge direction as the shared config-source walk (scope wins,
      * base back-fills, `override=false` stated explicitly).
      *
      * @inner
@@ -449,7 +436,9 @@ function Check(opt, cmd) {
     };
 
     /**
-     * Loads `<projectPath>/manifest.json`. Returns `null` on failure.
+     * Delegates to `lib.secrets.loadManifest` — the same manifest read the
+     * shared config-source walk performs, so this command and the walk
+     * cannot disagree about what the manifest says.
      *
      * @inner
      * @private
@@ -457,13 +446,13 @@ function Check(opt, cmd) {
      * @returns {object|null}
      */
     var loadManifest = function (projectPath) {
-        return readJsonSafe(_(projectPath + '/manifest.json', true));
+        return secrets.loadManifest(projectPath);
     };
 
     /**
-     * Resolves a bundle's source-dir (relative to the project root) from
-     * the manifest, mirroring `bundle:openapi`. Falls back to the bundle
-     * name when `src` is absent.
+     * Delegates to `lib.secrets.resolveBundleSrc` — the same src lookup the
+     * shared walk uses, kept identical so the settings read below targets
+     * the directory the walk enumerated.
      *
      * @inner
      * @private
@@ -472,93 +461,13 @@ function Check(opt, cmd) {
      * @returns {string}
      */
     var resolveBundleSrc = function (manifest, bundleName) {
-        if ( manifest && manifest.bundles && manifest.bundles[bundleName] && manifest.bundles[bundleName].src ) {
-            return manifest.bundles[bundleName].src;
-        }
-        return bundleName;
+        return secrets.resolveBundleSrc(manifest, bundleName);
     };
 
-    /**
-     * Lists the `.json` files in `dir`, skipping dotfiles and `* copy`
-     * siblings. Empty when the dir is absent.
-     *
-     * @inner
-     * @private
-     * @param {string} dir - Absolute config directory
-     * @returns {string[]}
-     */
-    var listJsonFiles = function (dir) {
-        if ( !fs.existsSync(dir) ) return [];
-        var entries;
-        try { entries = fs.readdirSync(dir); } catch (e) { return []; }
-        var out = [];
-        for (var i = 0; i < entries.length; i++) {
-            var name = entries[i];
-            if ( /^\./.test(name) ) continue;
-            if ( /\s+copy/i.test(name) ) continue;
-            if ( !JSON_EXT.test(name) ) continue;
-            out.push(name);
-        }
-        out.sort();
-        return out;
-    };
-
-    /**
-     * Reads every `.json` under `absDir`, enumerates its required secret
-     * keys, and adds them to `keySet` (a null-proto set). Mutates `keySet`.
-     *
-     * When `--scope=<s>` is active, the sibling `<absDir>_<scope>/` dir is
-     * read-only deep-merged over the base per config file (scope wins) before
-     * enumeration — mirroring a deploy's per-scope overlay — so the keys are
-     * the *effective* ones that scope will require. Read-only introspection;
-     * never touches the runtime config loader.
-     *
-     * @inner
-     * @private
-     * @param {string} absDir - Absolute base config directory to read
-     * @param {object} keySet - Mutable null-proto set; key name -> true
-     */
-    var collectKeysFromConfigDir = function (absDir, keySet) {
-        var scopeAbsDir = self.scopeName ? (absDir + '_' + self.scopeName) : null;
-        var baseNames   = listJsonFiles(absDir);
-        var scopeNames  = scopeAbsDir ? listJsonFiles(scopeAbsDir) : [];
-
-        var names = baseNames.slice();
-        for (var s = 0; s < scopeNames.length; s++) {
-            if (names.indexOf(scopeNames[s]) < 0) names.push(scopeNames[s]);
-        }
-
-        for (var f = 0; f < names.length; f++) {
-            var name         = names[f];
-            var baseContent  = (baseNames.indexOf(name) > -1) ? readJsonSafe(_(absDir + '/' + name, true)) : null;
-            var scopeContent = (scopeAbsDir && scopeNames.indexOf(name) > -1) ? readJsonSafe(_(scopeAbsDir + '/' + name, true)) : null;
-            // scope deep-merges over base (scope wins); override=false is explicit (not
-            // merge's default) so scope precedence stays correct even if lib/merge's
-            // default override ever changes.
-            var effective    = scopeContent ? merge(JSON.clone(scopeContent), baseContent || {}, false) : baseContent;
-            if (!effective) continue;
-            var keys = secrets.getRequiredKeys(effective);
-            for (var k = 0; k < keys.length; k++) {
-                keySet[keys[k]] = true;
-            }
-        }
-    };
-
-    /**
-     * Computes the shared-config key set once per project. The loader
-     * merges `shared/config/` into every bundle, so these keys are
-     * required by each bundle.
-     *
-     * @inner
-     * @private
-     * @param {string} projectPath
-     * @returns {object} Null-proto set; key name -> true
-     */
-    var computeSharedKeys = function (projectPath) {
-        var keySet = Object.create(null);
-        collectKeysFromConfigDir(_(projectPath + '/shared/config', true), keySet);
-        return keySet;
-    };
+    // The config-dir walk itself (dir globbing, scope overlay, key
+    // enumeration) moved to lib/secrets' sources module, consumed by the
+    // checkers below via secrets.getProjectRequiredKeys — see that module's
+    // header for the walk semantics and the sharing rationale (#B263).
 
     /**
      * Resolves one key across both tiers in the runtime's order: the
@@ -610,20 +519,13 @@ function Check(opt, cmd) {
      * @param {string} projectPath
      * @param {object|null} manifest
      * @param {string} bundleName
-     * @param {object} sharedKeys - Pre-computed shared key set
+     * @param {Object<string, string[]>} entryByKey - The bundle's walk entry map (shared keys already folded in)
      * @returns {{bundle:string, totalKeys:number, set:number, unset:number, keys:Array<{key:string, set:boolean, source:(string|null), from:(string|null)}>, secretsFile:object}}
      */
-    var checkBundle = function (projectPath, manifest, bundleName, sharedKeys) {
-        var keySet = Object.create(null);
-        for (var sk in sharedKeys) {
-            keySet[sk] = true;
-        }
-        var bundleSrc = resolveBundleSrc(manifest, bundleName);
-        collectKeysFromConfigDir(_(projectPath + '/' + bundleSrc + '/config', true), keySet);
-
+    var checkBundle = function (projectPath, manifest, bundleName, entryByKey) {
         var chain = resolveSecretsFileChain(projectPath, manifest, bundleName);
 
-        var keys     = Object.keys(keySet).sort();
+        var keys     = Object.keys(entryByKey).sort();
         var statuses = [];
         var setCount = 0;
         for (var k = 0; k < keys.length; k++) {
@@ -657,14 +559,13 @@ function Check(opt, cmd) {
         var report = { projects: [] };
         var names  = Object.keys(self.projects).sort();
         for (var i = 0; i < names.length; i++) {
-            var pp = self.projects[names[i]];
-            var mf = loadManifest(pp.path);
-            if (!mf || !mf.bundles) continue;
-            var sharedKeys = computeSharedKeys(pp.path);
-            var entry  = { project: names[i], bundles: [] };
-            var bnames = Object.keys(mf.bundles).sort();
-            for (var b = 0; b < bnames.length; b++) {
-                entry.bundles.push(checkBundle(pp.path, mf, bnames[b], sharedKeys));
+            var pp     = self.projects[names[i]];
+            var walked = secrets.getProjectRequiredKeys(pp.path, { scope: self.scopeName });
+            if (!walked) continue;
+            var mf    = loadManifest(pp.path); // still read here: the secrets-file chain needs it
+            var entry = { project: names[i], bundles: [] };
+            for (var b = 0; b < walked.bundles.length; b++) {
+                entry.bundles.push(checkBundle(pp.path, mf, walked.bundles[b].bundle, walked.bundles[b].byKey));
             }
             report.projects.push(entry);
         }
@@ -679,18 +580,17 @@ function Check(opt, cmd) {
      * @param {string} projectName
      */
     var checkProjectOnly = function (projectName) {
-        var project  = self.projects[projectName];
-        var manifest = loadManifest(project.path);
-        if (!manifest || !manifest.bundles) {
+        var project = self.projects[projectName];
+        var walked  = secrets.getProjectRequiredKeys(project.path, { scope: self.scopeName });
+        if (!walked) {
             console.error('Project @' + projectName + ' has no manifest.json or no bundles registered.');
             process.exit(1);
             return;
         }
-        var sharedKeys = computeSharedKeys(project.path);
-        var bundles    = Object.keys(manifest.bundles).sort();
-        var report     = { project: projectName, bundles: [] };
-        for (var i = 0; i < bundles.length; i++) {
-            report.bundles.push(checkBundle(project.path, manifest, bundles[i], sharedKeys));
+        var manifest = loadManifest(project.path); // still read here: the secrets-file chain needs it
+        var report   = { project: projectName, bundles: [] };
+        for (var i = 0; i < walked.bundles.length; i++) {
+            report.bundles.push(checkBundle(project.path, manifest, walked.bundles[i].bundle, walked.bundles[i].byKey));
         }
         emit(report);
     };
@@ -704,10 +604,10 @@ function Check(opt, cmd) {
      * @param {string} bundleName
      */
     var checkBundleOnly = function (projectName, bundleName) {
-        var project    = self.projects[projectName];
-        var manifest   = loadManifest(project.path);
-        var sharedKeys = computeSharedKeys(project.path);
-        var report     = { project: projectName, bundles: [checkBundle(project.path, manifest, bundleName, sharedKeys)] };
+        var project  = self.projects[projectName];
+        var walked   = secrets.getProjectRequiredKeys(project.path, { scope: self.scopeName, bundle: bundleName });
+        var manifest = loadManifest(project.path); // still read here: the secrets-file chain needs it
+        var report   = { project: projectName, bundles: [checkBundle(project.path, manifest, bundleName, walked.bundles[0].byKey)] };
         emit(report);
     };
 

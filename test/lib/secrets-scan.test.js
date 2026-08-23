@@ -168,40 +168,49 @@ describe('02 - argv parsing & dispatch', function () {
 // 03 — config-dir resolution (manifest src + JSON glob + shared/config)
 // ---------------------------------------------------------------------------
 
-describe('03 - config-dir resolution', function () {
+describe('03 - config-dir resolution (delegated to the shared walk)', function () {
+
+    // The walk itself (manifest src resolution, JSON_EXT globbing, dotfile /
+    // "* copy" skips, shared/config folding, requireJSON reads, key
+    // enumeration, scope-sibling overlay) moved to lib/secrets' sources
+    // module; its structural pins moved with it — see
+    // test/lib/secrets-sources.test.js §02. What the HANDLERS own now is the
+    // delegation: consume the one shared implementation, keep no local copy.
+    // (#B263 is the incident that motivated the single home: two hand-kept
+    // copies of "which sources does a bundle read" drifted.)
+
+    /**
+     * Code-only view for the negative pins below: drops comment lines and
+     * trailing line comments, so prose that legitimately NAMES a forbidden
+     * construct (to explain why the handler avoids it) cannot trip them.
+     */
+    function stripComments(src) {
+        return src.split('\n').filter(function (l) {
+            return !/^\s*(\/\/|\*|\/\*)/.test(l);
+        }).map(function (l) {
+            return l.replace(/\/\/.*$/, '');
+        }).join('\n');
+    }
 
     HANDLERS.forEach(function (h) {
         var name = h[0], src = h[1];
 
-        it(name + '.js resolves the bundle dir from manifest.bundles[name].src (openapi precedent)', function () {
-            assert.match(src, /manifest\.bundles\[bundleName\]\.src/);
-            assert.match(src, /return\s+manifest\.bundles\[bundleName\]\.src;/);
+        it(name + '.js delegates the config-source walk to lib.secrets (getProjectRequiredKeys)', function () {
+            assert.match(src, /secrets\.getProjectRequiredKeys\(/);
         });
 
-        it(name + '.js falls back to the bundle name when src is absent', function () {
-            assert.match(src, /return\s+bundleName;/);
+        it(name + '.js reads the manifest through the shared implementation (secrets.loadManifest)', function () {
+            assert.match(src, /secrets\.loadManifest\(/);
         });
 
-        it(name + '.js declares JSON_EXT = /\\.json$/', function () {
-            assert.match(src, /var\s+JSON_EXT\s*=\s*\/\\\.json\$\//);
-        });
-
-        it(name + '.js skips dotfiles and "* copy" siblings (matching loadBundleConfig)', function () {
-            assert.match(src, /\/\^\\\.\/\.test\(name\)/);    // /^\./.test(name)
-            assert.match(src, /\/\\s\+copy\/i\.test\(name\)/); // /\s+copy/i.test(name)
-        });
-
-        it(name + '.js walks the project-level shared/config dir', function () {
-            assert.match(src, /\/shared\/config/);
-        });
-
-        it(name + '.js reads JSON via requireJSON (comment-tolerant), never plain require', function () {
-            assert.match(src, /return\s+requireJSON\(filePath\)/);
-            assert.equal(/require\(\s*filePath\s*\)/.test(src), false);
-        });
-
-        it(name + '.js enumerates keys via lib.secrets.getRequiredKeys (on the effective merged config)', function () {
-            assert.match(src, /secrets\.getRequiredKeys\(effective\)/);
+        it(name + '.js keeps no local copy of the walk (code view)', function () {
+            var code = stripComments(src);
+            // anti-vacuity: the stripped view still holds the handler's real code
+            assert.ok(code.indexOf('var secrets = lib.secrets;') > -1,
+                'stripping emptied the corpus - the negatives below would pass vacuously');
+            assert.equal(/readdirSync/.test(code), false, name + '.js still globs config dirs locally');
+            assert.equal(/requireJSON\(/.test(code), false, name + '.js still parses config JSON locally');
+            assert.equal(/getRequiredKeys\(effective\)/.test(code), false, name + '.js still enumerates keys locally');
         });
     });
 });
@@ -548,13 +557,23 @@ describe('09 - scope overlay + env-file', function () {
             assert.match(src, /self\.scopeName\s*=\s*\(self\.params\s*&&\s*self\.params\.scope\)/);
         });
 
-        it(name + '.js derives the config_<scope>/ sibling from absDir + "_" + scope', function () {
-            assert.match(src, /absDir\s*\+\s*['"]_['"]\s*\+\s*self\.scopeName/);
+        it(name + '.js passes the scope INTO the shared walk (the walk no longer reads closure state)', function () {
+            assert.match(src, /getProjectRequiredKeys\([^)]*scope:\s*self\.scopeName/);
         });
+    });
 
-        it(name + '.js deep-merges scope over base via merge(JSON.clone(scopeContent), ..., false) (explicit override)', function () {
-            assert.match(src, /merge\(\s*JSON\.clone\(scopeContent\)[^)]*,\s*false\s*\)/);
-        });
+    // The walk-level scope-overlay pins (config_<scope> sibling derivation,
+    // merge(JSON.clone(scopeContent), ..., false)) moved with the walk — see
+    // test/lib/secrets-sources.test.js §02. check.js RETAINS its own scoped
+    // single-file reader (readScopedConfig, the #B263 settings/env machinery),
+    // which must stay merge-compatible with the walk:
+
+    it('check.js readScopedConfig derives the config_<scope>/ sibling like the shared walk', function () {
+        assert.match(checkSrc, /absDir\s*\+\s*['"]_['"]\s*\+\s*self\.scopeName/);
+    });
+
+    it('check.js readScopedConfig deep-merges scope over base with explicit override=false', function () {
+        assert.match(checkSrc, /merge\(\s*JSON\.clone\(scope\)[^)]*,\s*false\s*\)/);
     });
 
     it('check.js reads --env-file from self.params and defines loadEnvFile', function () {

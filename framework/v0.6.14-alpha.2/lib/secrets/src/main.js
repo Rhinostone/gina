@@ -11,7 +11,10 @@
  * @module lib/secrets
  * @description Substitutes `${secret:KEY}` placeholders in a merged bundle
  * config tree at config-load time. The default backend resolves keys from
- * `process.env`; a future iteration may add pluggable backends.
+ * the framework environment tier then `process.env`; `selectBackend` adds
+ * the declared-file tier (`settings.secrets.file`). The module also owns
+ * the shared config-source walk (`getProjectRequiredKeys`, from ./sources)
+ * that the `secrets:scan` / `secrets:check` CLIs enumerate keys with.
  *
  * **Syntax.** `${secret:KEY}` where `KEY` matches `^[A-Z_][A-Z0-9_]*$`.
  * The placeholder must be the entire JSON string value — mixed-content
@@ -66,6 +69,11 @@
 var defaultBackend = require('./backends/env');
 var fileBackend    = require('./backends/file');
 var envFile        = require('./env-file');
+// The config-source walk (./sources) is a FACTORY over this module's own
+// getRequiredKeys — instantiated here, at the composition root, so the two
+// files never require each other in a cycle. `getRequiredKeys` is a hoisted
+// function declaration, so passing it above its definition is safe.
+var sources        = require('./sources')(getRequiredKeys);
 
 /**
  * Regex matching an entire `${secret:KEY}` placeholder. The capture group
@@ -401,6 +409,18 @@ function selectBackend(config) {
 }
 
 module.exports = {
+    // Config-source walk (which `${secret:KEY}` placeholders does a project /
+    // bundle require, walked from the same sources `loadBundleConfig` reads),
+    // re-exported from ./sources so that every consumer — the secrets:scan and
+    // secrets:check CLIs today, any boot-time consumer tomorrow — walks the
+    // SAME source set. Two hand-kept copies of this walk drifted once already
+    // (#B263: the gate and the runtime consulted different sources); one
+    // implementation makes that disagreement structurally impossible. The
+    // leaf readers ride along for the CLI handlers' own single-file needs.
+    getProjectRequiredKeys: sources.getProjectRequiredKeys,
+    loadManifest: sources.loadManifest,
+    readJsonSafe: sources.readJsonSafe,
+    resolveBundleSrc: sources.resolveBundleSrc,
     resolve: resolve,
     getResolvedPaths: getResolvedPaths,
     getRequiredKeys: getRequiredKeys,

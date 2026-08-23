@@ -1,4 +1,3 @@
-var fs      = require('fs');
 var console = lib.logger;
 
 var CmdHelper = require('./../helper');
@@ -19,25 +18,13 @@ var CmdHelper = require('./../helper');
  *  gina secrets:scan @<project> --format=json
  *  gina secrets:scan @<project> --scope=<scope>
  *
- * Config sources walked, matching `core/config.js::loadBundleConfig`:
- *   - `<bundleSrc>/config/` per bundle, where `bundleSrc` comes from
- *     `manifest.bundles[<name>].src` (falling back to the bundle name).
- *   - the project-level `shared/config/`, which the loader merges into
- *     every bundle — so its keys are attributed to each bundle.
- * Every `.json` in those dirs is read (the loader globs the dir rather
- * than using a fixed whitelist); dotfiles and `* copy` files are skipped.
- *
- * With `--scope=<s>`, the sibling `config_<s>/` dir of each config dir
- * (e.g. `shared/config_production/`) is read-only overlaid on top of the
- * base via deep-merge (scope wins) — mirroring how a deploy applies its
- * per-scope config — so the report shows the *effective* keys that scope's
- * deploy will require. This is pure introspection: it does NOT change the
- * runtime config loader, which stays scope-agnostic (the deploy owns
- * per-scope selection).
- *
- * Caveat: this reports the *authored* placeholders on disk, not the merged
- * runtime config — correct today because placeholders are always authored
- * literals.
+ * The walk itself — which config sources a bundle reads, how the
+ * `--scope` overlay applies, which files are skipped — lives in
+ * `lib/secrets` (the sources module) and is consumed here through the
+ * registry, so this command, `secrets:check` and any future boot-time
+ * consumer enumerate the SAME source set by construction. See that
+ * module's header for the full walk semantics and the drift incident
+ * that motivated sharing it.
  *
  * @class Scan
  * @constructor
@@ -52,17 +39,6 @@ function Scan(opt, cmd) {
     var self = { format: 'text', scopeName: null };
 
     var secrets = lib.secrets;
-    var merge   = lib.merge;
-
-    /**
-     * Config files are JSON. The loader globs every `.json` in a config
-     * dir; this matches that, then drops dotfiles and `* copy` siblings.
-     *
-     * @inner
-     * @constant
-     * @type {RegExp}
-     */
-    var JSON_EXT = /\.json$/;
 
     /**
      * Parses `--format`, resolves project + optional bundle via CmdHelper,
@@ -111,7 +87,7 @@ function Scan(opt, cmd) {
         }
 
         if (bundleFilter) {
-            var manifest = loadManifest(self.projects[self.projectName].path);
+            var manifest = secrets.loadManifest(self.projects[self.projectName].path);
             if (manifest && manifest.bundles && !manifest.bundles[bundleFilter]) {
                 console.error('Bundle [ ' + bundleFilter + ' ] is not registered inside `@' + self.projectName + '`.');
                 process.exit(1);
@@ -125,178 +101,24 @@ function Scan(opt, cmd) {
         process.exit(0);
     };
 
+    // The config-dir walk itself (manifest read, dir globbing, scope overlay,
+    // key enumeration) moved to lib/secrets' sources module, consumed below
+    // via secrets.getProjectRequiredKeys — see that module's header for the
+    // walk semantics and the sharing rationale.
+
     /**
-     * Reads a JSON file with comment tolerance via `requireJSON`. Returns
-     * `null` on any I/O or parse error so callers can choose how to
-     * surface the failure.
+     * Shapes one walk entry into this command's per-bundle report block.
      *
      * @inner
      * @private
-     * @param {string} filePath
-     * @returns {object|null}
-     */
-    var readJsonSafe = function (filePath) {
-        try {
-            if ( !fs.existsSync(filePath) ) return null;
-            return requireJSON(filePath);
-        } catch (e) {
-            return null;
-        }
-    };
-
-    /**
-     * Loads `<projectPath>/manifest.json`. Returns `null` on failure.
-     *
-     * @inner
-     * @private
-     * @param {string} projectPath
-     * @returns {object|null}
-     */
-    var loadManifest = function (projectPath) {
-        return readJsonSafe(_(projectPath + '/manifest.json', true));
-    };
-
-    /**
-     * Resolves a bundle's source-dir (relative to the project root) from
-     * the manifest, mirroring `bundle:openapi`. Falls back to the bundle
-     * name when `src` is absent.
-     *
-     * @inner
-     * @private
-     * @param {object|null} manifest
-     * @param {string} bundleName
-     * @returns {string}
-     */
-    var resolveBundleSrc = function (manifest, bundleName) {
-        if ( manifest && manifest.bundles && manifest.bundles[bundleName] && manifest.bundles[bundleName].src ) {
-            return manifest.bundles[bundleName].src;
-        }
-        return bundleName;
-    };
-
-    /**
-     * Lists the `.json` files in `dir`, skipping dotfiles and `* copy`
-     * siblings — the same filtering `loadBundleConfig` applies. Returns a
-     * sorted list of bare filenames. Empty when the dir is absent.
-     *
-     * @inner
-     * @private
-     * @param {string} dir - Absolute config directory
-     * @returns {string[]}
-     */
-    var listJsonFiles = function (dir) {
-        if ( !fs.existsSync(dir) ) return [];
-        var entries;
-        try { entries = fs.readdirSync(dir); } catch (e) { return []; }
-        var out = [];
-        for (var i = 0; i < entries.length; i++) {
-            var name = entries[i];
-            if ( /^\./.test(name) ) continue;
-            if ( /\s+copy/i.test(name) ) continue;
-            if ( !JSON_EXT.test(name) ) continue;
-            out.push(name);
-        }
-        out.sort();
-        return out;
-    };
-
-    /**
-     * Reads every `.json` under `absDir`, enumerates its required secret
-     * keys via `lib.secrets.getRequiredKeys`, and records each key against
-     * its originating file (labelled with `relBase + '/' + filename`).
-     * Mutates `byKey` in place.
-     *
-     * When `--scope=<s>` is active (`self.scopeName`), the sibling
-     * `<absDir>_<scope>/` directory (e.g. `shared/config_production/`) is
-     * read-only overlaid on top of the base dir per config file, mirroring
-     * how a deploy applies its per-scope config: the scope file deep-merges
-     * over the base (scope wins on collisions, base back-fills) so the keys
-     * reported are the *effective* ones that scope's deploy will require.
-     * The scope file is JSON.clone'd before merge so cached content is not
-     * mutated. This is read-only introspection — it never touches the
-     * runtime config loader.
-     *
-     * @inner
-     * @private
-     * @param {string} absDir  - Absolute base config directory to read
-     * @param {string} relBase - Display prefix for file labels (e.g. `src/demo/config`)
-     * @param {Object<string, string[]>} byKey - Mutable KEY -> [files] map
-     */
-    var collectFromConfigDir = function (absDir, relBase, byKey) {
-        var scopeAbsDir  = self.scopeName ? (absDir + '_' + self.scopeName) : null;
-        var scopeRelBase = self.scopeName ? (relBase + '_' + self.scopeName) : null;
-
-        var baseNames  = listJsonFiles(absDir);
-        var scopeNames = scopeAbsDir ? listJsonFiles(scopeAbsDir) : [];
-
-        // union of config file names across base + scope-overlay dirs
-        var names = baseNames.slice();
-        for (var s = 0; s < scopeNames.length; s++) {
-            if (names.indexOf(scopeNames[s]) < 0) names.push(scopeNames[s]);
-        }
-
-        for (var f = 0; f < names.length; f++) {
-            var name         = names[f];
-            var baseContent  = (baseNames.indexOf(name) > -1) ? readJsonSafe(_(absDir + '/' + name, true)) : null;
-            var scopeContent = (scopeAbsDir && scopeNames.indexOf(name) > -1) ? readJsonSafe(_(scopeAbsDir + '/' + name, true)) : null;
-
-            // effective config for this scope: scope deep-merges over base (scope wins).
-            // override=false is explicit (not merge's default) so scope precedence stays
-            // correct even if lib/merge's default override ever changes.
-            var effective = scopeContent ? merge(JSON.clone(scopeContent), baseContent || {}, false) : baseContent;
-            if (!effective) continue;
-
-            var keys      = secrets.getRequiredKeys(effective);
-            var scopeKeys = scopeContent ? secrets.getRequiredKeys(scopeContent) : [];
-            for (var k = 0; k < keys.length; k++) {
-                // attribute the key to the layer that actually provides it in the effective config
-                var label = (scopeKeys.indexOf(keys[k]) > -1) ? (scopeRelBase + '/' + name) : (relBase + '/' + name);
-                if (!byKey[keys[k]]) byKey[keys[k]] = [];
-                if (byKey[keys[k]].indexOf(label) < 0) byKey[keys[k]].push(label);
-            }
-        }
-    };
-
-    /**
-     * Computes the shared-config KEY -> [files] map once per project. The
-     * loader merges `shared/config/` into every bundle, so these keys are
-     * attributed to each bundle.
-     *
-     * @inner
-     * @private
-     * @param {string} projectPath
-     * @returns {Object<string, string[]>}
-     */
-    var computeSharedByKey = function (projectPath) {
-        var byKey = Object.create(null);
-        collectFromConfigDir(_(projectPath + '/shared/config', true), 'shared/config', byKey);
-        return byKey;
-    };
-
-    /**
-     * Builds a required-secrets report for one bundle: the union of its
-     * own `config/` keys and the project's shared-config keys.
-     *
-     * @inner
-     * @private
-     * @param {string} projectPath
-     * @param {object|null} manifest
-     * @param {string} bundleName
-     * @param {Object<string, string[]>} sharedByKey - Pre-computed shared map
+     * @param {{bundle: string, byKey: Object<string, string[]>}} entry - One walk entry
      * @returns {{bundle:string, totalKeys:number, byKey:Object<string, string[]>}}
      */
-    var scanBundle = function (projectPath, manifest, bundleName, sharedByKey) {
-        var byKey = Object.create(null);
-        for (var sk in sharedByKey) {
-            byKey[sk] = sharedByKey[sk].slice();
-        }
-        var bundleSrc = resolveBundleSrc(manifest, bundleName);
-        var rel       = bundleSrc + '/config';
-        collectFromConfigDir(_(projectPath + '/' + rel, true), rel, byKey);
+    var toBundleReport = function (entry) {
         return {
-            bundle    : bundleName,
-            totalKeys : Object.keys(byKey).length,
-            byKey     : byKey
+            bundle    : entry.bundle,
+            totalKeys : Object.keys(entry.byKey).length,
+            byKey     : entry.byKey
         };
     };
 
@@ -310,14 +132,11 @@ function Scan(opt, cmd) {
         var report = { projects: [] };
         var names  = Object.keys(self.projects).sort();
         for (var i = 0; i < names.length; i++) {
-            var pp = self.projects[names[i]];
-            var mf = loadManifest(pp.path);
-            if (!mf || !mf.bundles) continue;
-            var sharedByKey = computeSharedByKey(pp.path);
-            var entry  = { project: names[i], bundles: [] };
-            var bnames = Object.keys(mf.bundles).sort();
-            for (var b = 0; b < bnames.length; b++) {
-                entry.bundles.push(scanBundle(pp.path, mf, bnames[b], sharedByKey));
+            var walked = secrets.getProjectRequiredKeys(self.projects[names[i]].path, { scope: self.scopeName });
+            if (!walked) continue;
+            var entry = { project: names[i], bundles: [] };
+            for (var b = 0; b < walked.bundles.length; b++) {
+                entry.bundles.push(toBundleReport(walked.bundles[b]));
             }
             report.projects.push(entry);
         }
@@ -332,18 +151,16 @@ function Scan(opt, cmd) {
      * @param {string} projectName
      */
     var scanProjectOnly = function (projectName) {
-        var project  = self.projects[projectName];
-        var manifest = loadManifest(project.path);
-        if (!manifest || !manifest.bundles) {
+        var project = self.projects[projectName];
+        var walked  = secrets.getProjectRequiredKeys(project.path, { scope: self.scopeName });
+        if (!walked) {
             console.error('Project @' + projectName + ' has no manifest.json or no bundles registered.');
             process.exit(1);
             return;
         }
-        var sharedByKey = computeSharedByKey(project.path);
-        var bundles     = Object.keys(manifest.bundles).sort();
-        var report      = { project: projectName, bundles: [] };
-        for (var i = 0; i < bundles.length; i++) {
-            report.bundles.push(scanBundle(project.path, manifest, bundles[i], sharedByKey));
+        var report = { project: projectName, bundles: [] };
+        for (var i = 0; i < walked.bundles.length; i++) {
+            report.bundles.push(toBundleReport(walked.bundles[i]));
         }
         emit(report);
     };
@@ -357,10 +174,9 @@ function Scan(opt, cmd) {
      * @param {string} bundleName
      */
     var scanBundleOnly = function (projectName, bundleName) {
-        var project     = self.projects[projectName];
-        var manifest    = loadManifest(project.path);
-        var sharedByKey = computeSharedByKey(project.path);
-        var report      = { project: projectName, bundles: [scanBundle(project.path, manifest, bundleName, sharedByKey)] };
+        var project = self.projects[projectName];
+        var walked  = secrets.getProjectRequiredKeys(project.path, { scope: self.scopeName, bundle: bundleName });
+        var report  = { project: projectName, bundles: [toBundleReport(walked.bundles[0])] };
         emit(report);
     };
 
