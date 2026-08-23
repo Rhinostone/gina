@@ -167,14 +167,16 @@ describe('02 - #B403 behavioral: one HTTP/2 transport failure notifies exactly o
         // on both transports, byte-independent of #B403. So this arm asserts
         // only what #B403 owns: whatever throwError activity remains must be a
         // framework-guard shape (marked), never the session handler's native
-        // connection error. Green today (one facade-catch entry) and green
-        // after a #B404 fix (zero entries) — red pre-#B403 (the native entry).
+        // connection error. Post-#B404 the facade delivers the error to the
+        // listener and NOTHING calls throwError here, so the wait keys on
+        // either signal (pre-#B404 it keyed on thrown.length alone, which the
+        // facade-catch entry satisfied) — red pre-#B403 (the native entry).
         var P = await freePort();
-        var h = makeInst();
+        var h = makeInst(), got = [];
         var handle = h.inst.query(h2Opts(P), {});
         assert.equal(typeof (handle && handle.onComplete), 'function');
-        handle.onComplete(function() {});
-        await waitFor(function() { return h.thrown.length; }, 3000);
+        handle.onComplete(function(err) { got.push(err); });
+        await waitFor(function() { return got.length || h.thrown.length; }, 3000);
         await hold(500);
         var native = h.thrown.filter(function(t) { return !/Controller Query Exception/.test(t.msg); });
         assert.deepStrictEqual(native, [],

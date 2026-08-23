@@ -4318,6 +4318,9 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
      *   A non-2xx upstream status rejects the promisified call with the plain
      *   `{status, error, message}` object; a connection failure rejects with a
      *   native `Error`.
+     *   `onComplete(cb)` itself follows the callback-form contract (#B404): on
+     *   failure `cb(err)` — the same shapes as above, with `data` undefined —
+     *   and on success `cb(false, data)`.
      *
      * An `async` callback's rejected promise is owned at every delivery seam
      * (#B399): it answers 500 instead of leaving the request hanging.
@@ -4404,7 +4407,9 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                     return _ownSyncCbThrow(_syncCbErr);
                 }
             }
-            self.emit('query#complete', err)
+            // #B404 by-catch — mirror the callback branch's return: without it the
+            // emitter branch fell through and the doomed query kept executing.
+            return self.emit('query#complete', err)
         }
 
 
@@ -5227,6 +5232,14 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                     }
 
                     try {
+                        // #B404 — error-path emits are single-argument, mirroring the
+                        // callback-form contract (callback(err) on failure, callback(false, data)
+                        // on success): deliver the payload as the error argument. Without this
+                        // guard the dispatch below dereferenced `data.status` with `data`
+                        // undefined and the catch misattributed the TypeError to the app callback.
+                        if ( typeof(data) == 'undefined' ) {
+                            return _ownAsyncCbRejection(cb(err))
+                        }
                         if ( data.status && !/^2/.test(data.status) && typeof(local.options.conf.server.coreConfiguration.statusCodes[data.status]) != 'undefined') {
                             return _ownAsyncCbRejection(cb(data))
                         }
@@ -6342,6 +6355,14 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                     }
 
                     try {
+                        // #B404 — error-path emits are single-argument, mirroring the
+                        // callback-form contract (callback(err) on failure, callback(false, data)
+                        // on success): deliver the payload as the error argument. Without this
+                        // guard the dispatch below dereferenced `data.status` with `data`
+                        // undefined and the catch misattributed the TypeError to the app callback.
+                        if ( typeof(data) == 'undefined' ) {
+                            return _ownAsyncCbRejection(cb(err))
+                        }
                         if ( data.status && !/^2/.test(data.status) && typeof(local.options.conf.server.coreConfiguration.statusCodes[data.status]) != 'undefined') {
                             _ownAsyncCbRejection(cb(data))
                         } else {
