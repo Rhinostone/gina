@@ -870,6 +870,20 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
     }
     // get configuration
     gna.getProjectConfiguration( async function onGettingProjectConfig(err, project) {
+    // #B406 — own the WHOLE boot frame. This callback is `async`, so a
+    // synchronous throw anywhere in its direct frame surfaces as a promise
+    // REJECTION, never an exception: the caller's try/catch in
+    // getProjectConfiguration() can never see it, and the process-level
+    // unhandledRejection net above only logs at error level — no `[ emerg`
+    // marker for start.js's startup watchdog (stdout-only, startup-only), no
+    // exit. Pre-fix, a boot-time crash here left the process alive but never
+    // started: the daemon's 60s startup timer was the only terminal, with no
+    // cause attached. The catch below routes every failure in this frame —
+    // sync throws today, any awaited rejection tomorrow — into abort(), the
+    // existing boot terminal (console.emerg + synchronous stderr flush +
+    // exit(1)), whose emerg line is what the watchdog matches on. The body
+    // keeps its original indentation.
+    try {
 
         if (err) {
             console.error(err.stack);
@@ -2343,7 +2357,17 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
             abort(err)
         }
 
-
+    // #B406 — single owned terminal for the whole boot frame (see the header
+    // comment on this callback). abort() reads err.stack through branches that
+    // assume an Error-shaped value, so a non-Error rejection (throw null /
+    // throw 'string') is coerced first — otherwise abort() itself would throw
+    // inside this catch and the rejection would escape back to the silent net.
+    } catch (bootErr) {
+        if ( !(bootErr instanceof Error) ) {
+            bootErr = new Error('boot frame rejected with a non-Error value: ' + String(bootErr));
+        }
+        abort(bootErr);
+    }
     });//EO onDoneGettingProjectConfiguration.
 });
 
