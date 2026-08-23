@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Fixed #B401 (docs accuracy) — `self.query()`''s JSDoc claimed the no-callback form returns a Promise; it returns a handle exposing `.onComplete(cb)`, which is not a thenable, so `await self.query({...})` resolved immediately with the handle and silently dropped the result. The JSDoc (and the online guide) now document the real contract and the supported `await` idiom — `await require(''util'').promisify(self.query)(options, {})` — including the rejection shapes (a non-2xx status rejects with the plain `{status, error, message}` object, a connection failure with a native `Error`), each verified against the runtime.'
-time: 2026-08-22T20:42:00+01:00
