@@ -45,33 +45,11 @@
 var envBackend = require('./env');
 var envFile    = require('../env-file');
 
-/**
- * Is `key` present in one of the environment tiers but carrying an EMPTY value?
- *
- * The env backend cannot answer this: it treats empty as unset by contract and
- * throws either way, so a caller that catches its throw knows only "not usable",
- * never "not there". This reads the raw slots to recover the distinction — used
- * solely to decide whether falling back to the file tier deserves a warning
- * (#B268), never to change which value is returned.
- *
- * Both tiers are checked because `getEnvVar()` itself rejects `''`
- * (`utils/helper.js` guards on `process.gina[key] != ''`), so an empty value in
- * the framework environment is invisible through the normal accessor.
- *
- * @inner
- * @private
- * @param {string} key - Placeholder key, e.g. `'DB_PASSWORD'`
- * @returns {boolean} `true` only when a tier holds `key` as an empty string
- */
-function isEnvPresentButEmpty(key) {
-    if (
-        typeof process.gina === 'object' && process.gina !== null &&
-        typeof process.gina[key] === 'string' && process.gina[key] === ''
-    ) {
-        return true;
-    }
-    return (typeof process.env[key] === 'string' && process.env[key] === '');
-}
+// The present-but-empty probe behind the #B268 warning moved to the env
+// backend (`envBackend.isPresentButEmpty`) when the exec backend arrived —
+// two lower tiers each carrying a private copy of "what does the environment
+// say" is the #B270/#B408 drift class. Same bytes, one home.
+var isEnvPresentButEmpty = envBackend.isPresentButEmpty;
 
 /**
  * Build a backend that reads the environment first and the given files second.

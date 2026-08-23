@@ -65,7 +65,7 @@ var CmdHelper = require('./../helper');
  * @param {object} cmd - The cmd dispatcher object (lib/cmd/index.js)
  */
 function Check(opt, cmd) {
-    var self = { format: 'text', anyUnset: false, scopeName: null, envName: null, envFile: null, envMap: null };
+    var self = { format: 'text', anyUnset: false, anyError: false, scopeName: null, envName: null, envFile: null, envMap: null };
 
     var secrets = lib.secrets;
     var merge   = lib.merge;
@@ -90,6 +90,7 @@ function Check(opt, cmd) {
         if ( !isCmdConfigured() ) return false;
 
         self.anyUnset = false;
+        self.anyError = false;
 
         for (var i = 3, len = process.argv.length; i < len; i++) {
             var arg = process.argv[i];
@@ -139,7 +140,11 @@ function Check(opt, cmd) {
                 return;
             }
             checkAll();
-            process.exit(self.anyUnset ? 1 : 0);
+            // #B409 — declaration errors fail the gate too: the runtime
+            // refuses to boot on them, so an exit keyed on unset keys alone
+            // green-lit a config that cannot start whenever the environment
+            // happened to carry the keys.
+            process.exit((self.anyUnset || self.anyError) ? 1 : 0);
             return;
         }
 
@@ -161,7 +166,8 @@ function Check(opt, cmd) {
             checkProjectOnly(self.projectName);
         }
 
-        process.exit(self.anyUnset ? 1 : 0);
+        // #B409 — same widening as the checkAll branch above.
+        process.exit((self.anyUnset || self.anyError) ? 1 : 0);
     };
 
     /**
@@ -467,6 +473,100 @@ function Check(opt, cmd) {
     // header for the walk semantics and the sharing rationale (#B263).
 
     /**
+     * Resolves the declared `settings.secrets.exec` tier: whispers the spec,
+     * validates it through the SAME shared implementation the runtime uses
+     * (`secrets.validateExecSpec`), then RUNS the declared command through the
+     * runtime's own fetch (`secrets.fetchExecMap` — same timeout default, same
+     * SIGKILL bound, same output contract), so this gate's verdict matches a
+     * boot's by construction. A validate-only mirror was rejected at design
+     * time: it would report every exec-supplied key UNSET — the #B263
+     * false-RED shape this command was built to prevent.
+     *
+     * @inner
+     * @private
+     * @param {string} projectPath
+     * @param {object|null} manifest
+     * @param {string} bundleName
+     * @param {object} execSpec - The declared (pre-substitution) `settings.secrets.exec` value
+     * @returns {{tier:string, declared:boolean, layers:Array, map:(object|null), origin:(object|null), errors:string[], exec:(object|null)}}
+     */
+    var resolveSecretsExecTier = function (projectPath, manifest, bundleName, execSpec) {
+        var out = { tier: 'exec', declared: true, layers: [], map: null, origin: null, errors: [], exec: null };
+
+        var resolvedSpec;
+        try {
+            resolvedSpec = whisper(buildReps(projectPath, manifest, bundleName), JSON.clone(execSpec));
+        } catch (whisperErr) {
+            out.errors.push('could not substitute tokens in `settings.secrets.exec`: ' + whisperErr.message);
+            return out;
+        }
+
+        var specErrors = secrets.validateExecSpec(resolvedSpec);
+        if (specErrors.length) {
+            var specMsg = specErrors[0].message;
+            if (specErrors[0].code === 'exec-command-unresolved-token') {
+                specMsg += ' — pass --scope/--env if it names one, since the runtime'
+                    + ' reads those from whatever launches the bundle';
+            }
+            out.errors.push(specMsg);
+            return out;
+        }
+
+        var map;
+        try {
+            map = secrets.fetchExecMap(resolvedSpec);
+        } catch (fetchErr) {
+            // The runtime REFUSES to boot on this — reporting it softer would
+            // green-light a config that cannot start (#B267's reasoning,
+            // exec edition).
+            out.errors.push(fetchErr.message + ' — the runtime REFUSES to boot on this');
+            return out;
+        }
+
+        out.map  = map;
+        out.exec = { command: resolvedSpec.command, keys: Object.keys(map).length };
+        return out;
+    };
+
+    /**
+     * Resolves whichever secrets tier the bundle declares — the file chain or
+     * the exec bridge — after the shared block-level validation
+     * (`secrets.validateBlock`: block shape, unknown-key refusal, file/exec
+     * exclusivity), which runs BEFORE either tier is touched, exactly as the
+     * runtime's `selectBackend` does. Same result shape as
+     * `resolveSecretsFileChain`, plus `tier` (`null` | `'file'` | `'exec'`)
+     * and, for the exec tier, an `exec: {command, keys}` descriptor.
+     *
+     * @inner
+     * @private
+     * @param {string} projectPath
+     * @param {object|null} manifest
+     * @param {string} bundleName
+     * @returns {{tier:(string|null), declared:boolean, layers:Array, map:(object|null), origin:(object|null), errors:string[], exec:(object|null)}}
+     */
+    var resolveSecretsChain = function (projectPath, manifest, bundleName) {
+        var out = { tier: null, declared: false, layers: [], map: null, origin: null, errors: [], exec: null };
+
+        var settings = readEffectiveSettings(projectPath, manifest, bundleName);
+        var block = (settings && typeof settings === 'object') ? settings.secrets : undefined;
+        if (typeof block === 'undefined' || block === null) return out;
+
+        var blockErrors = secrets.validateBlock(block);
+        if (blockErrors.length) {
+            out.declared = true;
+            out.errors.push(blockErrors[0].message);
+            return out;
+        }
+        if (typeof block.exec !== 'undefined' && block.exec !== null) {
+            return resolveSecretsExecTier(projectPath, manifest, bundleName, block.exec);
+        }
+        var fileOut = resolveSecretsFileChain(projectPath, manifest, bundleName);
+        fileOut.tier = fileOut.declared ? 'file' : null;
+        fileOut.exec = null;
+        return fileOut;
+    };
+
+    /**
      * Resolves one key across both tiers in the runtime's order: the
      * environment first, the declared file chain second. "Set" stays the env
      * backend's fail-closed rule at every tier — a non-empty string — so an
@@ -496,7 +596,14 @@ function Check(opt, cmd) {
         if (chain && chain.map) {
             var value = chain.map[key];
             if (typeof value === 'string' && value !== '') {
-                return { set: true, source: 'file', from: chain.origin[key] };
+                // The declared tier — file or exec; `sourceLabel` passes any
+                // non-'file' source through verbatim, so 'exec' labels ride
+                // for free. `from` is a per-layer path, a file-tier concept.
+                return {
+                    set: true,
+                    source: (chain.tier === 'exec') ? 'exec' : 'file',
+                    from: chain.origin ? chain.origin[key] : null
+                };
             }
         }
         return { set: false, source: null, from: null };
@@ -504,9 +611,11 @@ function Check(opt, cmd) {
 
     /**
      * Builds a check report for one bundle: every required key with its
-     * `SET`/`UNSET` status against both tiers, plus the resolved
-     * `settings.secrets.file` chain that formed the lower one. Flips
-     * `self.anyUnset` when a key is missing.
+     * `SET`/`UNSET` status against both tiers, plus whichever declared tier
+     * formed the lower one — the resolved `settings.secrets.file` chain or
+     * the `settings.secrets.exec` fetch (mutually exclusive by validation).
+     * Flips `self.anyUnset` when a key is missing and `self.anyError` when
+     * the declaration itself would refuse the boot (#B409).
      *
      * The chain is resolved per bundle, not per project: `settings.json` is a
      * per-bundle file and a declared path may embed `${bundle}`.
@@ -520,7 +629,12 @@ function Check(opt, cmd) {
      * @returns {{bundle:string, totalKeys:number, set:number, unset:number, keys:Array<{key:string, set:boolean, source:(string|null), from:(string|null)}>, secretsFile:object}}
      */
     var checkBundle = function (projectPath, manifest, bundleName, entryByKey) {
-        var chain = resolveSecretsFileChain(projectPath, manifest, bundleName);
+        var chain = resolveSecretsChain(projectPath, manifest, bundleName);
+
+        // #B409 — a declaration/fetch error means the runtime refuses to
+        // boot this bundle, so the gate must exit non-zero regardless of
+        // whether the environment happens to carry the keys.
+        if (chain.errors.length) { self.anyError = true; }
 
         var keys     = Object.keys(entryByKey).sort();
         var statuses = [];
@@ -537,11 +651,19 @@ function Check(opt, cmd) {
             unset     : keys.length - setCount,
             keys      : statuses,
             secretsFile : {
-                declared     : chain.declared,
+                declared     : (chain.declared && chain.tier !== 'exec'),
                 assumedScope : self.scopeAssumed || null,
                 assumedEnv   : self.envName || null,
                 layers       : chain.layers,
-                errors       : chain.errors
+                errors       : (chain.tier === 'exec') ? [] : chain.errors
+            },
+            secretsExec : {
+                declared     : (chain.tier === 'exec'),
+                assumedScope : self.scopeAssumed || null,
+                assumedEnv   : self.envName || null,
+                command      : (chain.exec) ? chain.exec.command : null,
+                keys         : (chain.exec) ? chain.exec.keys : 0,
+                errors       : (chain.tier === 'exec') ? chain.errors : []
             }
         };
     };
@@ -660,6 +782,7 @@ function Check(opt, cmd) {
     var emitTextBundle = function (br) {
         console.log('  ' + br.bundle + ':');
         emitTextChain(br.secretsFile);
+        emitTextExec(br.secretsExec);
         if (br.totalKeys === 0) {
             console.log('    No ${secret:KEY} placeholders found in config.');
             return;
@@ -715,6 +838,38 @@ function Check(opt, cmd) {
                         ? 'UNREADABLE (' + sf.layers[i].code + ')'
                         : 'ABSENT')));
         }
+    };
+
+    /**
+     * Renders the exec tier's line(s), mirroring `emitTextChain`'s shape for
+     * the file chain: the assumed scope/env (same reasoning — launch-time
+     * values this process cannot read), then either the errors — each one a
+     * verdict the runtime would refuse the boot on — or the fetch summary.
+     * Only the command's argv and a key COUNT are ever printed: the fetched
+     * values are the secrets payload and never reach the report.
+     *
+     * @inner
+     * @private
+     * @param {object} se - The `secretsExec` block from `checkBundle`
+     */
+    var emitTextExec = function (se) {
+        if (!se || !se.declared) return;
+
+        var assumed = [];
+        if (se.assumedScope) assumed.push('scope=' + se.assumedScope);
+        if (se.assumedEnv) assumed.push('env=' + se.assumedEnv);
+        console.log('    settings.secrets.exec'
+            + (assumed.length ? ' (assuming ' + assumed.join(', ') + ')' : '') + ':');
+
+        for (var e = 0; e < se.errors.length; e++) {
+            console.log('      ! ' + se.errors[e]);
+        }
+        if (se.errors.length) {
+            console.log('      ! exec tier skipped — keys below are checked against the environment only');
+            return;
+        }
+        console.log('      [exec] `' + (se.command ? se.command.join(' ') : '') + '`   fetched ('
+            + se.keys + ' keys)');
     };
 
     /**

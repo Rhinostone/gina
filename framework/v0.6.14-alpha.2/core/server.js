@@ -6938,6 +6938,12 @@ function Server(options) {
         ;
 
         //Reloading assets & files.
+        // ⚠️ Before ever uncommenting the refresh below, settle secrets-backend
+        // caching: `secrets.resolve` runs inside every config load, so with
+        // `settings.secrets.exec` declared this dead branch would re-run the
+        // operator's fetch command — a blocking child process — PER BUNDLE PER
+        // REQUEST in cacheless mode. Today the exec fetch runs once per bundle
+        // at boot only, precisely because this call site is dead.
         // if (!isCacheless) { // all but dev & debug
             callback(err, bundle, pathname, options.config, req, res, next)
         // } else {

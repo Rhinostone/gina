@@ -3128,10 +3128,15 @@ function Config(opt, contextResetNeeded) {
         // values. Fail-closed: backend throws on unset/empty values.
         //
         // The backend is the env-only default unless the bundle declares
-        // `settings.secrets.file`, in which case files are layered UNDER the
-        // environment (see lib/secrets/backends/file.js for why that way
-        // round). Selection is its own step so that an invalid `secrets`
-        // block reports as a config error rather than as a missing secret.
+        // `settings.secrets.file` (files layered UNDER the environment — see
+        // lib/secrets/backends/file.js for why that way round) or
+        // `settings.secrets.exec` (one operator-declared command whose JSON
+        // stdout layers under the environment the same way; its eager,
+        // SIGKILL-bounded fetch throws here on timeout/failure, so a wedged
+        // fetch is a FAILED boot, never a hung one). The two tiers are
+        // mutually exclusive by validation. Selection is its own step so
+        // that an invalid `secrets` block reports as a config error rather
+        // than as a missing secret.
         var secretsBackend;
         try {
             secretsBackend = secrets.selectBackend(self.envConf[bundle][env]);

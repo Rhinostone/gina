@@ -81,6 +81,46 @@ function resolve(key) {
     return value;
 }
 
+/**
+ * Is `key` present in one of the environment tiers but carrying an EMPTY value?
+ *
+ * `resolve()` cannot answer this: it treats empty as unset by contract and
+ * throws either way, so a caller that catches its throw knows only "not usable",
+ * never "not there". This reads the raw slots to recover the distinction — used
+ * solely to decide whether falling back to a lower tier (file or exec) deserves
+ * the #B268 warning, never to change which value is returned.
+ *
+ * Both tiers are checked because `getEnvVar()` itself rejects `''`
+ * (`utils/helper.js` guards on `process.gina[key] != ''`), so an empty value in
+ * the framework environment is invisible through the normal accessor.
+ *
+ * Lives HERE — beside the tiers it interrogates — rather than in each lower-tier
+ * backend: the file backend carried it privately, and a second copy in the exec
+ * backend would have been a third reading of "what does the environment say",
+ * the exact drift class #B270 and #B408 already paid for.
+ *
+ * @memberof module:lib/secrets/backends/env
+ * @function isPresentButEmpty
+ * @param {string} key - Placeholder key, e.g. `'DB_PASSWORD'`
+ * @returns {boolean} `true` only when a tier holds `key` as an empty string
+ *
+ * @example
+ * process.env.EMPTY_ONE = '';
+ * var env = require('./backends/env');
+ * env.isPresentButEmpty('EMPTY_ONE');   // → true
+ * env.isPresentButEmpty('ABSENT_ONE');  // → false
+ */
+function isPresentButEmpty(key) {
+    if (
+        typeof process.gina === 'object' && process.gina !== null &&
+        typeof process.gina[key] === 'string' && process.gina[key] === ''
+    ) {
+        return true;
+    }
+    return (typeof process.env[key] === 'string' && process.env[key] === '');
+}
+
 module.exports = {
-    resolve: resolve
+    resolve: resolve,
+    isPresentButEmpty: isPresentButEmpty
 };

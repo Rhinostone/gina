@@ -12,7 +12,9 @@
  * @description Substitutes `${secret:KEY}` placeholders in a merged bundle
  * config tree at config-load time. The default backend resolves keys from
  * the framework environment tier then `process.env`; `selectBackend` adds
- * the declared-file tier (`settings.secrets.file`). The module also owns
+ * the declared-file tier (`settings.secrets.file`) or the exec-bridge tier
+ * (`settings.secrets.exec` — mutually exclusive with `file`, both layered
+ * UNDER the environment). The module also owns
  * the shared config-source walk (`getProjectRequiredKeys`, from ./sources)
  * that the `secrets:scan` / `secrets:check` CLIs enumerate keys with.
  *
@@ -68,6 +70,7 @@
 
 var defaultBackend = require('./backends/env');
 var fileBackend    = require('./backends/file');
+var execBackend    = require('./backends/exec');
 var envFile        = require('./env-file');
 // Declaration validation is shared with the secrets:check CLI gate (#B408) —
 // pure and require-free, so it adds nothing to the zero-setup load path.
@@ -331,15 +334,30 @@ function getRequiredKeys(config) {
  * @memberof module:lib/secrets
  * @function selectBackend
  * @param {object} config - The merged per-bundle config (`envConf[bundle][env]`)
- * @returns {{resolve: function(string): string}} The env backend, or an env-over-file backend
- * @throws {Error} If a declared entry fails the shared declaration guards
- *   (./declaration): a non-string or whitespace-only entry, a `${secret:…}`
- *   placeholder, an unresolved `${…}` token, or an empty path segment (`//`).
+ * @returns {{resolve: function(string): string}} The env backend, an
+ *   env-over-file backend, or an env-over-exec backend — the two declared
+ *   tiers are mutually exclusive by validation
+ * @throws {Error} If the block or a declared tier fails the shared
+ *   declaration guards (./declaration): a non-object block, an unknown key,
+ *   both tiers declared at once; a file entry that is non-string /
+ *   whitespace-only / a `${secret:…}` placeholder / an unresolved `${…}`
+ *   token / an empty path segment (`//`); an exec spec whose command is not
+ *   a non-empty argv array of clean strings, or whose timeout is not a
+ *   positive integer. Also propagates the exec backend's eager-fetch
+ *   failures (timeout, missing binary, non-zero exit, bad output).
  *
  * @example
  * // settings.json:
  * //   "secrets": { "file": ["${homedir}/secrets.env",
  * //                         "${homedir}/${scope}/secrets.env"] }
+ * var backend = secrets.selectBackend(conf);
+ * secrets.resolve(conf, backend);
+ *
+ * @example
+ * // settings.json (exec bridge — the operator's own CLI does the fetch):
+ * //   "secrets": { "exec": { "command": ["sops", "decrypt",
+ * //                          "--output-type", "json",
+ * //                          "${project}/secrets.enc.json"] } }
  * var backend = secrets.selectBackend(conf);
  * secrets.resolve(conf, backend);
  */
@@ -349,39 +367,67 @@ function selectBackend(config) {
     }
     var content  = config.content;
     var settings = (content && typeof content === 'object') ? content.settings : null;
-    var declared = (settings && typeof settings === 'object' && settings.secrets)
-        ? settings.secrets.file
-        : undefined;
+    var block    = (settings && typeof settings === 'object') ? settings.secrets : undefined;
 
-    if (typeof declared === 'undefined' || declared === null) {
+    if (typeof block === 'undefined' || block === null) {
         return defaultBackend;
     }
 
-    var paths = Array.isArray(declared) ? declared : [declared];
-    if (!paths.length) {
-        // #B271 — `[]` disables the whole file tier exactly like `null`, but it is
-        // not one of the documented shapes, so an operator emptying the array to
-        // drop ONE layer silently drops the tier. Keep accepting it — an empty
-        // list genuinely means "no files", and refusing boot over an undocumented
-        // spelling would be a total outage for a harmless config — but say so once
-        // rather than disabling a security tier without a word.
-        console.warn('[ secrets ] `settings.secrets.file` is an empty array — the file tier is disabled. Use `null` to opt out explicitly, or list at least one path.');
-        return defaultBackend;
+    // Block-level guards first — shape, unknown-key refusal (runtime parity
+    // with the schema's `additionalProperties: false`; a typo'd key used to
+    // degrade SILENTLY to env-only), and the file/exec exclusivity rule with
+    // its `"file": null` escape hatch. Shared with the secrets:check gate
+    // (./declaration), like every guard below — #B408's lesson.
+    var blockErrors = declaration.validateBlock(block);
+    if (blockErrors.length) {
+        throw new Error(blockErrors[0].message);
     }
 
-    // The per-entry guards (#B271 entry shape incl. trim, the `secret:`
-    // placeholder refusal, the unresolved-token refusal, #B272's empty path
-    // segment) live in ./declaration, SHARED with the secrets:check CLI gate.
-    // #B408: two of those guards had drifted out of the checker's own copy —
-    // the gate green-lit configs this function refuses to boot — so the loop
-    // moved to one home, the same cure #B263 applied to the config-source
-    // walk. The full rationale for each guard travels with it.
-    var declErrors = declaration.validateFilePaths(paths);
-    if (declErrors.length) {
-        throw new Error(declErrors[0].message);
+    var declared = block.file;
+    if (typeof declared !== 'undefined' && declared !== null) {
+        var paths = Array.isArray(declared) ? declared : [declared];
+        if (!paths.length) {
+            // #B271 — `[]` disables the whole file tier exactly like `null`, but it is
+            // not one of the documented shapes, so an operator emptying the array to
+            // drop ONE layer silently drops the tier. Keep accepting it — an empty
+            // list genuinely means "no files", and refusing boot over an undocumented
+            // spelling would be a total outage for a harmless config — but say so once
+            // rather than disabling a security tier without a word.
+            console.warn('[ secrets ] `settings.secrets.file` is an empty array — the file tier is disabled. Use `null` to opt out explicitly, or list at least one path.');
+            return defaultBackend;
+        }
+
+        // The per-entry guards (#B271 entry shape incl. trim, the `secret:`
+        // placeholder refusal, the unresolved-token refusal, #B272's empty path
+        // segment) live in ./declaration, SHARED with the secrets:check CLI gate.
+        // #B408: two of those guards had drifted out of the checker's own copy —
+        // the gate green-lit configs this function refuses to boot — so the loop
+        // moved to one home, the same cure #B263 applied to the config-source
+        // walk. The full rationale for each guard travels with it.
+        var declErrors = declaration.validateFilePaths(paths);
+        if (declErrors.length) {
+            throw new Error(declErrors[0].message);
+        }
+
+        return fileBackend.build(paths);
     }
 
-    return fileBackend.build(paths);
+    var execSpec = block.exec;
+    if (typeof execSpec !== 'undefined' && execSpec !== null) {
+        var execErrors = declaration.validateExecSpec(execSpec);
+        if (execErrors.length) {
+            throw new Error(execErrors[0].message);
+        }
+        // build() runs the fetch EAGERLY — a timeout / missing binary /
+        // non-zero exit / bad output throws here, and the caller reports it
+        // as a per-bundle boot refusal, exactly like an unreadable file
+        // layer (#B267). Fail fast, never hang: the fetch is SIGKILL-bounded.
+        return execBackend.build(execSpec);
+    }
+
+    // `{}`, `{file: null}`, `{exec: null}` — the pinned inherit / opt-out
+    // shapes: same default backend instance, byte-identical to no block.
+    return defaultBackend;
 }
 
 module.exports = {
@@ -405,6 +451,13 @@ module.exports = {
     // secrets:check gate validates with the RUNTIME's own guards rather than
     // a hand-kept copy — the copy drifted twice (#B408; drift class #B263).
     validateFilePaths: declaration.validateFilePaths,
+    validateBlock: declaration.validateBlock,
+    validateExecSpec: declaration.validateExecSpec,
+    // The exec tier's fetch, re-exported so secrets:check runs the SAME
+    // spawn (same timeout, same SIGKILL bound, same output contract) the
+    // boot runs — a second spawn implementation in the checker would be the
+    // #B408 drift class on the semantics axis.
+    fetchExecMap: execBackend.fetchExecMap,
     SECRET_RE: SECRET_RE,
     // `.env`-style parsing, re-exported from ./env-file so that every reader
     // of a given file agrees on what it means. See that module's header for

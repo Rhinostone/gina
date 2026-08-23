@@ -158,7 +158,13 @@ describe('02 - argv parsing & dispatch', function () {
 
     it('check.js exits non-zero when any required key is unset', function () {
         // Two exit sites: the no-project (checkAll) branch and the project/bundle branch.
-        var matches = checkSrc.match(/process\.exit\(\s*self\.anyUnset\s*\?\s*1\s*:\s*0\s*\)/g) || [];
+        // #B409 realignment (approved) — the expression widened to
+        // (anyUnset || anyError): a declaration error means the runtime
+        // refuses the boot, so the gate fails on it too instead of exiting 0
+        // whenever the environment happened to carry the keys. The widened
+        // behaviour has its own pins in secrets-exec-backend.test.js §09;
+        // this test keeps its original claim: unset ⇒ non-zero.
+        var matches = checkSrc.match(/process\.exit\(\(\s*self\.anyUnset\s*\|\|\s*self\.anyError\s*\)\s*\?\s*1\s*:\s*0\s*\)/g) || [];
         assert.ok(matches.length >= 2, 'expected >= 2 anyUnset-driven exit sites, found ' + matches.length);
     });
 });
