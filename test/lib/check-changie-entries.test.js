@@ -373,3 +373,106 @@ describe('07 - batch behaviour', function () {
         assert.match(r.stderr, /cannot read file/);
     });
 });
+
+
+// ---------------------------------------------------------------------------
+// 08 — filename-encoded tracker id must be cited in the body (#B410)
+//
+// Regression: `Fixed-b406-boot-frame-ownership.yaml` shipped in 0.6.14 with
+// `#B406` in its filename and commit message but NOT in its body, so the
+// published CHANGELOG entry is unnumbered and id-based triage false-zeroes.
+// Measured across all 937 historical fragments, ~60 entries shipped this way.
+//
+// The allowlist matters: a generic `[a-z]+\d+` rule false-positives on real
+// filenames (`express5`, `npm12`, `s3`), and a false positive BLOCKS a commit.
+// ---------------------------------------------------------------------------
+
+describe('08 - filename id must be cited in the body (#B410)', function () {
+
+    var BODY = 'the boot frame now aborts loudly instead of hanging silently';
+
+    function frag(name, body) {
+        return write(name, [
+            'kind: Fixed',
+            "body: '" + body + "'",
+            'time: 2026-08-23T12:00:00Z',
+            ''
+        ].join('\n'));
+    }
+
+    // --- the extractor, directly ---
+
+    it('idFromFilename detects a b-family id', function () {
+        assert.equal(CHECK.idFromFilename('Fixed-b406-boot-frame-ownership.yaml'), '#B406');
+    });
+
+    it('idFromFilename detects a multi-letter family with digits inside (a11y)', function () {
+        assert.equal(CHECK.idFromFilename('Fixed-a11y3-error-document.yaml'), '#A11Y3');
+    });
+
+    it('idFromFilename binds ms6 as #MS6, not #M (alternation order)', function () {
+        assert.equal(CHECK.idFromFilename('Fixed-ms6-rate-limit.yaml'), '#MS6');
+    });
+
+    it('idFromFilename skips a date-named fragment', function () {
+        assert.equal(CHECK.idFromFilename('Fixed-20260327-some-slug.yaml'), '');
+    });
+
+    it('idFromFilename skips measured false positives (express5, npm12, s3)', function () {
+        assert.equal(CHECK.idFromFilename('Fixed-express5-engine-boot.yaml'), '');
+        assert.equal(CHECK.idFromFilename('Changed-npm12-readiness.yaml'), '');
+        assert.equal(CHECK.idFromFilename('Added-s3-storage-adapter.yaml'), '');
+    });
+
+    // --- end-to-end through the CLI ---
+
+    it('rejects a fragment whose filename names an id the body omits', function () {
+        var f = frag('Fixed-b406-boot-frame-ownership.yaml', BODY);
+        var r = run(f);
+        assert.equal(r.status, 1, 'expected rejection, got exit ' + r.status);
+        assert.match(r.stderr, /filename encodes #B406/);
+        assert.match(r.stderr, /#B410/);
+    });
+
+    it('accepts the same fragment once the body cites the id', function () {
+        var f = frag('Fixed-b406-cited.yaml', 'Fixed #B406 — ' + BODY);
+        assert.equal(run(f).status, 0);
+    });
+
+    it('accepts a date-named fragment with no id anywhere', function () {
+        var f = frag('Fixed-20260327-boot-frame.yaml', BODY);
+        assert.equal(run(f).status, 0);
+    });
+
+    it('does not false-positive on express5 / npm12 / s3 filenames', function () {
+        assert.equal(run(frag('Fixed-express5-engine-boot.yaml', BODY)).status, 0);
+        assert.equal(run(frag('Changed-npm12-readiness.yaml', BODY)).status, 0);
+        assert.equal(run(frag('Added-s3-storage-adapter.yaml', BODY)).status, 0);
+    });
+
+    it('reports the STRUCTURAL failure first when a fragment has both problems', function () {
+        // unquoted body AND a filename id the body omits — shape wins.
+        var f = write('Fixed-b407-both-problems.yaml', [
+            'kind: Fixed',
+            'body: unquoted body with a colon: here',
+            'time: 2026-08-23T12:00:00Z',
+            ''
+        ].join('\n'));
+        var r = run(f);
+        assert.equal(r.status, 1);
+        assert.match(r.stderr, /unquoted `body:`/);
+        assert.doesNotMatch(r.stderr, /filename encodes/);
+    });
+
+    it('prints only the id footer on a pure id failure, not the quoting advice', function () {
+        var r = run(frag('Fixed-b406-footer-scope.yaml', BODY));
+        assert.equal(r.status, 1);
+        assert.match(r.stderr, /must cite that/);
+        assert.doesNotMatch(r.stderr, /safe body shapes/);
+    });
+
+    it('validateBodyCitesId is exported and skips an unrecognised filename', function () {
+        assert.equal(typeof CHECK.validateBodyCitesId, 'function');
+        assert.equal(CHECK.validateBodyCitesId('whatever.yaml', "body: 'x'"), '');
+    });
+});
