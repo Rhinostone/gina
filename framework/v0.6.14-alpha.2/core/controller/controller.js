@@ -4318,9 +4318,11 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
      *   A non-2xx upstream status rejects the promisified call with the plain
      *   `{status, error, message}` object; a connection failure rejects with a
      *   native `Error`.
-     *   `onComplete(cb)` itself follows the callback-form contract (#B404): on
-     *   failure `cb(err)` — the same shapes as above, with `data` undefined —
-     *   and on success `cb(false, data)`.
+     *   `onComplete(cb)` itself delivers err-first (#B404): on failure
+     *   `cb(err)` with `data` undefined — a plain `{status, error}` object for
+     *   a non-2xx status or a transport failure, a native `Error` for a
+     *   pre-transport failure (missing host, unreadable certificate, open
+     *   circuit) — and on success `cb(false, data)`.
      *
      * An `async` callback's rejected promise is owned at every delivery seam
      * (#B399): it answers 500 instead of leaving the request hanging.
