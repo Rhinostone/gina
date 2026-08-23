@@ -4698,3 +4698,361 @@ describe('39 - resumeRequest replays a halted GET request (behavioral)', functio
         });
     });
 });
+
+
+
+// 40 — #B399 (query delivery seams): every app-callback delivery in the query
+// machinery owns an async callback's rejection. Pre-fix (measured on the
+// shipped bytes, three tiers × both transports): a SYNC throw inside the app
+// callback was caught only by the two success-delivery guards, while an
+// `async` callback's rejected promise passed through every bare
+// `callback(...)` / `cb(...)` delivery unowned — no response, the request hung
+// to client/proxy timeout, the rejection floated to the process-level handler.
+// Post-fix ONE constructor-scope `_ownAsyncCbRejection` helper wraps all 22
+// delivery expressions (4 facade `cb` sites + 18 direct `callback` sites): a
+// thenable return gets a `.catch` routing to the same throwError shape the
+// sync-delivery catches build (flat 500); sync behaviour at every wrapped site
+// is byte-unchanged. 40a pins the shipped text; 40b drives the REAL code
+// (createTestInstance + real query() + real/dead local upstreams) — no
+// replica, so there is nothing to drift.
+describe('40a - #B399 query delivery seams own an async callback rejection: source pins', function() {
+
+    var src = fs.readFileSync(SOURCE, 'utf8');
+    function countOf(hay, needle) { return hay.split(needle).length - 1; }
+    // line-filter comment strip (the error-ref.test.js idiom) — the dead
+    // commented-out query blocks carry the sync-catch message too
+    function stripLineComments(text) {
+        return text.split('\n').filter(function (l) { return !/^\s*\/\//.test(l); }).join('\n');
+    }
+
+    it('exactly ONE constructor-scope helper, defined before this.query', function() {
+        var DEF = 'var _ownAsyncCbRejection = function(result)';
+        assert.equal(countOf(src, DEF), 1, 'a single shared definition (the facade-local copies are gone)');
+        assert.ok(src.indexOf(DEF) < src.indexOf('this.query = function(options, data, callback)'),
+            'defined above this.query so every delivery site reaches it');
+        var b = src.slice(src.indexOf(DEF), src.indexOf('return result;', src.indexOf(DEF)));
+        assert.ok(b.indexOf("if ( result && typeof(result.then) == 'function' )") > -1, 'thenable check — plain callbacks mint zero promises');
+        assert.ok(b.indexOf('.catch(function(asyncErr)') > -1, 'rejection handler');
+        assert.ok(b.indexOf('exception.status = 500;') > -1, 'flat 500');
+        assert.ok(b.indexOf('self.throwError(exception);') > -1, 'routes to throwError');
+    });
+
+    it('all 4 facade cb sites and all 18 direct callback sites are wrapped', function() {
+        assert.equal(countOf(src, '_ownAsyncCbRejection(cb(data))'), 2, 'facade data-status branch, both transports');
+        assert.equal(countOf(src, '_ownAsyncCbRejection(cb(err, data))'), 2, 'facade success branch, both transports');
+        assert.equal(countOf(src, '_ownAsyncCbRejection(callback('), 18, 'every direct delivery expression (query prep + both transport bodies)');
+    });
+
+    it('the two facades register the guard inside the sync-guard try (both transports)', function() {
+        var OPENER = 'onComplete  : function(cb) {'; // two-space form — the query facades only (the store facade differs)
+        assert.equal(countOf(src, OPENER), 2, 'expected exactly the two query facades');
+        var seen = 0, from = 0;
+        for (;;) {
+            var o = src.indexOf(OPENER, from);
+            if (o === -1) { break; }
+            var block  = src.slice(o, src.indexOf('} catch (e) {', o) + 1);
+            var onceAt = block.indexOf("self.once('query#complete'");
+            var tryAt  = block.lastIndexOf('try {');
+            var call1  = block.indexOf('_ownAsyncCbRejection(cb(data))');
+            var call2  = block.indexOf('_ownAsyncCbRejection(cb(err, data))');
+            assert.ok(onceAt > -1 && tryAt > onceAt, 'the sync-guard try opens inside the listener');
+            assert.ok(call1 > tryAt && call2 > call1, 'both wrapped calls sit inside the sync-guard try');
+            seen++;
+            from = o + OPENER.length;
+        }
+        assert.equal(seen, 2, 'both query facades verified');
+    });
+
+    it('the async guard has ONE marker; the four live sync-delivery catches are untouched', function() {
+        assert.equal(countOf(src, 'Controller Query Exception on async callback rejection.'), 1, 'the async marker lives only in the shared helper');
+        var live = stripLineComments(src);
+        assert.equal(countOf(live, 'Controller Query Exception while catching back.'), 4,
+            '2 facade + 2 direct-delivery sync catches stay live (comment-stripped census)');
+        // instrument control (can-fail): the UNstripped source also carries the
+        // dead commented-out query blocks — the strip must be doing real work
+        assert.ok(countOf(src, 'Controller Query Exception while catching back.') > 4,
+            'control: the comment strip is load-bearing, not vacuous');
+    });
+});
+
+describe('40b - #B399 query delivery seams: behavioral, real bytes', function() {
+
+    // Same standalone bootstrap idiom as §39 — controller.js loads outside a
+    // bundle. The context seeds cover what query()'s paths unconditionally
+    // dereference (protocol/scheme fallback, credentials.ca, and the HTTP/1
+    // error handler's gina.ports lookup); they are installed in before() so
+    // earlier describes never see them.
+    var before40 = require('node:test').before;
+    var http40  = require('http');
+    var http240 = require('http2');
+    var net40   = require('net');
+    var FW40 = require('../fw');
+    process.env.NODE_PATH = (process.env.NODE_PATH ? process.env.NODE_PATH + path.delimiter : '') + FW40;
+    require('module').Module._initPaths();
+    require(path.join(FW40, 'helpers'));
+    require(path.join(FW40, '..', '..', 'utils', 'prototypes'));
+    setPath('gina', { core: path.join(FW40, 'core') });
+    var SuperController40 = require(SOURCE);
+
+    before40(function() {
+        setContext('bundle', 'tb40');
+        setContext('env', 'dev');
+        setContext('gina', {
+            ports: { 'http/1.1': { http: {} }, 'http/2.0': { http: {} } },
+            config: { envConf: { tb40: { dev: {
+                server: { resolvers: [], credentials: {}, protocol: 'http/1.1', scheme: 'http', port: 65530 },
+                host: '127.0.0.1', hostname: 'http://127.0.0.1:65530'
+            } } } }
+        });
+    });
+
+    function settle() { return new Promise(function(resolve) { setImmediate(resolve); }); }
+    function gate() { var r; var p = new Promise(function(res) { r = res; }); return { p: p, resolve: r }; }
+    function freePort() {
+        return new Promise(function(resolve) {
+            var srv = net40.createServer();
+            srv.listen(0, '127.0.0.1', function() {
+                var p = srv.address().port;
+                srv.close(function() { resolve(p); });
+            });
+        });
+    }
+
+    // Deterministic teardown for the real-server arms: the framework caches
+    // the HTTP/2 client session (serverInstance._cached) and node keeps h1
+    // keep-alive sockets alive — on node 22 the lingering handles held the
+    // file's event loop open past the 120s file timeout (all subtests green,
+    // file not ok). Destroy both sides explicitly; harmless when nothing is
+    // cached.
+    function destroyClientHandles(h) {
+        try { h.inst.serverInstance._cached.forEach(function(v) { if (v && typeof v.destroy === 'function') { v.destroy(); } }); } catch (e) {}
+        try { (h.inst.serverInstance._http2Sessions || []).forEach(function(sess) { if (sess && typeof sess.destroy === 'function') { sess.destroy(); } }); } catch (e) {}
+    }
+
+    function makeInst40() {
+        var inst = SuperController40.createTestInstance({
+            req: { url: '/x', method: 'GET', headers: {}, routing: { rule: 'r40', namespace: 'default', param: {} }, params: {}, get: {}, post: {} },
+            res: { setHeader: function(){}, end: function(){}, writeHead: function(){}, getHeaders: function(){ return {}; }, statusCode: 200 },
+            options: {
+                conf: {
+                    bundle: 'tb40', encoding: 'utf-8',
+                    server: { protocol: 'http/1.1', scheme: 'http',
+                              coreConfiguration: { statusCodes: { '500': 'Internal Server Error', '503': 'Service Unavailable' }, mime: { json: 'application/json', txt: 'text/plain' } },
+                              supportedRequestMethods: { get: 1 } },
+                    content: { routing: { r40: {} } }
+                },
+                rule: 'r40', control: 'act', bundle: 'tb40', controller: '/controllers/t40.js'
+            }
+        });
+        inst.serverInstance = { _cached: new Map(), _cachePath: '/tmp/gina-t40', _cacheIsEnabled: 'false', _http2Sessions: [] };
+        var thrown = [];
+        inst.throwError = function() {
+            var a = arguments[0];
+            thrown.push((a instanceof Error) ? { msg: a.message, status: a.status } : { msg: String(a && a.message || a), status: a && a.status });
+        };
+        return { inst: inst, thrown: thrown };
+    }
+
+    // Facade drive: the manual emit below is SYNCHRONOUS, so it always wins
+    // the race against the async connect failure at the dead port; the network
+    // error then lands in an already-consumed .once (HTTP/1) or the
+    // transport's own error path (HTTP/2, which may call throwError on its
+    // own) — which is why every assertion FILTERS the spy by its own marker
+    // instead of counting totals.
+    function driveFacade(h, cb, proto) {
+        var isH2 = proto === 'http/2.0';
+        var handle = h.inst.query({
+            protocol: proto || 'http/1.1', scheme: 'http',
+            hostname: isH2 ? 'http://127.0.0.1:65530' : '127.0.0.1', host: '127.0.0.1',
+            port: 65530, path: '/x', method: 'GET', requestTimeout: '1s',
+            headers: { 'content-type': 'application/json' }
+        }, {});
+        assert.equal(typeof (handle && handle.onComplete), 'function', 'query() without a callback must return the {onComplete} handle');
+        handle.onComplete(cb);
+        h.inst.emit('query#complete', false, { ok: true });
+        return handle;
+    }
+    function ownMatches(thrown, re) {
+        return thrown.filter(function(t) { return re.test(t.msg); });
+    }
+
+    it('facade baseline: a plain callback is invoked (false, data), no guard activity', async function() {
+        var h = makeInst40(), got = [];
+        driveFacade(h, function(err, data) { got.push([err, data && data.ok]); });
+        await settle();
+        assert.deepStrictEqual(got, [[false, true]]);
+        assert.equal(ownMatches(h.thrown, /Controller Query Exception/).length, 0);
+    });
+
+    it('facade regression: a SYNC callback throw still routes to the sync catch (throwError 500)', async function() {
+        var h = makeInst40();
+        driveFacade(h, function() { throw new Error('t40-sync-boom'); });
+        await settle();
+        var m = ownMatches(h.thrown, /t40-sync-boom/);
+        assert.equal(m.length, 1, 'the sync throw must reach throwError exactly once');
+        assert.match(m[0].msg, /Controller Query Exception while catching back\./);
+        assert.equal(m[0].status, 500);
+    });
+
+    it('facade: an async callback rejection is owned — throwError(500), async marker, nothing floats (HTTP/1)', async function() {
+        var h = makeInst40();
+        driveFacade(h, async function() { throw new Error('t40-async-boom'); });
+        await settle();
+        var m = ownMatches(h.thrown, /t40-async-boom/);
+        assert.equal(m.length, 1, 'the rejection must reach throwError (pre-fix measured: 0 + an unhandledRejection)');
+        assert.match(m[0].msg, /Controller Query Exception on async callback rejection\./);
+        assert.equal(m[0].status, 500);
+        // node:test fails the active test on any REAL unhandled rejection —
+        // passing IS the nothing-floats assertion.
+    });
+
+    it('facade: an async callback rejection is owned through the HTTP/2 facade too', async function() {
+        var h = makeInst40();
+        driveFacade(h, async function() { throw new Error('t40-h2-async-boom'); }, 'http/2.0');
+        await settle();
+        var m = ownMatches(h.thrown, /t40-h2-async-boom/);
+        assert.equal(m.length, 1, 'the rejection must reach throwError through the HTTP/2 facade');
+        assert.match(m[0].msg, /Controller Query Exception on async callback rejection\./);
+        assert.equal(m[0].status, 500);
+        destroyClientHandles(h);
+    });
+
+    it('facade: an async callback that RESOLVES stays silent — no false positive', async function() {
+        var h = makeInst40();
+        driveFacade(h, async function() { return 'fine'; });
+        await settle();
+        assert.equal(ownMatches(h.thrown, /Controller Query Exception/).length, 0, 'a resolving thenable must not trigger the guard');
+    });
+
+    it('a non-Error rejection reason is String()-coerced into the exception detail', async function() {
+        var h = makeInst40();
+        driveFacade(h, function() { return Promise.reject(null); });
+        await settle();
+        var m = ownMatches(h.thrown, /Controller Query Exception on async callback rejection\./);
+        assert.equal(m.length, 1, 'a plain function returning a rejected promise is a thenable result too');
+        assert.ok(/null$/.test(m[0].msg), 'String(null) must close the detail');
+        assert.equal(m[0].status, 500);
+    });
+
+    it('a callback that responded before rejecting still reaches throwError (the #B31 released-response seam decides the outcome)', async function() {
+        // renderTEXT() is the lightest terminal exit — it releases
+        // local.req/res/next. The async guard then builds its exception from
+        // local.options (which survives release) and calls self.throwError;
+        // on a live instance the real throwError absorbs the late call per
+        // #B31 (§22 owns that pin) — the spy here proves the guard itself
+        // still fires post-release.
+        var h = makeInst40();
+        driveFacade(h, async function() {
+            h.inst.renderTEXT('done');
+            throw new Error('t40-late-boom');
+        });
+        await settle();
+        var m = ownMatches(h.thrown, /t40-late-boom/);
+        assert.equal(m.length, 1, 'the late rejection must still reach throwError');
+        assert.match(m[0].msg, /Controller Query Exception on async callback rejection\./);
+    });
+
+    it('DIRECT callback, HTTP/1, real upstream 200: an async rejection is owned (the documented form)', async function() {
+        var srv = http40.createServer(function(q, r) { r.writeHead(200, { 'content-type': 'application/json' }); r.end('{"ok":true}'); });
+        await new Promise(function(res) { srv.listen(0, '127.0.0.1', res); });
+        try {
+            var port = srv.address().port;
+            var h = makeInst40(), g = gate();
+            h.inst.query({ protocol: 'http/1.1', scheme: 'http', hostname: '127.0.0.1', host: '127.0.0.1',
+                           port: port, path: '/x', method: 'GET', requestTimeout: '2s',
+                           headers: { 'content-type': 'application/json' } }, {},
+                async function(err, data) { g.resolve([err, data && data.ok]); throw new Error('t40-h1-direct-boom'); });
+            var inv = await g.p;
+            await settle(); await settle();
+            assert.deepStrictEqual(inv, [false, true], 'the success delivery must invoke the direct callback');
+            var m = ownMatches(h.thrown, /t40-h1-direct-boom/);
+            assert.equal(m.length, 1, 'the rejection must reach throwError (pre-fix measured: floated)');
+            assert.match(m[0].msg, /Controller Query Exception on async callback rejection\./);
+            assert.equal(m[0].status, 500);
+        } finally {
+            destroyClientHandles(h);
+            if (typeof srv.closeAllConnections === 'function') { srv.closeAllConnections(); }
+            srv.close();
+        }
+    });
+
+    it('DIRECT callback, HTTP/2, real upstream 200: an async rejection is owned', async function() {
+        var srv = http240.createServer();
+        var srvSessions = [];
+        srv.on('session', function(sess) { srvSessions.push(sess); });
+        srv.on('stream', function(stream) { stream.respond({ ':status': 200, 'content-type': 'application/json' }); stream.end('{"ok":true}'); });
+        await new Promise(function(res) { srv.listen(0, '127.0.0.1', res); });
+        try {
+            var port = srv.address().port;
+            var h = makeInst40(), g = gate();
+            h.inst.query({ protocol: 'http/2.0', scheme: 'http', hostname: 'http://127.0.0.1:' + port, host: '127.0.0.1',
+                           port: port, path: '/x', method: 'GET', requestTimeout: '2s',
+                           headers: { 'content-type': 'application/json' } }, {},
+                async function(err, data) { g.resolve([err, data && data.ok]); throw new Error('t40-h2-direct-boom'); });
+            var inv = await g.p;
+            await settle(); await settle();
+            assert.deepStrictEqual(inv, [false, true], 'the success delivery must invoke the direct callback');
+            var m = ownMatches(h.thrown, /t40-h2-direct-boom/);
+            assert.equal(m.length, 1, 'the rejection must reach throwError');
+            assert.match(m[0].msg, /Controller Query Exception on async callback rejection\./);
+            assert.equal(m[0].status, 500);
+        } finally {
+            destroyClientHandles(h);
+            srvSessions.forEach(function(sess) { try { sess.destroy(); } catch (e) {} });
+            srv.close();
+        }
+    });
+
+    it('DIRECT callback, HTTP/1, transport-error delivery (dead port): an async rejection is owned', async function() {
+        var port = await freePort();
+        var h = makeInst40(), g = gate();
+        h.inst.query({ protocol: 'http/1.1', scheme: 'http', hostname: '127.0.0.1', host: '127.0.0.1',
+                       port: port, path: '/x', method: 'GET', requestTimeout: '2s',
+                       headers: { 'content-type': 'application/json' } }, {},
+            async function(err) { g.resolve(!!err); throw new Error('t40-h1-errpath-boom'); });
+        var gotErr = await g.p;
+        await settle(); await settle();
+        assert.equal(gotErr, true, 'the error delivery must hand the callback a truthy err');
+        var m = ownMatches(h.thrown, /t40-h1-errpath-boom/);
+        assert.equal(m.length, 1, 'the rejection must reach throwError (pre-fix measured: floated)');
+        assert.match(m[0].msg, /Controller Query Exception on async callback rejection\./);
+        assert.equal(m[0].status, 500);
+        destroyClientHandles(h);
+    });
+
+    it('DIRECT callback, HTTP/2, transport-error delivery (dead port): an async rejection is owned', async function() {
+        var port = await freePort();
+        var h = makeInst40(), g = gate();
+        h.inst.query({ protocol: 'http/2.0', scheme: 'http', hostname: 'http://127.0.0.1:' + port, host: '127.0.0.1',
+                       port: port, path: '/x', method: 'GET', requestTimeout: '2s',
+                       headers: { 'content-type': 'application/json' } }, {},
+            async function(err) { g.resolve(!!err); throw new Error('t40-h2-errpath-boom'); });
+        var gotErr = await g.p;
+        await settle(); await settle();
+        assert.equal(gotErr, true, 'the typed-error delivery must hand the callback a truthy err');
+        var m = ownMatches(h.thrown, /t40-h2-errpath-boom/);
+        assert.equal(m.length, 1, 'the rejection must reach throwError');
+        assert.match(m[0].msg, /Controller Query Exception on async callback rejection\./);
+        assert.equal(m[0].status, 500);
+        destroyClientHandles(h);
+    });
+
+    it('SUBTRACT — the pre-fix bare dispatch discards the rejection (inline pre-fix listener shape)', async function() {
+        // Pre-fix listener shape: bare `return cb(err, data)` inside a
+        // sync-only try/catch — the pre-#B399-facade bytes. The promise is
+        // pre-absorbed: node:test fails the active test on any REAL unhandled
+        // rejection, so the floats-to-process half of the pre-fix behaviour
+        // is carried by the measured probe record, not re-created here.
+        var h = makeInst40();
+        var p = Promise.reject(new Error('unowned'));
+        p.catch(function() {});
+        var cb = function() { return p; };
+        h.inst.once('query#complete', function(err, data) {
+            try { return cb(err, data); } catch (e) { h.inst.throwError(new Error('sync-only')); }
+        });
+        h.inst.emit('query#complete', false, { ok: true });
+        await settle();
+        assert.equal(ownMatches(h.thrown, /Controller Query Exception|unowned|sync-only/).length, 0,
+            'bare dispatch: the rejection never reaches throwError — the pre-fix failure mode');
+    });
+});
