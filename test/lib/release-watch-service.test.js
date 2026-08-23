@@ -61,8 +61,25 @@ function sleep(ms) {
  * @param {string} content
  * @returns {string}
  */
-function writeFile(root, rel, content) {
+function writeFile(root, rel, content, sameLengthOk) {
     var abs = path.join(root, rel);
+    // #B411 — the release fingerprint is `relpath|size|floor(mtimeMs)`, so an
+    // edit that preserves BYTE LENGTH is detectable only by the millisecond of
+    // mtime. When such a write lands in the baseline stamp's own tick the
+    // fingerprint does not move, the sweep sees nothing, and the awaiting test
+    // times out with no clue why — which is exactly how S.19 flaked across
+    // three release cuts. Fail loudly at the write instead of mysteriously
+    // later. Pass sameLengthOk:true when a test is deliberately probing the
+    // mtime-only path.
+    if (!sameLengthOk && fs.existsSync(abs)) {
+        var prev = fs.readFileSync(abs, 'utf8');
+        assert.notStrictEqual(
+            Buffer.byteLength(content), Buffer.byteLength(prev),
+            'writeFile(' + rel + '): replacement is the same byte length as the ' +
+            'existing content, so the fingerprint can only change via mtime (#B411). ' +
+            'Change the length, or pass sameLengthOk:true if that is the point.'
+        );
+    }
     fs.mkdirSync(path.dirname(abs), { recursive: true });
     fs.writeFileSync(abs, content);
     return abs;
@@ -260,7 +277,9 @@ describe('release-watch-service — state machine (behavioral, injected seams)',
         writeFile(proj.root, 'src/web/templates/html/index.html', 'edited-template');
         var got = await waitFor(function() { return rw.getStatus().severity === 'restart'; });
         assert.ok(got, 'restart escalation expected');
-        writeFile(proj.root, 'src/web/public/css/app.css', 'b{}');
+        // 4 bytes, not 3: a same-length swap over 'a{}' would be invisible to the
+        // fingerprint, and this assertion would then pass vacuously (#B411).
+        writeFile(proj.root, 'src/web/public/css/app.css', 'bb{}');
         await sleep(T.sweep * 4);
         assert.strictEqual(rw.getStatus().severity, 'restart', 'must not de-escalate');
     });
@@ -494,7 +513,8 @@ describe('release-watch-service — state machine (behavioral, injected seams)',
         var proj = mkProject();
         var rec = armService(proj);
         // phase 1 — assets-class staleness
-        writeFile(proj.root, 'src/web/public/css/app.css', 'phase1{}');
+        // NB: length differs from the seed on purpose — see writeFile (#B411).
+        writeFile(proj.root, 'src/web/public/css/app.css', 'phase-1{}');
         await waitFor(function() { return rw.getStatus().severity === 'assets'; });
         // phase 2 — rebuild; the real build stamps at BUILD START (pre-edit)…
         rw.requestRebuild({ restart: 'auto' });
@@ -523,7 +543,8 @@ describe('release-watch-service — state machine (behavioral, injected seams)',
         var proj = mkProject();
         var rec = armService(proj);
         // an operator runs `gina bundle:build` in a terminal: src edit + restamp
-        writeFile(proj.root, 'src/web/controllers/controller.js', 'external-edit-2');
+        // NB: length differs from the seed on purpose — see writeFile (#B411).
+        writeFile(proj.root, 'src/web/controllers/controller.js', 'external-edit-22');
         proj.stampNow();
         // the predicate reads only the event stream — no getStatus() poll, so the
         // emit provenance is the sweep→batch→adopt path, not a status poll
