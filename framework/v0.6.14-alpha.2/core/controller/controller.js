@@ -6041,12 +6041,19 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                     // Error code handling (non-2xx)
                     const statusCodes = local.options.conf.server.coreConfiguration.statusCodes;
                     if (data.status && !/^2/.test(data.status) && typeof statusCodes[data.status] !== 'undefined') {
-                        if (/^5/.test(data.status)) {
-                            return _ownAsyncCbRejection(callback(data));
-                        } else {
-                            self.throwError(data);
-                            return;
-                        }
+                        // #B405 — finishing the #Q1 migration on this transport:
+                        // throwError() bypasses the callback, preventing graceful
+                        // degradation, and left a promisified query permanently
+                        // unsettled on any non-5xx status. Every non-2xx now goes
+                        // to the callback so the caller decides — the HTTP/1.1
+                        // contract (see the #Q1 comment there).
+                        // replaced: if (/^5/.test(data.status)) {
+                        // replaced:     (the same wrapped callback(data) delivery — 5xx-only)
+                        // replaced: } else {
+                        // replaced:     self.throwError(data);
+                        // replaced:     return;
+                        // replaced: }
+                        return _ownAsyncCbRejection(callback(data));
                     } else {
                         // Success path
                         if (self && self.isHaltedRequest() && typeof local.onHaltedRequestResumed !== 'undefined') {
