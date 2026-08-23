@@ -6271,6 +6271,56 @@ function Server(options) {
 
 
         var bodyStr = null, obj = null, exception = null;
+
+        /**
+         * Serializes `request.query` for the GET/HEAD re-parse below,
+         * unwrapping nested-JSON STRING values by PARSING them (#B407).
+         *
+         * A query value may legitimately arrive as serialized JSON — a
+         * `?filter={"a":1}` reaches the engine query parser as the STRING
+         * value `'{"a":1}'` — and the pipeline below expects it to land as
+         * a real object. The previous implementation unwrapped TEXTUALLY on
+         * the serialized document: two wrapper replaces for the quotes
+         * around a `{`-leading value, then a blanket backslash strip to
+         * clean the escapes INSIDE the unwrapped object. That strip ran
+         * over the WHOLE document, destroying the escapes JSON.stringify
+         * had just written for ORDINARY values: a newline (`%0A`) became
+         * the letter `n`, a tab the letter `t`, a backslash vanished — and
+         * a double quote in a value (or a JSON-ARRAY value, which the
+         * wrapper replaces never handled) produced invalid JSON, which
+         * `parseBody` reports (`[365] could not parse body`) before
+         * returning undefined, so EVERY query param on the request was
+         * silently dropped. Parsing each candidate value keeps the unwrap
+         * intent — validated now, and correct for nested content carrying
+         * escapes, which the textual unwrap also corrupted — while every
+         * escape in an ordinary value survives serialization intact.
+         *
+         * Only own enumerable STRING values leaning `{`/`[` are candidates;
+         * one that does not parse stays a verbatim string (previously that
+         * shape, once the strip mangled it, also dropped the whole query).
+         * The `"true"`/`"false"`/`"on"`/`"null"` text coercion at the call
+         * sites is unchanged — with escapes intact it can only match
+         * whole-string values, never an escaped occurrence inside one.
+         *
+         * @inner
+         * @private
+         * @param {object} query - The engine-parsed `request.query`
+         * @returns {string} Serialized query, nested-JSON string values unwrapped
+         */
+        var serializeQueryForReparse = function (query) {
+            for (var qKey in query) {
+                if ( !Object.prototype.hasOwnProperty.call(query, qKey) ) continue;
+                if ( typeof(query[qKey]) == 'string' && /^\s*[\{\[]/.test(query[qKey]) ) {
+                    try {
+                        query[qKey] = JSON.parse(query[qKey]);
+                    } catch (qParseErr) {
+                        // not JSON after all — keep the raw string value
+                    }
+                }
+            }
+            return JSON.stringify(query);
+        };
+
         // to compare with /core/controller/controller.js -> getParams()
         switch( request.method.toLowerCase() ) {
             case 'post':
@@ -6439,7 +6489,11 @@ function Server(options) {
 
                     }
 
-                    bodyStr = JSON.stringify(request.query).replace(/\"{/g, '{').replace(/}\"/g, '}').replace(/\\/g, '');
+                    // #B407 — was: bodyStr = JSON.stringify(request.query).replace(/\"{/g, '{').replace(/}\"/g, '}').replace(/\\/g, '');
+                    // (see serializeQueryForReparse above: the textual unwrap's blanket backslash
+                    // strip corrupted every escape-bearing value and dropped the whole query on a
+                    // double quote or a JSON-array value)
+                    bodyStr = serializeQueryForReparse(request.query);
                     // false & true case
                     if ( /(\"false\"|\"true\"|\"on\")/i.test(bodyStr) )
                         bodyStr = bodyStr.replace(/\"false\"/ig, false).replace(/\"true\"/ig, true).replace(/\"on\"/ig, true);
@@ -6709,7 +6763,11 @@ function Server(options) {
                         }
                         delete request.query.inheritedData;
                     }
-                    bodyStr = JSON.stringify(request.query).replace(/\"{/g, '{').replace(/}\"/g, '}').replace(/\\/g, '');
+                    // #B407 — was: bodyStr = JSON.stringify(request.query).replace(/\"{/g, '{').replace(/}\"/g, '}').replace(/\\/g, '');
+                    // (see serializeQueryForReparse above: the textual unwrap's blanket backslash
+                    // strip corrupted every escape-bearing value and dropped the whole query on a
+                    // double quote or a JSON-array value)
+                    bodyStr = serializeQueryForReparse(request.query);
                     if ( /(\"false\"|\"true\"|\"on\")/i.test(bodyStr) )
                         bodyStr = bodyStr.replace(/\"false\"/ig, false).replace(/\"true\"/ig, true).replace(/\"on\"/ig, true);
                     if ( /(\"null\")/i.test(bodyStr) )
