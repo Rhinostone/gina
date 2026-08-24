@@ -520,10 +520,16 @@ function Couchbase(conn, infos) {
             }
             optionsArr = null;
 
-            paramTypes = queryString.match(/\@param \{(.*)\}/gm);
+            // #B413 — `[^}]+` on both expressions, and normalise like the return type
+            // below. Greedy `(.*)` over-captured a second brace pair on the same line
+            // (`@param {a} and {b}` yielded `a} and {b`), and the extracted type feeds an
+            // exact-match `switch` in cast() whose arms are all lowercase — so both an
+            // over-captured and a capitalised type (`{Number}`) match no arm and the
+            // parameter is SILENTLY left uncast rather than erroring.
+            paramTypes = queryString.match(/\@param \{([^}]+)\}/gm);
             if ( paramTypes && Array.isArray(paramTypes) ) {
                 for (let t=0, tLen = paramTypes.length; t<tLen; t++) {
-                    paramTypes[t] = paramTypes[t].match(/\{(.*)\}/)[1];
+                    paramTypes[t] = paramTypes[t].match(/\{([^}]+)\}/)[1].trim().toLowerCase();
                 }
             }
             // extract return type (before stripping — annotation lives in the comment block)
@@ -534,7 +540,14 @@ function Couchbase(conn, infos) {
             // Same expression the mysql / postgresql / scylladb / sqlite connectors use.
             returnType = queryString.match(/@return\s+\{([^}]+)\}/);
             if ( Array.isArray(returnType) ) {
-                returnType = returnType[1];
+                // #B413 — normalise like mysql / postgresql / scylladb / sqlite, all of
+                // which do `retMatch[1].trim().toLowerCase()`. Without it every branch
+                // below compares against a lowercase literal, so `{Number}`, `{ number }`
+                // and `{NUMBER}` fall through ALL of them and the caller silently receives
+                // the raw row array instead of the declared shape. Measured: zero incidence
+                // in a 486-declaration consumer corpus — but that is convention, not
+                // protection, and nothing stops an author writing it.
+                returnType = returnType[1].trim().toLowerCase();
             }
 
             // #SQL1 — extract $param names from the first block comment using state-machine

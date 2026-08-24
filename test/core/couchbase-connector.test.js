@@ -1041,3 +1041,110 @@ describe('12 - #B412: @return capture is bounded to the first brace pair', funct
         assert.equal('@return {object} note {x}'.match(/@return\s+\{(.*)\}/)[1], 'object} note {x');
     });
 });
+
+
+// ─── 13 — #B413: annotation types are normalised and brace-bounded ───────────
+//
+// Both extracted annotation types feed EXACT-MATCH comparisons whose arms are all
+// lowercase: `returnType` against the `== 'number'` / `'object'` / `'boolean'`
+// branch chain, and `paramTypes[t]` against cast()'s switch. So a capitalised or
+// space-padded type — `{Number}`, `{ number }` — matched nothing and the value was
+// SILENTLY left undispatched/uncast rather than erroring. The four sibling
+// connectors all normalise with `.trim().toLowerCase()`; couchbase now does too.
+// Greedy `(.*)` is bounded to `[^}]+` on both, so a second brace pair on the same
+// line no longer bleeds into the captured type.
+
+describe('13 - #B413: annotation type normalisation + bounded capture', function() {
+
+    var src;
+    before(function() { src = fs.readFileSync(CONNECTOR, 'utf8'); });
+
+    it('§13a — returnType is trimmed and lowercased at extraction', function() {
+        var i = src.indexOf('returnType = queryString.match(');
+        assert.ok(i > -1, 'the returnType extraction must exist');
+        // 1400, not 700: the fix's own comment block sits between the anchor and the
+        // normalisation (measured gap 743 chars), so a tight window false-fails.
+        var window = src.slice(i, i + 1400);
+        assert.match(window, /returnType\[1\]\.trim\(\)\.toLowerCase\(\)/,
+            'must normalise like the sibling connectors');
+    });
+
+    it('§13b — paramTypes are trimmed, lowercased and brace-bounded', function() {
+        var i = src.indexOf('paramTypes = queryString.match(');
+        assert.ok(i > -1, 'the paramTypes extraction must exist');
+        var window = src.slice(i, i + 600);
+        // Anchor on the @param expression ITSELF, not the byte window: the window
+        // reaches into the adjacent @return line, which already carries [^}]+ from
+        // #B412, so a window-scoped token check passes on pre-change bytes too.
+        assert.ok(src.indexOf('/\\@param \\{([^}]+)\\}/gm') > -1, 'outer capture bounded');
+        assert.match(window, /\.trim\(\)\.toLowerCase\(\)/,      'normalised before the cast switch');
+        assert.doesNotMatch(window, /match\(\/\\\{\(\.\*\)\\\}\//, 'inner greedy form must be gone');
+    });
+
+    it('§13c — TYPE annotations are bounded; @options stays greedy ON PURPOSE', function() {
+        // The distinction is what the annotation holds, not a blanket style rule:
+        //   @return / @param -> a single type TOKEN, which can never contain `}`
+        //                       => bounded [^}]+, so a later brace pair cannot bleed in.
+        //   @options         -> a JavaScript OBJECT LITERAL, JSON.parse'd after the keys
+        //                       are quoted, which CAN nest braces
+        //                       => greedy (.*), because [^}]+ truncates `{ a: { b: 1 } }`
+        //                          to `{ a: { b: 1 }` and breaks the parse.
+        // Verified by measurement, not assumed — see #B413.
+        assert.doesNotMatch(src, /@return[^\n]*\\\{\(\.\*\)\\\}/,  '@return must not be greedy');
+        assert.doesNotMatch(src, /@param[^\n]*\\\{\(\.\*\)\\\}/,   '@param must not be greedy');
+        assert.match(src, /\\@options \\\{\(\.\*\)\\\}/,
+            '@options MUST stay greedy — it holds a nestable object literal');
+    });
+
+    it('§13c-bis — behavioural: bounding @options would corrupt a nested object', function() {
+        // The control for the pin above: prove the greedy form is load-bearing.
+        var greedy  = /\@options \{(.*)\}/;
+        var bounded = /\@options \{([^}]+)\}/;
+        var nested  = '@options { a: { b: 1 } }';
+        assert.equal(nested.match(greedy)[0],  '@options { a: { b: 1 } }', 'greedy keeps the whole object');
+        assert.equal(nested.match(bounded)[0], '@options { a: { b: 1 }',   'bounded TRUNCATES it');
+    });
+
+    // ── behavioural replicas ──
+
+    /** Replica of the shipped returnType extraction. */
+    function extractReturnType(q) {
+        var m = q.match(/@return\s+\{([^}]+)\}/);
+        return Array.isArray(m) ? m[1].trim().toLowerCase() : null;
+    }
+    /** Replica of the shipped paramTypes extraction. */
+    function extractParamTypes(q) {
+        var pts = q.match(/\@param \{([^}]+)\}/gm);
+        if (!pts || !Array.isArray(pts)) return [];
+        return pts.map(function(p) { return p.match(/\{([^}]+)\}/)[1].trim().toLowerCase(); });
+    }
+
+    it('§13d — capitalised and padded return types now reach their branch', function() {
+        assert.equal(extractReturnType('@return {number}'),   'number', 'canonical (control)');
+        assert.equal(extractReturnType('@return {Number}'),   'number', 'capitalised');
+        assert.equal(extractReturnType('@return { number }'), 'number', 'space-padded');
+        assert.equal(extractReturnType('@return {NUMBER}'),   'number', 'upper');
+        assert.equal(extractReturnType('@return {object} note {x}'), 'object',
+            'a second brace pair must not bleed in');
+        assert.equal(extractReturnType('SELECT 1'), null, 'no annotation (control: still null)');
+    });
+
+    it('§13e — param types normalise for cast()\'s lowercase switch', function() {
+        assert.deepEqual(extractParamTypes('/** @param {string} a */'), ['string'], 'canonical (control)');
+        assert.deepEqual(extractParamTypes('/** @param {Number} a */'), ['number'], 'capitalised now casts');
+        assert.deepEqual(extractParamTypes('/** @param { Float } a */'), ['float'],  'padded + capitalised');
+        assert.deepEqual(extractParamTypes('/** @param {a} and {b} */'), ['a'],
+            'greedy over-capture is gone — was "a} and {b"');
+        assert.deepEqual(extractParamTypes('SELECT 1'), [], 'no annotation (control: empty)');
+    });
+
+    it('§13f — the cast switch arms are all lowercase (why normalisation matters)', function() {
+        var i = src.indexOf('var cast = function(dataArray, paramTypes)');
+        assert.ok(i > -1, 'cast() must exist');
+        var body = src.slice(i, i + 700);
+        (body.match(/case '([^']+)'/g) || []).forEach(function(c) {
+            var lit = c.replace(/case '|'/g, '');
+            assert.equal(lit, lit.toLowerCase(), 'switch arm ' + c + ' is lowercase');
+        });
+    });
+});
