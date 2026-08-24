@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Fixed #B329 — the popin stylesheet no longer restyles every dialog on the page: its ::backdrop rule (dark overlay + blur) is now scoped to gina''s own popin dialogs (dialog.gina-popin-container::backdrop), matching the reduced-motion rules that were already scoped. Consumer-visible: a page that relied on the unscoped rule to style its own dialogs must now style them itself, and a popin dialog element supplied by the page''s own markup needs the gina-popin-container class to keep gina''s backdrop.'
-time: 2026-08-24T04:15:12+01:00

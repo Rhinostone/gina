@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Client-side `getRoute()` no longer crashes with a context-free TypeError when a bundle''s routing table is absent (#B415). The client `getRouting()` returns null by design when nothing matches - an empty table before the routing fetch lands, or a bundle with no rules - and the bare dereference of that null sat one line above the very diagnostic built for the degraded-table case, so the case it existed for was exactly the one it could never report. A named guard now throws `bundle X has no routing table for rule Y (client: routing config not loaded yet, or empty)`, restoring the diagnostic''s intent on both the client and the server.'
-time: 2026-08-24T03:22:36+01:00
