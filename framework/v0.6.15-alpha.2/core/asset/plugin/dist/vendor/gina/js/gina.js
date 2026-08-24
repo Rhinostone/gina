@@ -10084,6 +10084,10 @@ define('gina/link', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge',
          * url lookup run. Before this order existed, two anchors sharing one url
          * collapsed onto whichever registered first, whichever was clicked.
          *
+         * A url that resolves to no registration throws a named error BEFORE the
+         * supersede step (#B328) — a miss can never abort a request already in
+         * flight, and the message names the url plus the likely cause.
+         *
          * Side effects: supersedes any request still in flight, arms `data-gina-loading`
          * on the anchor for the duration of this one, and releases it from a `loadend`
          * listener. An indefinite hang is the single outcome that never releases, because
@@ -10091,6 +10095,8 @@ define('gina/link', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge',
          *
          * @param {string} url - URL to request
          * @param {object} [options] - XHR options, merged over the link's own
+         *
+         * @throws {Error} when `url` matches no registration (the public-path miss)
          *
          * @returns {void}
          *
@@ -10106,6 +10112,20 @@ define('gina/link', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge',
             var $operated = _operatedLink;
             _operatedLink = null;
 
+            // link object — #B287: the operated registration wins; the first-match
+            // url lookup remains only for the public `gina.link.request(url)` path.
+            // #B328 — resolved (and guarded) BEFORE the transport block below:
+            // resolving after it meant a mistyped public url had already aborted a
+            // legitimate in-flight request before throwing a bare TypeError on
+            // `$link.id`. A miss now leaves transport state untouched.
+            var $link      = $operated || getLinkByUrl(url);
+            if ( !$link ) {
+                // Named like #B415's null-table guard: tell a mistyped url from the
+                // real second shape — a registration added by a later construction,
+                // which the published instance's walk cannot see (#B326).
+                throw new Error('[ LinkHandler::request(url, options) ] : no link is registered for url `'+ url +'` (never bound, or bound by a later construction — the published instance walks only its own registrations)');
+            }
+
             // One transport per request, and a sequence taken BEFORE the abort so a
             // supersede-abort is stale by construction — its handler sees
             // `seq !== _linkSeq` and drops out, which is what keeps the abort from
@@ -10119,9 +10139,6 @@ define('gina/link', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge',
             var xhr = createXhr();
             _linkXhr = xhr;
 
-            // link object — #B287: the operated registration wins; the first-match
-            // url lookup remains only for the public `gina.link.request(url)` path.
-            var $link      = $operated || getLinkByUrl(url);
             var id         = $link.id;
 
 

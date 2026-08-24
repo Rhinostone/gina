@@ -81,7 +81,7 @@ body[data-gina-popin-scroll-lock] {
   backdrop-filter: blur(6px);
 }
 
-dialog::backdrop {
+dialog.gina-popin-container::backdrop {
   background-color: rgba(0, 0, 0, 0.75);
   backdrop-filter: blur(6px);
 }

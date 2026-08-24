@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Fixed #B328 — calling the public link API with a url no link is registered for (gina.link.request(url), or a registered link''s .request(url) with a foreign url) threw a bare TypeError. It now throws a named error identifying the url and the likely cause — never bound, or bound by a later construction the published instance cannot see. The miss is also detected before the supersede step, so a mistyped url no longer aborts a legitimate request still in flight. Click-driven links are unaffected: both click paths always resolve a real registration.'
+time: 2026-08-24T04:15:12+01:00

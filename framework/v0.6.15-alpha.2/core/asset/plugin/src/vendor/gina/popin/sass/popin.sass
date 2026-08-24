@@ -103,8 +103,9 @@ body[data-gina-popin-scroll-lock]
         backdrop-filter: blur(6px)
 
 
-// Overlay used by new "dialog" popins
-dialog::backdrop
+// Overlay used by new "dialog" popins — scoped to gina's own container class
+// (#B329): unscoped, this painted gina's backdrop on every consumer dialog.
+dialog.gina-popin-container::backdrop
     background-color: rgba(0,0,0,0.75)
     backdrop-filter: blur(6px)
 
