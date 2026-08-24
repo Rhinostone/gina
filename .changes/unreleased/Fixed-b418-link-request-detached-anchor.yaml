@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Fixed #B418 — calling the public link API for a registered url whose anchor is no longer in the DOM threw a bare TypeError. It now throws a named error identifying the link id, the url and the cause: there is no deregistration path, so a registration outlives its element, and a page that re-renders its anchors after binding hits exactly this. The miss is detected beside the unregistered-url guard, before the supersede step, so it never aborts a request already in flight nor invalidates that request''s response handling. Click-driven links cannot reach this case.'
+time: 2026-08-24T13:04:36+01:00

@@ -10086,7 +10086,10 @@ define('gina/link', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge',
          *
          * A url that resolves to no registration throws a named error BEFORE the
          * supersede step (#B328) — a miss can never abort a request already in
-         * flight, and the message names the url plus the likely cause.
+         * flight, and the message names the url plus the likely cause. A
+         * registration whose anchor has left the DOM throws the same way (#B418):
+         * there is no deregistration path, so registrations outlive their
+         * elements, and the link contract cannot proceed without the anchor.
          *
          * Side effects: supersedes any request still in flight, arms `data-gina-loading`
          * on the anchor for the duration of this one, and releases it from a `loadend`
@@ -10096,7 +10099,8 @@ define('gina/link', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge',
          * @param {string} url - URL to request
          * @param {object} [options] - XHR options, merged over the link's own
          *
-         * @throws {Error} when `url` matches no registration (the public-path miss)
+         * @throws {Error} when `url` matches no registration, or the matched
+         *  registration's anchor is no longer in the DOM (both public-path misses)
          *
          * @returns {void}
          *
@@ -10125,6 +10129,21 @@ define('gina/link', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge',
                 // which the published instance's walk cannot see (#B326).
                 throw new Error('[ LinkHandler::request(url, options) ] : no link is registered for url `'+ url +'` (never bound, or bound by a later construction — the published instance walks only its own registrations)');
             }
+            // link element — #B418: same shape, second miss. A registration can
+            // outlive its anchor (there is no deregistration path, so a page that
+            // re-renders its anchors leaves the registration pointing at nothing),
+            // and the bare `$el.getAttribute` below then threw a raw TypeError —
+            // after the supersede block had aborted an in-flight request and
+            // bumped the sequence, whose stale-response wrapper drops that
+            // request's completion. Resolved and guarded HERE so a miss of either
+            // kind leaves transport state untouched. The link contract is
+            // DOM-coupled — loading state, hlink attributes and response events
+            // all target the anchor — so this cannot proceed without one.
+            var id  = $link.id;
+            var $el = document.getElementById(id) || null;
+            if ( !$el ) {
+                throw new Error('[ LinkHandler::request(url, options) ] : link `'+ id +'` is registered for url `'+ url +'` but its anchor is no longer in the DOM — registrations are not removed when their element is');
+            }
 
             // One transport per request, and a sequence taken BEFORE the abort so a
             // supersede-abort is stale by construction — its handler sees
@@ -10138,12 +10157,6 @@ define('gina/link', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge',
             }
             var xhr = createXhr();
             _linkXhr = xhr;
-
-            var id         = $link.id;
-
-
-            // link element
-            var $el         = document.getElementById(id) || null;
 
             var hLinkIsRequired = null;
             // forward callback to HTML data event attribute through `hlink` status
