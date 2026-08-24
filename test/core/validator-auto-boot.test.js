@@ -79,13 +79,18 @@ describe('01 - core.js boots the validator in the require([...]) callback', func
             'expected new Validator(gina.forms.rules).on("ready", …) — the .on() fires the init self-fire that binds forms');
     });
 
-    it('source: bootValidator defers on isFrameworkLoaded with a bounded poll', function () {
+    it('source: bootValidator defers on isFrameworkLoaded AND depsSettled with a bounded poll', function () {
         var src = getCoreSrc();
         var fn = src.substring(src.indexOf('var bootValidator = function'), src.indexOf('bootValidator();'));
         assert.ok(/window\['gina'\]\['isFrameworkLoaded'\]/.test(fn),
             'bootValidator must wait for isFrameworkLoaded (gina.forms is whispered by onGinaLoaded, which sets isFrameworkLoaded first)');
+        // #B414 — a form rule may name a route (the `query` rule), which
+        // evaluates at bind: the gate must also wait for the routing fetch to
+        // SETTLE (loaded or failed), or the instance constructs against {}.
+        assert.ok(/!_ginaDepsSettled/.test(fn),
+            'bootValidator must also wait for the routing dependency to settle (#B414)');
         assert.ok(/_validatorBootTries\+\+\s*<\s*100/.test(fn),
-            'the isFrameworkLoaded poll must be bounded (<= 100 tries), mirroring the popin boot');
+            'the poll must stay bounded (<= 100 tries), mirroring the popin boot');
     });
 
     it('freshness: served gina.min.js carries the boot — rebuilt from source', function () {
@@ -101,8 +106,12 @@ describe('01 - core.js boots the validator in the require([...]) callback', func
 
     it('logic: boot-gate decides poll / skip / construct correctly', function () {
         // Pure-logic replica of bootValidator's decision (matches the source guards).
+        // #B414 added the depsSettled dimension: framework-loaded-but-deps-pending
+        // POLLS (it used to construct — the race). `depsSettled: true` is the
+        // default in these fixtures so the pre-#B414 cases keep their meaning.
         function decide(state) {
-            if ( !state.gina || !state.gina.isFrameworkLoaded ) { return 'poll'; }
+            var settled = ( typeof state.depsSettled == 'undefined' ) ? true : state.depsSettled;
+            if ( !state.gina || !state.gina.isFrameworkLoaded || !settled ) { return 'poll'; }
             if ( state.gina.hasValidator ) { return 'skip'; }
             var forms = state.gina.forms;
             var rules = ( forms && forms.rules ) ? forms.rules : null;
@@ -113,6 +122,11 @@ describe('01 - core.js boots the validator in the require([...]) callback', func
         // framework not loaded yet → keep polling
         assert.equal(decide({ gina: null }), 'poll');
         assert.equal(decide({ gina: { isFrameworkLoaded: false } }), 'poll');
+        // #B414 — framework loaded but the routing fetch not yet settled → POLL
+        // (this exact state used to CONSTRUCT: the deployed-tier race window)
+        assert.equal(decide({ depsSettled: false, gina: { isFrameworkLoaded: true, hasValidator: false, forms: { rules: { signup: { fieldA: {} } } } } }), 'poll');
+        // …and settling (loaded OR failed both settle) releases the same state
+        assert.equal(decide({ depsSettled: true,  gina: { isFrameworkLoaded: true, hasValidator: false, forms: { rules: { signup: { fieldA: {} } } } } }), 'construct');
         // already booted (idempotent) → skip
         assert.equal(decide({ gina: { isFrameworkLoaded: true, hasValidator: true, forms: { rules: { signup: {} } } } }), 'skip');
         // loaded, not booted, but NO rules → skip (byte-identical to pre-change)

@@ -912,3 +912,239 @@ describe('10 - #B243: unserializable query parameters (shipped bytes)', function
         assert.match(blk, /throw _unserializableErr/, 'throw form when the caller passed no callback');
     });
 });
+
+
+// ─── 11 — #B412: the `{number}` branch derives the count without a regex ─────
+//
+// The former branch parsed the COUNT alias out of the query text with
+// `COUNT\(\S+\)\s+AS\s+(\w+)` and dereferenced the match UNGUARDED. `\S+` cannot
+// span whitespace, so `COUNT(DISTINCT a.b) AS n` matched neither alternative, and
+// an unaliased `COUNT(*)` matched nothing either — `null[1]` then threw INSIDE the
+// connector's own result callback, so a promisified caller never settled and the
+// request hung with no response and no 5xx.
+//
+// mysql / postgresql / scylladb / sqlite all derive the count with no regex at
+// all; this branch now mirrors them. Pins below are validated red-first against
+// the pre-change source (see the §11c replica for the behavioural half).
+
+describe('11 - #B412: {number} branch converged on the sibling pattern', function() {
+
+    var src, blk, blkNoComments;
+    before(function() {
+        src = fs.readFileSync(CONNECTOR, 'utf8');
+        // Text anchors, not line numbers (see the note above §09): isolate the
+        // `{number}` branch from its `else if` to the start of the next statement.
+        var start = src.indexOf("} else if ( returnType && returnType == 'number'");
+        assert.ok(start > -1, 'the {number} branch must still exist');
+        var rest  = src.slice(start);
+        var end   = rest.indexOf('\n                        try {');
+        assert.ok(end > -1, 'the branch must be followed by the callback dispatch');
+        blk = rest.slice(0, end);
+        // The fix DOCUMENTS the defect it replaced, so the old pattern legitimately
+        // appears in this block's comments. Strip them before asserting absence.
+        blkNoComments = blk.replace(/\/\/[^\n]*/g, '');
+    });
+
+    it('§11a — the comment strip is real (control: it must not empty the block)', function() {
+        // Without this, a broken strip would make every absence pin below pass vacuously.
+        assert.match(blkNoComments, /countKeys/,
+            'stripped block must still contain live code');
+        assert.ok(blkNoComments.length < blk.length,
+            'the strip must actually remove something (the block is commented)');
+    });
+
+    it('§11b — no alias regex survives in the executable code', function() {
+        // Literal match, not a nested regex: the source escapes the paren
+        // (`COUNT\(\S+\)`), and a needle that misses that escape passes on the
+        // PRE-change source too — i.e. a pin that cannot fail. Caught by the
+        // red-first harness; see #B412.
+        assert.equal(blkNoComments.indexOf('COUNT\\(\\S+\\)'), -1,
+            'the COUNT alias regex must be gone from live code');
+        assert.doesNotMatch(blkNoComments, /re\.lastIndex/,
+            'the `re.lastIndex` capture-index idiom must be gone');
+        assert.doesNotMatch(blkNoComments, /returnVariable/,
+            'the dead returnVariable indirection must be gone');
+    });
+
+    it('§11c — the guarded first-column extraction is present', function() {
+        assert.match(blkNoComments, /Array\.isArray\(data\)/,       'guards that data is an array');
+        assert.match(blkNoComments, /data\.length\s*>\s*0/,          'guards a non-empty result set');
+        assert.match(blkNoComments, /data\[0\]\s*!==\s*null/,        'guards typeof null === object');
+        assert.match(blkNoComments, /Object\.keys\(data\[0\]\)/,     'reads the projected columns');
+        assert.match(blkNoComments, /countKeys\[0\]\]/,              'indexes keys[0], NOT the key array');
+    });
+
+    it('§11d — keys are indexed, never coerced (the silent-undefined trap)', function() {
+        // `row[Object.keys(row)]` stringifies the key ARRAY: a two-key row becomes
+        // "a,b" -> undefined. Only `keys[0]` is correct.
+        assert.doesNotMatch(blkNoComments, /data\[0\]\[Object\.keys\(data\[0\]\)\]/,
+            'must not use the array-coercion idiom');
+    });
+
+    it('§11e — COUNT detection accepts both spacings in one expression', function() {
+        assert.match(blkNoComments, /\/count\\s\*\\\(\/i/,
+            'uses /count\\s*\\(/i like the sibling connectors');
+    });
+
+    // ── behavioural half: a pure-logic replica of the shipped branch ──
+    /**
+     * Replica of the shipped `{number}` extraction. Kept line-for-line with the
+     * connector so a divergence shows up as a failing pin above, not silently here.
+     */
+    function extractCount(data) {
+        if (Array.isArray(data) && data.length > 0 && typeof(data[0]) == 'object' && data[0] !== null) {
+            var countKeys = Object.keys(data[0]);
+            return (countKeys.length > 0) ? data[0][countKeys[0]] : 0;
+        }
+        return 0;
+    }
+
+    it('§11f — every shape that used to throw now returns a number', function() {
+        assert.equal(extractCount([{ n: 42 }]), 42,        'aliased COUNT');
+        assert.equal(extractCount([{ '$1': 7 }]), 7,        'unaliased COUNT(*) — driver-assigned key');
+        assert.equal(extractCount([{ n: 3, m: 9 }]), 3,     'multi-column: first projected column');
+        assert.equal(extractCount([{}]), 0,                 'row with no columns');
+        assert.equal(extractCount([]), 0,                   'EMPTY result set (the second unguarded deref)');
+        assert.equal(extractCount(null), 0,                 'null payload');
+        assert.equal(extractCount([null]), 0,               'null row — typeof null === object');
+    });
+
+    it('§11g — none of those shapes can throw (the hang was a throw in a callback)', function() {
+        [[{ n: 1 }], [], [{}], null, [null], undefined, 'x', [{ a: 1, b: 2 }]].forEach(function(shape) {
+            assert.doesNotThrow(function() { extractCount(shape); },
+                'shape ' + JSON.stringify(shape) + ' must not throw');
+        });
+    });
+});
+
+
+// ─── 12 — #B412: the @return annotation parser no longer over-captures ───────
+
+describe('12 - #B412: @return capture is bounded to the first brace pair', function() {
+
+    it('§12a — the source uses [^}]+, matching the sibling connectors', function() {
+        var src = fs.readFileSync(CONNECTOR, 'utf8');
+        var line = src.split('\n').filter(function(l) {
+            return /returnType\s*=\s*queryString\.match\(/.test(l);
+        })[0];
+        assert.ok(line, 'the returnType extraction line must exist');
+        assert.match(line, /\[\^\}\]\+/,  'must use the bounded [^}]+ class');
+        assert.doesNotMatch(line, /\{\(\.\*\)\}/, 'must not use the greedy (.*) form');
+    });
+
+    it('§12b — behavioural: a second brace pair on the line no longer bleeds in', function() {
+        var shipped = /@return\s+\{([^}]+)\}/;
+        assert.equal('@return {number} n'.match(shipped)[1], 'number');
+        assert.equal('@return {object} note {x}'.match(shipped)[1], 'object',
+            'the trailing {x} must not be absorbed');
+        // control: the greedy form genuinely fails this case, so the pin above is not vacuous
+        assert.equal('@return {object} note {x}'.match(/@return\s+\{(.*)\}/)[1], 'object} note {x');
+    });
+});
+
+
+// ─── 13 — #B413: annotation types are normalised and brace-bounded ───────────
+//
+// Both extracted annotation types feed EXACT-MATCH comparisons whose arms are all
+// lowercase: `returnType` against the `== 'number'` / `'object'` / `'boolean'`
+// branch chain, and `paramTypes[t]` against cast()'s switch. So a capitalised or
+// space-padded type — `{Number}`, `{ number }` — matched nothing and the value was
+// SILENTLY left undispatched/uncast rather than erroring. The four sibling
+// connectors all normalise with `.trim().toLowerCase()`; couchbase now does too.
+// Greedy `(.*)` is bounded to `[^}]+` on both, so a second brace pair on the same
+// line no longer bleeds into the captured type.
+
+describe('13 - #B413: annotation type normalisation + bounded capture', function() {
+
+    var src;
+    before(function() { src = fs.readFileSync(CONNECTOR, 'utf8'); });
+
+    it('§13a — returnType is trimmed and lowercased at extraction', function() {
+        var i = src.indexOf('returnType = queryString.match(');
+        assert.ok(i > -1, 'the returnType extraction must exist');
+        // 1400, not 700: the fix's own comment block sits between the anchor and the
+        // normalisation (measured gap 743 chars), so a tight window false-fails.
+        var window = src.slice(i, i + 1400);
+        assert.match(window, /returnType\[1\]\.trim\(\)\.toLowerCase\(\)/,
+            'must normalise like the sibling connectors');
+    });
+
+    it('§13b — paramTypes are trimmed, lowercased and brace-bounded', function() {
+        var i = src.indexOf('paramTypes = queryString.match(');
+        assert.ok(i > -1, 'the paramTypes extraction must exist');
+        var window = src.slice(i, i + 600);
+        // Anchor on the @param expression ITSELF, not the byte window: the window
+        // reaches into the adjacent @return line, which already carries [^}]+ from
+        // #B412, so a window-scoped token check passes on pre-change bytes too.
+        assert.ok(src.indexOf('/\\@param \\{([^}]+)\\}/gm') > -1, 'outer capture bounded');
+        assert.match(window, /\.trim\(\)\.toLowerCase\(\)/,      'normalised before the cast switch');
+        assert.doesNotMatch(window, /match\(\/\\\{\(\.\*\)\\\}\//, 'inner greedy form must be gone');
+    });
+
+    it('§13c — TYPE annotations are bounded; @options stays greedy ON PURPOSE', function() {
+        // The distinction is what the annotation holds, not a blanket style rule:
+        //   @return / @param -> a single type TOKEN, which can never contain `}`
+        //                       => bounded [^}]+, so a later brace pair cannot bleed in.
+        //   @options         -> a JavaScript OBJECT LITERAL, JSON.parse'd after the keys
+        //                       are quoted, which CAN nest braces
+        //                       => greedy (.*), because [^}]+ truncates `{ a: { b: 1 } }`
+        //                          to `{ a: { b: 1 }` and breaks the parse.
+        // Verified by measurement, not assumed — see #B413.
+        assert.doesNotMatch(src, /@return[^\n]*\\\{\(\.\*\)\\\}/,  '@return must not be greedy');
+        assert.doesNotMatch(src, /@param[^\n]*\\\{\(\.\*\)\\\}/,   '@param must not be greedy');
+        assert.match(src, /\\@options \\\{\(\.\*\)\\\}/,
+            '@options MUST stay greedy — it holds a nestable object literal');
+    });
+
+    it('§13c-bis — behavioural: bounding @options would corrupt a nested object', function() {
+        // The control for the pin above: prove the greedy form is load-bearing.
+        var greedy  = /\@options \{(.*)\}/;
+        var bounded = /\@options \{([^}]+)\}/;
+        var nested  = '@options { a: { b: 1 } }';
+        assert.equal(nested.match(greedy)[0],  '@options { a: { b: 1 } }', 'greedy keeps the whole object');
+        assert.equal(nested.match(bounded)[0], '@options { a: { b: 1 }',   'bounded TRUNCATES it');
+    });
+
+    // ── behavioural replicas ──
+
+    /** Replica of the shipped returnType extraction. */
+    function extractReturnType(q) {
+        var m = q.match(/@return\s+\{([^}]+)\}/);
+        return Array.isArray(m) ? m[1].trim().toLowerCase() : null;
+    }
+    /** Replica of the shipped paramTypes extraction. */
+    function extractParamTypes(q) {
+        var pts = q.match(/\@param \{([^}]+)\}/gm);
+        if (!pts || !Array.isArray(pts)) return [];
+        return pts.map(function(p) { return p.match(/\{([^}]+)\}/)[1].trim().toLowerCase(); });
+    }
+
+    it('§13d — capitalised and padded return types now reach their branch', function() {
+        assert.equal(extractReturnType('@return {number}'),   'number', 'canonical (control)');
+        assert.equal(extractReturnType('@return {Number}'),   'number', 'capitalised');
+        assert.equal(extractReturnType('@return { number }'), 'number', 'space-padded');
+        assert.equal(extractReturnType('@return {NUMBER}'),   'number', 'upper');
+        assert.equal(extractReturnType('@return {object} note {x}'), 'object',
+            'a second brace pair must not bleed in');
+        assert.equal(extractReturnType('SELECT 1'), null, 'no annotation (control: still null)');
+    });
+
+    it('§13e — param types normalise for cast()\'s lowercase switch', function() {
+        assert.deepEqual(extractParamTypes('/** @param {string} a */'), ['string'], 'canonical (control)');
+        assert.deepEqual(extractParamTypes('/** @param {Number} a */'), ['number'], 'capitalised now casts');
+        assert.deepEqual(extractParamTypes('/** @param { Float } a */'), ['float'],  'padded + capitalised');
+        assert.deepEqual(extractParamTypes('/** @param {a} and {b} */'), ['a'],
+            'greedy over-capture is gone — was "a} and {b"');
+        assert.deepEqual(extractParamTypes('SELECT 1'), [], 'no annotation (control: empty)');
+    });
+
+    it('§13f — the cast switch arms are all lowercase (why normalisation matters)', function() {
+        var i = src.indexOf('var cast = function(dataArray, paramTypes)');
+        assert.ok(i > -1, 'cast() must exist');
+        var body = src.slice(i, i + 700);
+        (body.match(/case '([^']+)'/g) || []).forEach(function(c) {
+            var lit = c.replace(/case '|'/g, '');
+            assert.equal(lit, lit.toLowerCase(), 'switch arm ' + c + ' is lowercase');
+        });
+    });
+});
