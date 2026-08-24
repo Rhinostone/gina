@@ -912,3 +912,132 @@ describe('10 - #B243: unserializable query parameters (shipped bytes)', function
         assert.match(blk, /throw _unserializableErr/, 'throw form when the caller passed no callback');
     });
 });
+
+
+// ─── 11 — #B412: the `{number}` branch derives the count without a regex ─────
+//
+// The former branch parsed the COUNT alias out of the query text with
+// `COUNT\(\S+\)\s+AS\s+(\w+)` and dereferenced the match UNGUARDED. `\S+` cannot
+// span whitespace, so `COUNT(DISTINCT a.b) AS n` matched neither alternative, and
+// an unaliased `COUNT(*)` matched nothing either — `null[1]` then threw INSIDE the
+// connector's own result callback, so a promisified caller never settled and the
+// request hung with no response and no 5xx.
+//
+// mysql / postgresql / scylladb / sqlite all derive the count with no regex at
+// all; this branch now mirrors them. Pins below are validated red-first against
+// the pre-change source (see the §11c replica for the behavioural half).
+
+describe('11 - #B412: {number} branch converged on the sibling pattern', function() {
+
+    var src, blk, blkNoComments;
+    before(function() {
+        src = fs.readFileSync(CONNECTOR, 'utf8');
+        // Text anchors, not line numbers (see the note above §09): isolate the
+        // `{number}` branch from its `else if` to the start of the next statement.
+        var start = src.indexOf("} else if ( returnType && returnType == 'number'");
+        assert.ok(start > -1, 'the {number} branch must still exist');
+        var rest  = src.slice(start);
+        var end   = rest.indexOf('\n                        try {');
+        assert.ok(end > -1, 'the branch must be followed by the callback dispatch');
+        blk = rest.slice(0, end);
+        // The fix DOCUMENTS the defect it replaced, so the old pattern legitimately
+        // appears in this block's comments. Strip them before asserting absence.
+        blkNoComments = blk.replace(/\/\/[^\n]*/g, '');
+    });
+
+    it('§11a — the comment strip is real (control: it must not empty the block)', function() {
+        // Without this, a broken strip would make every absence pin below pass vacuously.
+        assert.match(blkNoComments, /countKeys/,
+            'stripped block must still contain live code');
+        assert.ok(blkNoComments.length < blk.length,
+            'the strip must actually remove something (the block is commented)');
+    });
+
+    it('§11b — no alias regex survives in the executable code', function() {
+        // Literal match, not a nested regex: the source escapes the paren
+        // (`COUNT\(\S+\)`), and a needle that misses that escape passes on the
+        // PRE-change source too — i.e. a pin that cannot fail. Caught by the
+        // red-first harness; see #B412.
+        assert.equal(blkNoComments.indexOf('COUNT\\(\\S+\\)'), -1,
+            'the COUNT alias regex must be gone from live code');
+        assert.doesNotMatch(blkNoComments, /re\.lastIndex/,
+            'the `re.lastIndex` capture-index idiom must be gone');
+        assert.doesNotMatch(blkNoComments, /returnVariable/,
+            'the dead returnVariable indirection must be gone');
+    });
+
+    it('§11c — the guarded first-column extraction is present', function() {
+        assert.match(blkNoComments, /Array\.isArray\(data\)/,       'guards that data is an array');
+        assert.match(blkNoComments, /data\.length\s*>\s*0/,          'guards a non-empty result set');
+        assert.match(blkNoComments, /data\[0\]\s*!==\s*null/,        'guards typeof null === object');
+        assert.match(blkNoComments, /Object\.keys\(data\[0\]\)/,     'reads the projected columns');
+        assert.match(blkNoComments, /countKeys\[0\]\]/,              'indexes keys[0], NOT the key array');
+    });
+
+    it('§11d — keys are indexed, never coerced (the silent-undefined trap)', function() {
+        // `row[Object.keys(row)]` stringifies the key ARRAY: a two-key row becomes
+        // "a,b" -> undefined. Only `keys[0]` is correct.
+        assert.doesNotMatch(blkNoComments, /data\[0\]\[Object\.keys\(data\[0\]\)\]/,
+            'must not use the array-coercion idiom');
+    });
+
+    it('§11e — COUNT detection accepts both spacings in one expression', function() {
+        assert.match(blkNoComments, /\/count\\s\*\\\(\/i/,
+            'uses /count\\s*\\(/i like the sibling connectors');
+    });
+
+    // ── behavioural half: a pure-logic replica of the shipped branch ──
+    /**
+     * Replica of the shipped `{number}` extraction. Kept line-for-line with the
+     * connector so a divergence shows up as a failing pin above, not silently here.
+     */
+    function extractCount(data) {
+        if (Array.isArray(data) && data.length > 0 && typeof(data[0]) == 'object' && data[0] !== null) {
+            var countKeys = Object.keys(data[0]);
+            return (countKeys.length > 0) ? data[0][countKeys[0]] : 0;
+        }
+        return 0;
+    }
+
+    it('§11f — every shape that used to throw now returns a number', function() {
+        assert.equal(extractCount([{ n: 42 }]), 42,        'aliased COUNT');
+        assert.equal(extractCount([{ '$1': 7 }]), 7,        'unaliased COUNT(*) — driver-assigned key');
+        assert.equal(extractCount([{ n: 3, m: 9 }]), 3,     'multi-column: first projected column');
+        assert.equal(extractCount([{}]), 0,                 'row with no columns');
+        assert.equal(extractCount([]), 0,                   'EMPTY result set (the second unguarded deref)');
+        assert.equal(extractCount(null), 0,                 'null payload');
+        assert.equal(extractCount([null]), 0,               'null row — typeof null === object');
+    });
+
+    it('§11g — none of those shapes can throw (the hang was a throw in a callback)', function() {
+        [[{ n: 1 }], [], [{}], null, [null], undefined, 'x', [{ a: 1, b: 2 }]].forEach(function(shape) {
+            assert.doesNotThrow(function() { extractCount(shape); },
+                'shape ' + JSON.stringify(shape) + ' must not throw');
+        });
+    });
+});
+
+
+// ─── 12 — #B412: the @return annotation parser no longer over-captures ───────
+
+describe('12 - #B412: @return capture is bounded to the first brace pair', function() {
+
+    it('§12a — the source uses [^}]+, matching the sibling connectors', function() {
+        var src = fs.readFileSync(CONNECTOR, 'utf8');
+        var line = src.split('\n').filter(function(l) {
+            return /returnType\s*=\s*queryString\.match\(/.test(l);
+        })[0];
+        assert.ok(line, 'the returnType extraction line must exist');
+        assert.match(line, /\[\^\}\]\+/,  'must use the bounded [^}]+ class');
+        assert.doesNotMatch(line, /\{\(\.\*\)\}/, 'must not use the greedy (.*) form');
+    });
+
+    it('§12b — behavioural: a second brace pair on the line no longer bleeds in', function() {
+        var shipped = /@return\s+\{([^}]+)\}/;
+        assert.equal('@return {number} n'.match(shipped)[1], 'number');
+        assert.equal('@return {object} note {x}'.match(shipped)[1], 'object',
+            'the trailing {x} must not be absorbed');
+        // control: the greedy form genuinely fails this case, so the pin above is not vacuous
+        assert.equal('@return {object} note {x}'.match(/@return\s+\{(.*)\}/)[1], 'object} note {x');
+    });
+});

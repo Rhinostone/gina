@@ -456,7 +456,6 @@ function Couchbase(conn, infos) {
             , paramTypes    = []
             , inlineParams  = [] // order of use inside the query
             , returnType    = null // Array or Object : Array by default
-            , returnVariable= null // return variable
         ;
 
 
@@ -528,7 +527,12 @@ function Couchbase(conn, infos) {
                 }
             }
             // extract return type (before stripping — annotation lives in the comment block)
-            returnType = queryString.match(/\@return\s+\{(.*)\}/);
+            // #B412 — `[^}]+`, not `(.*)`: the greedy form over-captures when a second
+            // `{...}` appears later on the SAME line (`@return {object} note {x}` yielded
+            // `object} note {x`), producing an unknown returnType that falls through every
+            // branch and hands the caller the raw row array instead of the declared shape.
+            // Same expression the mysql / postgresql / scylladb / sqlite connectors use.
+            returnType = queryString.match(/@return\s+\{([^}]+)\}/);
             if ( Array.isArray(returnType) ) {
                 returnType = returnType[1];
             }
@@ -1037,13 +1041,25 @@ function Couchbase(conn, infos) {
 
                             data = (data) ? data[0] : data
 
-                        } else if ( returnType && returnType == 'number' && /count\(|count\s+\(/i.test(queryString) ) {
-
-                            var re = /(?:(?:COUNT\(\S+\)|COUNT\s+\(\S+\))\s+AS\s+)(\w+)/i;
-                            re.lastIndex = 1; // defining last index
-                            returnVariable = queryString.match(re)[re.lastIndex];
-
-                            data = ( typeof(returnVariable) != 'undefined' ) ? data[0][returnVariable] : data[0];
+                        } else if ( returnType && returnType == 'number' && /count\s*\(/i.test(queryString) ) {
+                            // #B412 — derive the count from the first projected column instead of
+                            // parsing the COUNT alias out of the query text. The former alias regex
+                            // (`COUNT\(\S+\)\s+AS\s+(\w+)`) could match NEITHER `COUNT(DISTINCT a.b) AS n`
+                            // (`\S+` cannot span the space) NOR an unaliased `COUNT(*)`, and the deref of
+                            // the resulting null match was unguarded. Because that throw happened INSIDE
+                            // this result callback, a promisified caller never settled: the request hung
+                            // with no response and no 5xx, visible only as an uncorrelated log line.
+                            // It was also dev-invisible — the dev path strips only the first comment
+                            // block, so a commented-out parsable COUNT elsewhere in the file kept the
+                            // regex satisfied locally while production (which strips every comment) threw.
+                            // Mirrors mysql / postgresql / scylladb / sqlite, none of which use a regex
+                            // here. `data[0] !== null` because typeof null === 'object'.
+                            if ( Array.isArray(data) && data.length > 0 && typeof(data[0]) == 'object' && data[0] !== null ) {
+                                var countKeys = Object.keys(data[0]);
+                                data = ( countKeys.length > 0 ) ? data[0][countKeys[0]] : 0;
+                            } else {
+                                data = 0;
+                            }
                         }
 
                         try {
