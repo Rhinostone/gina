@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'A failed client routing fetch now leaves console evidence (#B416). The dependency bus event fires on fetch failure as well as success - that is what keeps the page booting - but the listener discarded the error it carried, so a genuinely failed fetch (a non-OK status caught by the response guard) booted the framework permanently degraded, with an empty routing table and zero console output. The listener now reads and reports the carried error, naming the consequence: client `getRoute()`/`toUrl()` degraded until reload.'
+time: 2026-08-24T03:22:37+01:00

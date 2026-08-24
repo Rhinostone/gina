@@ -1118,6 +1118,15 @@ function Routing() {
         // }
 
 
+        // #B415 — client-side getRouting returns null BY DESIGN when nothing
+        // matches (a {} table before the routing fetch lands, or a bundle with
+        // no rules). The bare `routing[rule]` deref below then threw a context-
+        // free TypeError ONE LINE ABOVE the #B132 diagnostic — so the degraded-
+        // table case #B132 was built for was exactly the one it could never
+        // report. Name the bundle and the likely cause instead.
+        if ( !routing ) {
+            throw new Error('[ RoutingHelper::getRoute(rule, params) ] : bundle `'+ bundle +'` has no routing table for rule `'+ rule +'` (client: routing config not loaded yet, or empty)')
+        }
         if ( typeof(routing[rule]) == 'undefined' ) {
             // #B132 — name the bundle + its table size so a degraded/near-empty
             // table (e.g. a bundle whose routing config never loaded) is

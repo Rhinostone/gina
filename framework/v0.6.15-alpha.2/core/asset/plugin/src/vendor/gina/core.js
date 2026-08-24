@@ -36,6 +36,55 @@ var readyList = [
 var readyFired = false;
 var readyEventHandlersInstalled = false;
 
+// #B414 — the framework's ONE mandatory client dependency (the routing table,
+// fetched by getDependencies from `<webroot>_gina/assets/routing.json`) must be
+// SETTLED before any consumer handler runs: the server whispers
+// `page.environment.routing` as a hardcoded '{}' (the real export is commented
+// out — "Adding 289 KB"), so between DOMContentLoaded and the fetch landing,
+// `gina.config.routing` is {} and any getRoute()/toUrl() in handler init throws
+// or misroutes. Loopback wins that race by single-digit ms; a real deployment
+// LOSES it by 150ms+ on every load — deterministic breakage that local dev can
+// never see. "Settled" deliberately means loaded OR failed: loadRoutingConf
+// dispatches `deps.loaded` on both paths, so a broken endpoint still releases
+// handlers (with console evidence via the listener) instead of hanging the page.
+var _ginaDepsSettled = false;
+var _ginaDepsQueue   = [];
+/**
+ * Marks the mandatory client deps settled and drains every queued callback.
+ * Idempotent — the forced (timeout) and real (deps.loaded) paths can both fire.
+ * @param {boolean} [forced] - true when the 5s fallback fired before the deps
+ * @inner
+ */
+function _settleDeps(forced) {
+    if (_ginaDepsSettled) return;
+    _ginaDepsSettled = true;
+    if (forced && typeof(console) != 'undefined' && console.error) {
+        console.error('[gina] routing dependency still pending after 5s — releasing handlers with a degraded routing table');
+    }
+    while (_ginaDepsQueue.length) {
+        try { _ginaDepsQueue.shift()(); } catch (depsCbErr) {
+            if ( typeof(console) != 'undefined' && console.error ) {
+                console.error(depsCbErr.stack || depsCbErr.message || depsCbErr);
+            }
+        }
+    }
+}
+/**
+ * Runs `fn` now if the mandatory deps have settled, else queues it for the
+ * settle drain (real or forced).
+ * @param {function} fn
+ * @inner
+ */
+function _whenDepsSettled(fn) {
+    if (_ginaDepsSettled) { fn(); return; }
+    _ginaDepsQueue.push(fn);
+}
+// Armed at PARSE TIME on purpose — NOT inside getDependencies: on a page where
+// the script-tag scan matches nothing (renamed src, static harness) the fetch
+// is never issued, so a timer armed there would never start and the gate would
+// hang handlers forever in exactly the degenerate case it exists to protect.
+setTimeout(function () { _settleDeps(true); }, 5000);
+
 // call this when the document is ready
 // this function protects itself against being called more than once
 function ready() {
@@ -62,7 +111,13 @@ function ready() {
                             result = readyList[i].fn.call(window, readyList[i].ctx, window.require);
 
                             // clear
-                            if (result) {
+                            // #B414 — advance past the gina entry only once the
+                            // routing dependency has settled too: a truthy
+                            // onGinaLoaded means only that the LOADER's whispers
+                            // ran (isFrameworkLoaded), never that the async
+                            // routing fetch landed. Releasing here without it
+                            // ran consumer handlers against a {} table.
+                            if (result && _ginaDepsSettled) {
                                 window.clearInterval(scheduler);
                                 ++i;
                                 handleEvent(i, readyList);
@@ -153,7 +208,12 @@ if ( typeof(window['gina']) == 'undefined' ) { // could have be defined by loade
         /**
          * ready
          * This is the one public interface use to wrap `handlers`
-         * It is an equivalent of document.addEventListener('DOMContentLoaded', cb)
+         * It fires once BOTH document readiness (DOMContentLoaded-equivalent)
+         * AND the framework's mandatory routing dependency have settled — the
+         * routing table arrives by async fetch, so DOMContentLoaded alone was
+         * too early on deployed tiers (#B414). If the fetch fails or never
+         * starts, handlers still release (settle-on-error / 5s fallback), with
+         * console evidence.
          *
          * No need to use it for `handlers`, it is automatically applied for each `handler`
          *
@@ -167,7 +227,14 @@ if ( typeof(window['gina']) == 'undefined' ) { // could have be defined by loade
             // if ready has already beenfired, then just schedule the callback
             // to fire asynchronously, but right away
             if (readyFired) {
-                setTimeout(function() {callback(context);}, 1);
+                // #B414 — the late-registration path must gate on the routing
+                // dependency too: this branch bypasses the readyList scheduler
+                // entirely, so without the gate a handler registered after
+                // DOMContentLoaded (a deferred script, a handler registered
+                // from another handler) still ran against a {} table.
+                _whenDepsSettled(function () {
+                    setTimeout(function() {callback(context);}, 1);
+                });
                 return;
             } else {
                 // add the function and context to the list
@@ -293,7 +360,14 @@ require([
     var _validatorBootTries = 0;
     var bootValidator = function () {
         try {
-            if ( !window['gina'] || !window['gina']['isFrameworkLoaded'] ) {
+            // #B414 — `_ginaDepsSettled` joins the gate: `isFrameworkLoaded`
+            // guarantees the whispers (incl. gina.forms) ran, but NOT that the
+            // async routing fetch landed — and a form rule may name a route
+            // (the `query` rule), which evaluates at bind. Constructing before
+            // the deps settle bound forms against a {} table and died inside
+            // the init listener. Settle-on-error + the 5s fallback keep this
+            // poll terminating in every degenerate shape.
+            if ( !window['gina'] || !window['gina']['isFrameworkLoaded'] || !_ginaDepsSettled ) {
                 if ( _validatorBootTries++ < 100 ) {
                     (window['setTimeout'] || function (fn) { fn(); })(bootValidator, 50);
                 }
@@ -457,9 +531,21 @@ function getDependencies(gina, cb) {
         // }
     ];
     depsEventBus.addEventListener('deps.loaded', (event) => {
+        // #B416 — surface the failure the event carries: loadRoutingConf
+        // dispatches this on ERROR too (that is what keeps the boot alive),
+        // but the detail was discarded — a failed fetch (#B213's guard
+        // throwing on a non-OK status) booted the framework permanently
+        // degraded (routing {}) with ZERO console evidence.
+        if ( event && event.detail && event.detail.error ) {
+            if ( typeof(console) != 'undefined' && console.error ) {
+                console.error('[gina] routing dependency failed to load — client getRoute()/toUrl() will be degraded until reload:', event.detail.error.stack || event.detail.error.message || event.detail.error);
+            }
+        }
         arr.splice(0,1);
         if (!arr.length) {
-            // Deps ready
+            // Deps settled (loaded or failed) — release the #B414 gate, then
+            // run the script-onload continuation (the ginaloaded attach).
+            _settleDeps();
             cb()
         }
     });
