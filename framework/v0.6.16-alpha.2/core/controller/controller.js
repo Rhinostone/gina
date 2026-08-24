@@ -1002,7 +1002,22 @@ function SuperController(options) {
             set('page.environment.reverseRouting',encodeRFC5987ValueChars('{}'));
 
             var forms = local.options.conf.forms = options.conf.content.forms // all forms
-            set('page.environment.forms', encodeRFC5987ValueChars(JSON.stringify(forms))); // export for GFF
+            // #B344 -- the `mocks` group (dev fixture data walked from `<bundle>/forms/mocks/`)
+            // is server-side only: the client bundle consumes `rules` (validator live-check)
+            // and `validators` (user-defined validators), never `mocks` -- so the whispered
+            // export excludes it in EVERY env (uniform client contract, page weight).
+            // Shallow copy only: `forms` is the SHARED per-process catalog reference also
+            // grafted below (`conf.forms`, `page.forms`) -- never mutate it.
+            var _whisperedForms = {};
+            if ( forms && typeof(forms) == 'object' ) {
+                // replaced: for...in -- use Object.keys() (#P22)
+                var _formsGroups = Object.keys(forms);
+                for (var _fgi = 0; _fgi < _formsGroups.length; ++_fgi) {
+                    if (_formsGroups[_fgi] === 'mocks') continue;
+                    _whisperedForms[_formsGroups[_fgi]] = forms[_formsGroups[_fgi]];
+                }
+            }
+            set('page.environment.forms', encodeRFC5987ValueChars(JSON.stringify(_whisperedForms))); // export for GFF (#B344: minus `mocks`)
             set('page.forms', options.conf.content.forms);
 
 
