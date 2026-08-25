@@ -10,7 +10,7 @@
  * exact field the facade routes on.
  *
  * §01-§02 are source pins over comment-stripped slices (the store slice runs
- * `this.store = async function` to `this.query = function`, the same anchors
+ * `this.store = function` to `this.query = function`, the same anchors
  * controller-store-move.test.js uses). §03 pins the #B140 record change in
  * core/server.js. §04+ drive the REAL SuperController.createTestInstance()
  * against a REAL lib/storage driver on a throwaway root — behavioural, per
@@ -42,7 +42,7 @@ var SV = null;   // server.js (comment-stripped)
 before(function () {
     var RAW = fs.readFileSync(SOURCE, 'utf8');
 
-    var stStart = RAW.indexOf('this.store = async function');
+    var stStart = RAW.indexOf('this.store = function');
     var stEnd   = RAW.indexOf('this.query = function', stStart);
     assert.ok(stStart > -1, 'extraction control: store declaration located');
     assert.ok(stEnd > stStart, 'extraction control: store slice terminator located');

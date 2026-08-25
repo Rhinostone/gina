@@ -1002,7 +1002,22 @@ function SuperController(options) {
             set('page.environment.reverseRouting',encodeRFC5987ValueChars('{}'));
 
             var forms = local.options.conf.forms = options.conf.content.forms // all forms
-            set('page.environment.forms', encodeRFC5987ValueChars(JSON.stringify(forms))); // export for GFF
+            // #B344 -- the `mocks` group (dev fixture data walked from `<bundle>/forms/mocks/`)
+            // is server-side only: the client bundle consumes `rules` (validator live-check)
+            // and `validators` (user-defined validators), never `mocks` -- so the whispered
+            // export excludes it in EVERY env (uniform client contract, page weight).
+            // Shallow copy only: `forms` is the SHARED per-process catalog reference also
+            // grafted below (`conf.forms`, `page.forms`) -- never mutate it.
+            var _whisperedForms = {};
+            if ( forms && typeof(forms) == 'object' ) {
+                // replaced: for...in -- use Object.keys() (#P22)
+                var _formsGroups = Object.keys(forms);
+                for (var _fgi = 0; _fgi < _formsGroups.length; ++_fgi) {
+                    if (_formsGroups[_fgi] === 'mocks') continue;
+                    _whisperedForms[_formsGroups[_fgi]] = forms[_formsGroups[_fgi]];
+                }
+            }
+            set('page.environment.forms', encodeRFC5987ValueChars(JSON.stringify(_whisperedForms))); // export for GFF (#B344: minus `mocks`)
             set('page.forms', options.conf.content.forms);
 
 
@@ -3887,6 +3902,10 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
      *  @param {object} error
      *  @param {array} files
      *
+     * @returns {{onComplete: function}|undefined} the fluent handle when `cb`
+     *   is omitted — `store(target).onComplete(cb)` — or `undefined` when
+     *   `cb` is provided
+     *
      * @example
      * // store the request's uploaded files, surfacing the real failure cause
      * self.store(uploadDir, req.files, function onStored(err, files) {
@@ -3905,8 +3924,18 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
      *     // files[i] = { file, group, driver, key, size, type, encoding } (driver-routed)
      *     self.renderJSON({ files: files });
      * });
+     *
+     * @example
+     * // fluent form — no callback argument: chain .onComplete(cb).
+     * // #B420: the declaration is deliberately NOT `async` — this handle must
+     * // be returned synchronously; an `async` wrapper would hand back a
+     * // Promise carrying no `onComplete`.
+     * self.store(uploadDir).onComplete(function onStored(err, files) {
+     *     if (err) { return self.throwError(500, err); }
+     *     self.renderJSON({ files: files });
+     * });
      * */
-    this.store = async function(target, files, cb) {
+    this.store = function(target, files, cb) {
 
         // #STO1 — per-group storage-driver routing (slice 1). Group config is
         // read DIRECTLY off the request's resolved bundle conf (a getConfig()
@@ -4005,7 +4034,7 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
 
             // #B38 — released-response guard (see #B31): the documented
             // `store(target).onComplete(cb)` form calls start() SYNCHRONOUSLY from the
-            // returned wrapper, OUTSIDE the async store() body, so on a released request
+            // returned wrapper, OUTSIDE the store() body, so on a released request
             // (the per-request refs nulled by a terminal exit) this is a SIGTERM bundle
             // kill — not the non-fatal async class. Notify through the same cb / 'uploaded'
             // channel the empty-upload path uses, then bail.

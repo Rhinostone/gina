@@ -60,7 +60,7 @@ before(function () {
     assert.ok(mvEnd > mvStart, 'extraction control: movefiles slice terminator located');
     MV = stripComments(RAW.slice(mvStart, mvEnd));
 
-    var stStart = RAW.indexOf('this.store = async function');
+    var stStart = RAW.indexOf('this.store = function');
     var stEnd   = RAW.indexOf('this.query = function', stStart);
     assert.ok(stStart > -1, 'extraction control: store declaration located');
     assert.ok(stEnd > stStart, 'extraction control: store slice terminator located');

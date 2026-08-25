@@ -231,7 +231,7 @@ describe('03 - serveFromStorage: source structure', function() {
     before(function() {
         var i = SRC.indexOf('this.serveFromStorage = function');
         assert.ok(i > -1, 'declaration anchor must exist');
-        var j = SRC.indexOf('this.store = async function', i);
+        var j = SRC.indexOf('this.store = function', i);
         assert.ok(j > i, 'the facade sits before this.store');
         blk = SRC.slice(i, j);
     });

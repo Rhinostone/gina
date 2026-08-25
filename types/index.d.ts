@@ -429,9 +429,11 @@ declare namespace gina {
         }): void;
 
         /**
-         * Store uploaded file(s) to a target directory.
+         * Store uploaded file(s) to a target directory. With no `cb`, returns
+         * the fluent handle: `store(target).onComplete(cb)` (#B420 — the
+         * implementation is deliberately not `async`).
          */
-        store(target: string, files?: any, cb?: (err: Error | null, files?: any[]) => void): Promise<void>;
+        store(target: string, files?: any, cb?: (err: Error | null, files?: any[]) => void): { onComplete(cb: (err: Error | null, files?: any[]) => void): void } | void;
 
         /** Health check: responds with `{ status: 200, isAlive: true }` */
         getBundleStatus(req: GinaRequest, res: GinaResponse, next: NextFunction): void;

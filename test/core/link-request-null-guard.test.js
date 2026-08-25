@@ -90,10 +90,17 @@ describe('02 - link: the extracted guard executes — a null resolution throws, 
         var slice = src.slice(start, end);
         assert.ok(slice.indexOf('getLinkByUrl') > -1,
             'the resolution must live INSIDE the pre-transport span (red before the fix: it sat below the supersede block)');
-        var fn = new Function('_operatedLink', 'getLinkByUrl', 'url',
+        // #B418 moved the $el resolution into this span, so the executed slice
+        // references `document` — stubbed here like the other collaborators
+        // (`getLinkByUrl` above; the sibling file stubs createXhr/_linkXhr/_linkSeq).
+        // The stub returns a present element, so these arms exercise the #B328
+        // guard exactly as before; the detached-anchor arms live in
+        // link-request-detached-anchor.test.js with a null-returning stub.
+        var fn = new Function('_operatedLink', 'getLinkByUrl', 'document', 'url',
             slice + '\nreturn { link: $link, cleared: _operatedLink };');
+        var DOC_STUB = { getElementById: function() { return { id: 'present' }; } };
         runSlice = function(operated, lookup, url) {
-            return fn(operated, function() { return lookup; }, url);
+            return fn(operated, function() { return lookup; }, DOC_STUB, url);
         };
     });
 
