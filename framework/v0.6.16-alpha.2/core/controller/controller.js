@@ -3902,6 +3902,10 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
      *  @param {object} error
      *  @param {array} files
      *
+     * @returns {{onComplete: function}|undefined} the fluent handle when `cb`
+     *   is omitted — `store(target).onComplete(cb)` — or `undefined` when
+     *   `cb` is provided
+     *
      * @example
      * // store the request's uploaded files, surfacing the real failure cause
      * self.store(uploadDir, req.files, function onStored(err, files) {
@@ -3920,8 +3924,18 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
      *     // files[i] = { file, group, driver, key, size, type, encoding } (driver-routed)
      *     self.renderJSON({ files: files });
      * });
+     *
+     * @example
+     * // fluent form — no callback argument: chain .onComplete(cb).
+     * // #B420: the declaration is deliberately NOT `async` — this handle must
+     * // be returned synchronously; an `async` wrapper would hand back a
+     * // Promise carrying no `onComplete`.
+     * self.store(uploadDir).onComplete(function onStored(err, files) {
+     *     if (err) { return self.throwError(500, err); }
+     *     self.renderJSON({ files: files });
+     * });
      * */
-    this.store = async function(target, files, cb) {
+    this.store = function(target, files, cb) {
 
         // #STO1 — per-group storage-driver routing (slice 1). Group config is
         // read DIRECTLY off the request's resolved bundle conf (a getConfig()
@@ -4020,7 +4034,7 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
 
             // #B38 — released-response guard (see #B31): the documented
             // `store(target).onComplete(cb)` form calls start() SYNCHRONOUSLY from the
-            // returned wrapper, OUTSIDE the async store() body, so on a released request
+            // returned wrapper, OUTSIDE the store() body, so on a released request
             // (the per-request refs nulled by a terminal exit) this is a SIGTERM bundle
             // kill — not the non-fatal async class. Notify through the same cb / 'uploaded'
             // channel the empty-upload path uses, then bail.
