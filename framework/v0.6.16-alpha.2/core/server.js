@@ -5959,6 +5959,39 @@ function Server(options) {
                         var fileUploadDir = ( opt.groups[fileGroup] && opt.groups[fileGroup].path )
                             ? opt.groups[fileGroup].path
                             : uploadDir;
+                        // #B419 (2026-08-25) — the staging destination is server-generated and
+                        // OPAQUE: never the client-supplied basename. Both the write site below
+                        // and the record's `path` used `<fileUploadDir>/<info.filename>` verbatim
+                        // with no per-part component — so two parts sharing a name (within ONE
+                        // request, or across concurrent requests) opened two write streams on ONE
+                        // path with independent file offsets and INTERLEAVED their bytes into a
+                        // single hybrid matching neither source, reported to the app as a success
+                        // (`storeErr:false` / 200). Measured pre-fix on a live boot: one request
+                        // with two same-named parts -> one 500000-byte file of {B:417353,A:82647};
+                        // 12 concurrent same-named requests -> 0/12 clean. The parse precedes
+                        // routing and all middleware (the #B30/#B97/#B145 family), so an
+                        // UNAUTHENTICATED POST to ANY url reaches this path — an unrouted one
+                        // answers 404 to the client and still writes the file.
+                        //
+                        // A random name, NOT `filename + <suffix>`: this is what multer ("a random
+                        // name that doesn't include any file extension") and formidable
+                        // (`newFilename` hexoid, client name kept as `originalFilename`) both do.
+                        // Appending would keep attacker-controlled bytes on disk (RTL-override
+                        // display spoofing, control chars, reserved device names) and could push a
+                        // long-but-legal filename past NAME_MAX (255) into an ENAMETOOLONG 500,
+                        // turning a working upload into a failure. A CSPRNG, NOT the `Math.random()`
+                        // movefiles uses (`controller.js:3198`): V8's is xorshift128+, so staging
+                        // paths would be predictable, and a group `path` is operator-configurable
+                        // into a served root. No extension, so a misconfigured static-serve of that
+                        // directory cannot hand back an interpretable type.
+                        //
+                        // The client's name is NOT lost — it stays on the record as
+                        // `originalFilename` below, which is what `self.store()` publishes under
+                        // (`controller.js:4061`) and what a storage driver receives as
+                        // `originalName`. The documented "keeping each file's original name"
+                        // contract is unchanged; only `req.files[].path`'s basename differs, and
+                        // that is documented as "the absolute path of the temporary file on disk".
+                        var stagedName = crypto.randomBytes(16).toString('hex') + '.part';
                         // #B145 (2026-07-22) — guard the dir creation. mkdirSync throws
                         // SYNCHRONOUSLY inside this busboy 'file' callback when the configured
                         // group `path` is non-creatable (parent read-only / EROFS / EACCES).
@@ -5981,7 +6014,7 @@ function Server(options) {
                         }
 
                         // creating file
-                        writeStreams[index] = fs.createWriteStream( _(fileUploadDir + '/' + filename) );
+                        writeStreams[index] = fs.createWriteStream( _(fileUploadDir + '/' + stagedName) );
                         // #B143 (2026-07-21) — arm the write stream's terminal listeners AT
                         // CREATION, not in a busboy 'finish' loop. The historical late attach
                         // lost a race: an early small part's write stream emits 'finish' in
@@ -6092,7 +6125,10 @@ function Server(options) {
 
                             // #B49 — mirror the per-group / configured dir chosen at the write site
                             // above (file.on('end') closes over the same per-file fileUploadDir).
-                            tmpFilename = _(fileUploadDir + '/' + filename);
+                            // #B419 — and the same per-part `stagedName`: this expression and the
+                            // createWriteStream above are built INDEPENDENTLY, so uniquifying only
+                            // one leaves this record pointing at a file that was never written.
+                            tmpFilename = _(fileUploadDir + '/' + stagedName);
 
                             // #B142 (2026-07-21) — size here is PROVISIONAL: 'end' fires on
                             // the SOURCE stream while the liner Transform downstream can

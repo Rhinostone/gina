@@ -53,8 +53,8 @@ describe('01 - upload dir: server.js source pins (#B49)', function() {
     });
 
     it('both write sites use the resolved per-file dir, not the bare global', function() {
-        assert.match(active, /fs\.createWriteStream\(\s*_\(fileUploadDir \+ '\/' \+ filename\)/);
-        assert.match(active, /tmpFilename\s*=\s*_\(fileUploadDir \+ '\/' \+ filename\)/);
+        assert.match(active, /fs\.createWriteStream\(\s*_\(fileUploadDir \+ '\/' \+ stagedName\)/);
+        assert.match(active, /tmpFilename\s*=\s*_\(fileUploadDir \+ '\/' \+ stagedName\)/);
     });
 
     it('no write site still uses the old bare `uploadDir` path form', function() {
