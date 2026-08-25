@@ -59,8 +59,14 @@ describe('01 - upload dir: server.js source pins (#B49)', function() {
 
     it('no write site still uses the old bare `uploadDir` path form', function() {
         // the global decl keeps `uploadDir` as the fallback, but neither write
-        // site nor tmpFilename may use `_(uploadDir + '/' + filename)` any more.
-        assert.doesNotMatch(active, /_\(uploadDir \+ '\/' \+ filename\)/);
+        // site nor tmpFilename may use the bare global as the destination.
+        // #B419 retargeted this from `+ filename` to `+ stagedName`: the rename
+        // made the old needle unmatchable, so it had become a control that could
+        // not fire — it would have passed even if the #B49 regression returned.
+        assert.doesNotMatch(active, /_\(uploadDir \+ '\/' \+ stagedName\)/);
+        // instrument validation: the needle must be findable in principle, or the
+        // assertion above proves nothing.
+        assert.match(active, /_\(fileUploadDir \+ '\/' \+ stagedName\)/);
     });
 });
 
