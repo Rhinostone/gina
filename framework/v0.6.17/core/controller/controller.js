@@ -986,8 +986,23 @@ function SuperController(options) {
                         }
                         continue;
                     }
-                    local.options.conf.routing[r].host = ctx.config.envConf.routing[r].host;
-                    local.options.conf.routing[r].hostname = ctx.config.envConf.routing[r].hostname;
+                    // #B423 — copy only what the source actually HAS. A `redirect`
+                    // rule is deliberately excluded from the host/hostname defaulting
+                    // (config.js gates it on `!/^redirect$/.test(param.control)`), so
+                    // those keys are ABSENT on such rules — and an unconditional copy
+                    // assigned `undefined`, CREATING own properties valued `undefined`
+                    // on `_routingCloned`. That object is cached on envConf for the
+                    // process lifetime, so every later no-arg `getConfig()` ->
+                    // `JSON.clone(local.options.conf)` walked into the rule, hit
+                    // `source[key] === undefined` and emitted the clone's
+                    // "should not be left `undefined`. Assigning to `null`" warn —
+                    // once per redirect rule per clone, forever. Absent stays absent.
+                    if ( typeof(ctx.config.envConf.routing[r].host) != 'undefined' ) {
+                        local.options.conf.routing[r].host = ctx.config.envConf.routing[r].host;
+                    }
+                    if ( typeof(ctx.config.envConf.routing[r].hostname) != 'undefined' ) {
+                        local.options.conf.routing[r].hostname = ctx.config.envConf.routing[r].hostname;
+                    }
                 }
                 ctx.config.envConf._isRoutingUpdateNeeded = false;
 

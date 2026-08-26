@@ -23,8 +23,9 @@
  * The fix aligns each site with a precedent already in this file — the #B87
  * `query` coercion for the two rules, and isFloat's identical guarded
  * .replace() for trim. Deliberately NOT changed here: isDate (its throw is a
- * purpose-built catch — a design call, #B397) and toFloat/format (broken
- * server-side for every input, including valid ones — #B398).
+ * purpose-built catch — a design call, #B397). toFloat/format were also left
+ * out of this pass and have since been fixed by #B398 (context-safe rules —
+ * see validator-context-safe-rules.test.js).
  *
  * Shape: (a) source pins, comment-stripped — the fix's OWN comments name the
  * pre-fix forms, so an un-stripped scan false-positives (the recurring
