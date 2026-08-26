@@ -38,8 +38,9 @@
  * ## Curated vocabulary
  * A deliberate subset of the engine's rules (form-validator.js): isEmail, isRequired,
  * isBoolean, isNumber, isInteger, isString(+min/maxLength), isDate, isInList (enum),
- * exclude, trim. It EXCLUDES `toFloat` (unguarded `document.getElementById` server
- * crash) and `query` (spins a Controller) — a DTO must never emit them.
+ * exclude, trim. It EXCLUDES `toFloat` (a coercion transform, kept out of the
+ * DTO vocabulary — its historical unguarded-`document` server crash is fixed
+ * by #B398) and `query` (spins a Controller) — a DTO must never emit them.
  *
  * ## Value-range (`.min()/.max()`) — schema-canonical, runtime-deferred (measured)
  * The engine has NO min/max-VALUE rule, and its generic `is` condition can only

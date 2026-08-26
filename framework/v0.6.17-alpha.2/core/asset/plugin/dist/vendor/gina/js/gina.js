@@ -4303,10 +4303,29 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
             return self[this.name]
         }
 
+        /**
+         * Set the field value — downstream rules and the validated payload both
+         * consume it — and reflect it onto the live element when one exists.
+         *
+         * Context-safe (#B398): the DOM reflection is browser-only. `target` is
+         * null server-side by construction, where the value assignment alone is
+         * the whole effect; pre-fix, the unguarded `setAttribute` made every
+         * server-side call throw.
+         *
+         * @param {string|number|boolean} value - value to assign
+         *
+         * @returns {object} field object (chainable)
+         *
+         * @example
+         *     // rule file
+         *     "status": { "set": "pending" }
+         * */
         self[el]['set'] = function(value) {
             this.value  = local['data'][this.name] = value;
-            //  html
-            this.target.setAttribute('value', value);
+            //  html reflection (browser only) — #B398: `target` is null server-side
+            if ( isGFFCtx && this.target ) {
+                this.target.setAttribute('value', value);
+            }
             // Todo : select and radio case to apply change
 
             return self[this.name]
@@ -4680,12 +4699,47 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
         }
 
 
+        /**
+         * Coerce the field value to a float (`decimals` places, default 2),
+         * normalizing spaces and thousand/decimal separators (`,` vs `.`).
+         *
+         * Context-safe (#B398): in the browser the live DOM value is preferred
+         * when one is reachable — the rendered input may carry a display-filtered
+         * value (swig::formatNumber()) that differs from the snapshot. Server-side
+         * — and whenever no live element is reachable (null `target`, detached
+         * node) — the submitted `this.value` IS the raw value and is used
+         * directly. Pre-fix, an unguarded `document` read here made every
+         * server-side call throw, valid inputs included; the same statement was
+         * missing a comma, leaking `isFloatingWithCommas` as an implicit global.
+         *
+         * @param {number} [decimals=2] - decimal places kept on the coerced value
+         *
+         * @returns {object} field object (chainable)
+         *
+         * @example
+         *     // rule file
+         *     "price": { "toFloat": 2, "isFloat": true }
+         * */
         self[el]['toFloat'] = function(decimals) {
             // Fixed on 2025-03-12
-            // In case we are dealing with a filtered value (swig::formatNumber())
-            var val                     = document.getElementById(this.target.getAttribute('id')).value || this.value
-                isFloatingWithCommas    = false
+            // In case we are dealing with a filtered value (swig::formatNumber()),
+            // prefer the live DOM value when one is reachable. #B398 — guarded:
+            // `target` is null server-side (see the field construction) and
+            // `document` only exists in a browser(-like) context.
+            // was: var val = document.getElementById(this.target.getAttribute('id')).value || this.value
+            //          isFloatingWithCommas = false  // <- missing comma: implicit global
+            var $liveElement            = null
+                , val                   = null
+                , isFloatingWithCommas  = false
             ;
+            if (
+                this.target
+                && typeof(document) !== 'undefined' && document
+                && typeof(document.getElementById) === 'function'
+            ) {
+                $liveElement = document.getElementById(this.target.getAttribute('id'));
+            }
+            val = ( $liveElement && typeof($liveElement.value) != 'undefined' ) ? ($liveElement.value || this.value) : this.value;
             if ( typeof(val) == 'string' ) {
                 val = val.replace(/\s+/g, '');
                 // Fixed on 2025-03-12
@@ -5181,19 +5235,34 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
         }
 
         /**
-         * Formating date using DateFormatHelper
+         * Formating date using DateFormatHelper.
          * Check out documentation in the helper source: `lib/helpers/dateFormat.js`
-         * e.g.:
+         *
+         * Designed to follow `isDate`, which leaves the parsed `Date` on the
+         * field's `.value`. Works in BOTH contexts — `Date.prototype.format` is
+         * installed server-side too (helpers/prototypes). Returns the formatted
+         * STRING by design: terminal, do not chain another rule after it.
+         *
+         * #B398: a non-`Date` value here means `isDate` was not applied first —
+         * a rule-authoring error, reported as a named throw instead of the
+         * opaque `val.format is not a function`.
+         *
+         * @param {string} mask - DateFormatHelper mask (e.g. `isoDateTime`)
+         * @param {boolean} [utc] - render in UTC
+         *
+         * @returns {string} formatted date (terminal — not chainable)
+         *
+         * @example
          *      d.start
          *        .isDate('dd/mm/yyyy')
          *        .format('isoDateTime');
-         *
-         *
          * */
         self[el]['format'] = function(mask, utc) {
             var val = this.value;
             if (!val) return self[this.name];
-
+            if ( typeof(val.format) !== 'function' ) {
+                throw new Error('[FormValidator::format] field `'+ this.name +'`: value is not a Date - apply isDate(mask) before format(mask)');
+            }
             return val.format(mask, utc)
         };
 
