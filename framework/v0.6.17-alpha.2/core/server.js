@@ -7503,7 +7503,51 @@ function Server(options) {
         };
 
         // Checking cached route
-        var hasCachedRoute = await routingLib.getCached(req.method +':'+ pathname, req) || null;
+        // #B422 — a cached entry is a CANDIDATE, not a verdict. getCached() re-runs
+        // compareUrls(), whose returned foundRoute carries the verdict in `.past`
+        // (`request.routing` is populated only when `.past` is true) — but this call
+        // site used to test the OBJECT's truthiness, so a warm entry whose
+        // `requirements` REJECTED the request was still forced into `matched = true`
+        // by the loop's cached-route break below, dispatching with `req.routing`
+        // unset: the header-composition stub reached router.route(), whose
+        // `params.param.control` deref threw inside the async chain — an unhandled
+        // rejection, connection dropped, no HTTP response at all. Trigger: the cache
+        // key is `method:pathname` and (on the isaac engine) `req.url` arrives
+        // query-stripped, so ALL query variants of one pathname share ONE entry —
+        // whichever variant is seen first decides what is cached, and every later
+        // variant used to inherit that entry verdict-free.
+        // Fix: honor the verdict. Any warm outcome other than `.past === true`
+        // (requirements rejected, or a throwing `validator::` requirement) restores
+        // the request bags the failed compareUrls run contaminated (same surface the
+        // cold loop resets per iteration: req.params + req[method]) and falls
+        // through to the cold scan, which owns every terminal: 404, a sibling rule,
+        // or the cold catch's 500 naming the rule. Mirrors the two #B121 fixes in
+        // lib/routing (`was: if (isRoute.past)`).
+        var _reqMethodKey   = (method || req.method || 'GET').toLowerCase();
+        // #B422 — pre-getCached capture: a truly-cold request reaches this point
+        // with getCached() returning null WITHOUT running compareUrls, so restoring
+        // this state makes the fall-through byte-equivalent to a cold request at
+        // loop entry.
+        var _preCacheParams     = Object.assign({}, req.params);
+        var _preCacheReqMethod  = (typeof(req[_reqMethodKey]) != "undefined") ? Object.assign({}, req[_reqMethodKey]) : undefined;
+        var hasCachedRoute      = null;
+        var _cachedRouteThrew   = false;
+        try {
+            hasCachedRoute = await routingLib.getCached(req.method +':'+ pathname, req) || null;
+        } catch (_cachedRouteErr) {
+            // #B422 — a warm `validator::` requirement threw: treat as a miss. The
+            // cold scan re-runs the same rule and answers through its own catch,
+            // naming the rule — this warm site only knows the cache key.
+            _cachedRouteThrew = true;
+        }
+        if ( _cachedRouteThrew || hasCachedRoute && hasCachedRoute.past !== true ) {
+            // #B422 — requirements rejected this request (or evaluation threw). The
+            // entry stays valid for the variants it accepts; THIS request re-enters
+            // the cold scan clean.
+            req.params = Object.assign({}, _preCacheParams);
+            req[_reqMethodKey] = _preCacheReqMethod ? Object.assign({}, _preCacheReqMethod) : {};
+            hasCachedRoute = null;
+        }
         if ( hasCachedRoute ) {
             // Supposed to have everything we need to route
             isRoute = hasCachedRoute;
@@ -7528,7 +7572,8 @@ function Server(options) {
             }
         }
 
-        var _reqMethodKey   = (method || req.method || 'GET').toLowerCase();
+        // #B422 — _reqMethodKey is computed above, before the getCached call, so the
+        // pre-cache capture and this loop's per-iteration reset share one key.
         // Save the original req.params set by server.isaac.js (e.g. { 0: "/path" }).
         // fitsWithRequirements checks typeof(request.params) != 'undefined' — it must
         // exist, but contamination keys from failed compareUrls must be removed.

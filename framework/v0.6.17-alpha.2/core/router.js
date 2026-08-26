@@ -607,6 +607,16 @@ function Router(env, scope) {
         // #FI — controller setup start (file loading + inherits + new + setOptions)
         var _setupStart = (request._devTimeline) ? Date.now() : 0;
 
+        // #B422 defence in depth — `params.param.control` is the dispatch target; a
+        // params object without it means routing state was corrupted upstream (a
+        // matched-but-verdict-less route). Fail LOUD with a named 500: the bare
+        // deref below used to throw inside the async chain — an unhandled rejection
+        // that dropped the connection with no HTTP response and no trace.
+        if ( !params || !params.param || typeof(params.param.control) == 'undefined' ) {
+            serverInstance.throwError(response, 500, 'Routing state error: no `param.control` resolved for `'+ request.method +' '+ request.url +'`'+ ( (params && params.rule) ? ' (rule: `'+ params.rule +'`)' : '' ) +'.\nThe route was dispatched without a complete routing description.');
+            return;
+        }
+
         var action          = request.control = params.param.control;
         // more can be added ... but it will always start by `on`Something.
         var reservedActions = [
