@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Validator rules `toFloat`, `set` and `format` are now context-safe (#B398). `toFloat` no longer throws server-side — it reads the live DOM value only when one is reachable and otherwise uses the submitted value, so server-side rule sets can coerce floats (the missing comma that leaked `isFloatingWithCommas` as an implicit global is fixed with it). `set` assigns the field value in both contexts and reflects it onto the DOM element only in the browser. `format` — which already worked in both contexts after `isDate` — now reports a non-Date value as a named rule-authoring error pointing at the missing `isDate`, instead of the opaque `val.format is not a function`.'
-time: 2026-08-26T15:54:03+01:00
