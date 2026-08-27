@@ -45,6 +45,7 @@
  * Usage:
  *   node script/perf/profile-baseline.js                    # render,upload,ws
  *   node script/perf/profile-baseline.js --arm=ws,ws-bundle # #P36 re-arm pair
+ *   node script/perf/profile-baseline.js --arm=render,json   # #P39 slice-2 shape pair
  *   node script/perf/profile-baseline.js --keep             # keep the temp home
  * Options (defaults): --requests=3000 --concurrency=8 --upload-count=200
  *   --upload-kb=1500 --ws-sessions=8 --ws-frames=1500 --ws-payload=4096
@@ -511,6 +512,35 @@ async function driveRender(port) {
 }
 
 /**
+ * JSON arm (#P39 slice-2 sizing, 2026-08-27): N GETs against the fixture's
+ * TRIVIAL, DB-free `renderJSON` route — the shape a consumer production report
+ * convicted (§10), where no swig render and no `set()` traffic happens at all.
+ *
+ * The render arm cannot answer for this shape: its dominant term is the
+ * per-`set()` deep merge, which a JSON route never pays. Running both is what
+ * separates "expensive because it renders" from "expensive on every matched
+ * route regardless" — the per-request floor (routing, middleware construction,
+ * `getConfig()` clones) is what survives here.
+ *
+ * @param   {number} port
+ * @returns {Promise<object>} driver stats
+ */
+async function driveJson(port) {
+    var webroot = '/' + BUNDLE;
+    var stats = { arm: 'json', codes: {}, requests: REQUESTS, startMs: Date.now() };
+    var clients = [];
+    for (var c = 0; c < CONCURRENCY; c++) { clients.push(h2Session(port)); }
+    var per = Math.ceil(REQUESTS / CONCURRENCY);
+    try {
+        await Promise.all(clients.map(function (cl) { return seqGet(cl, webroot + '/', per, stats); }));
+    } finally {
+        clients.forEach(function (cl) { try { cl.close(); } catch (e) { /* ignore */ } });
+    }
+    stats.wallMs = Date.now() - stats.startMs;
+    return stats;
+}
+
+/**
  * Upload arm: concurrent multipart POSTs of a random binary payload.
  *
  * @param   {number} port
@@ -844,8 +874,8 @@ function teardown() {
 // Main
 // ---------------------------------------------------------------------------
 
-var DRIVERS = { render: driveRender, upload: driveUpload, ws: driveWs };
-var VALID_ARMS = ['render', 'upload', 'ws', 'ws-bundle'];
+var DRIVERS = { render: driveRender, json: driveJson, upload: driveUpload, ws: driveWs };
+var VALID_ARMS = ['render', 'json', 'upload', 'ws', 'ws-bundle'];
 
 async function main() {
     var bad = ARMS.filter(function (a) { return VALID_ARMS.indexOf(a) === -1; });
