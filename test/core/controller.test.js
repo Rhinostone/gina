@@ -8,8 +8,11 @@ var SOURCE = path.join(require('../fw'), 'core/controller/controller.js');
 
 // 01 — #B98 pure-logic replica: the routing-param `title` promotion + the
 // route-name fallback, run against the REAL lib/merge. set()/parseDataObject
-// are lifted verbatim from controller.js; §03 source-pins the shipped block so
-// this replica cannot silently drift from the source. The historical generic
+// below are the FROZEN pre-#P39-slice-2 implementation (retired 2026-08-27):
+// kept as this suite's oracle because #B98 is about WHICH set() calls run, and
+// the live set() is structure-equivalent for every primitive-path write —
+// pinned by test/core/controller-set-path.test.js §02. §03 source-pins the
+// #B98 call sites (not the setter), so this replica cannot mislead. The historical generic
 // promotion loop (removed by #B98) is kept as a SUBTRACT control proving the
 // defect: its dispatch sat after a `continue` that always fired, so it never
 // called set() at all.
@@ -18,8 +21,9 @@ describe('01 - #B98 routing param.title promotion + route-name fallback (pure-lo
     var FW_B98 = require('../fw');
     var mergeB98 = require(path.join(FW_B98, 'lib/merge'));
 
-    // Verbatim replicas of controller.js parseDataObject + set — fresh closure
-    // state per call via makeSetter, mirroring the per-request `local` closure.
+    // FROZEN replicas of the retired parseDataObject + set (pre-#P39 slice 2) —
+    // fresh closure state per call via makeSetter, mirroring the per-request
+    // `local` closure. Deliberately NOT the live implementation: see the header.
     function makeSetter() {
         var local = { userData: {} };
         var parseDataObject = function(o, obj, override) {
