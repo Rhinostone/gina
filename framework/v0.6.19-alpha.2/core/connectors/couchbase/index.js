@@ -982,6 +982,44 @@ function Couchbase(conn, infos) {
 
 
 
+                    // #B429 — per-call settlement. The completion trigger
+                    // ('N1QL:<entity>#<method>') carries NO call identity and `self` is a
+                    // process-wide entity singleton, so the shared-emitter rendezvous that
+                    // used to settle the Promise/.onComplete() path BROADCAST each result to
+                    // every in-flight caller of the same method (measured: two concurrent
+                    // callers both received whichever query finished first — on IN-ORDER
+                    // completion too, not just out-of-order). Every path now settles through
+                    // THIS call's own closure, exactly once; the trigger is emitted purely as
+                    // an observability signal (see the end of onQueryCallback).
+                    var _delivered = false;
+                    /**
+                     * Settle THIS call, at most once.
+                     *
+                     * @inner
+                     * @param {Error|boolean} err - the error, or `false` on success.
+                     * @param {*} data - rows, or the coerced value for a declared `@return` type.
+                     * @param {object} [meta] - the driver's result metadata.
+                     * @returns {void}
+                     */
+                    var _deliver = function(err, data, meta) {
+                        if (_delivered) {
+                            return;
+                        }
+                        _delivered = true;
+                        if (_mainCallback == null) {
+                            return;
+                        }
+                        try {
+                            _mainCallback(err, data, meta);
+                        } catch (_cbErr) {
+                            // #B430 — the caller's own callback threw. Never re-invoke it with
+                            // the same payload (the previous catch did exactly that, running a
+                            // throwing callback twice). Surface the throw instead.
+                            _cbErr.stack = '[ '+ trigger +' ] callback exception:\n'+ (_cbErr.stack || _cbErr.message);
+                            console.error(_cbErr.stack);
+                        }
+                    };
+
                     var onQueryCallback = function(err, data, meta) {
                         // #QI — finalize query entry timing and index extraction
                         if (_queryEntry) {
@@ -1024,11 +1062,12 @@ function Couchbase(conn, infos) {
 
                         if (err) {
                             lib.connectorError.stamp(err); // #CE1: classify transient vs permanent (one stamp; err flows to every downstream emit/callback)
-                            if ( typeof(self.emit) != 'undefined' ) {
-                                self.emit(trigger, err);
-                            } else { // Promise case
-                                throw new Error('[ Couchbase ][ onQueryCallback Exception] '+ trigger + '\n'+ err.stack)
-                            }
+                            // #B429 — the early `self.emit(trigger, err)` that used to sit here
+                            // is REMOVED. It fired the shared trigger BEFORE this call was
+                            // settled, so a concurrent caller's listener consumed THIS call's
+                            // error (measured: an `await` caller rejected with an explicit-
+                            // callback call's error). Settlement and the single observability
+                            // emit both happen at the end of onQueryCallback now.
                         }
 
                         // handle return type
@@ -1075,44 +1114,46 @@ function Couchbase(conn, infos) {
                             }
                         }
 
+                        // #B429 — settle THIS call through its own closure, exactly once.
+                        // Both call forms converge here: the explicit trailing callback IS
+                        // _mainCallback, and the Promise/.onComplete() path assigns its own
+                        // per-call resolver to _mainCallback before dispatching.
+                        _deliver(err, data, meta);
+
+                        // #B429 — ONE observability emit per completion, after settlement and
+                        // never as the delivery mechanism. This is a documented signal, not
+                        // dead code: entity.js's emit override forwards a trigger matching the
+                        // `N1QL:*` allow-list to lib/inspector-events (verified live), which is
+                        // what the Inspector's event stream renders. It is deliberately outside
+                        // _deliver's guard so a listener throwing can never affect settlement.
                         try {
-                            if ( _mainCallback != null ) {
-                                _mainCallback(err, data, meta)
-                            } else {
-                                //console.debug('self.emit ? ', typeof(self), typeof(self.emit));
-                                if (err) {
-                                    if ( typeof(self.emit) != 'undefined' ) {
-                                        self.emit(trigger, err);
-                                    } else { // Promise case
-                                        throw err
-                                    }
-
-                                } else {
-                                    if ( typeof(self.emit) != 'undefined' ) {
-                                        self.emit(trigger, err, data, meta);
-                                    } else { // Promise case
-                                        return data
-                                    }
-                                }
-                                return
+                            if ( typeof(self.emit) != 'undefined' ) {
+                                self.emit(trigger, err, data, meta);
                             }
-
-                        } catch (_err) {
-                            if ( _mainCallback != null ) {
-                                _mainCallback(err, data, meta)
-                            } else {
-                                if ( typeof(self.emit) != 'undefined' ) {
-                                    self.emit(trigger, _err);
-                                } else {
-                                    throw new Error('[ Couchbase ][ Core Entity Exception] '+ trigger + '\n'+ _err.stack)
-                                }
-                            }
+                        } catch (_emitErr) {
+                            console.error('[ '+ trigger +' ] listener exception:\n'+ (_emitErr.stack || _emitErr.message));
                         }
                     }; // EO onQueryCallback
 
-                    self._isRegisteredFromProto = false;
-                    // `register()` is only used for v2
-                    var register = async function (trigger, queryParams, onQueryCallback, cb) {
+                    /**
+                     * Dispatch this call's N1QL query and hand every outcome to
+                     * `onQueryCallback`, which settles the caller through `_deliver()`.
+                     *
+                     * Since #B429 there is exactly ONE dispatch path and no settlement
+                     * hook: the previous `cb` parameter registered a `self.once(trigger)`
+                     * listener on the shared entity singleton, which broadcast each result
+                     * to every in-flight caller of the same method.
+                     *
+                     * @inner
+                     * @param {string} trigger - `N1QL:<entity>#<method>`; the REST transport's
+                     *   correlation label and the observability event name. NOT a call identity.
+                     * @param {object} queryParams - forwarded to `restQuery` when the REST
+                     *   transport is enabled (`conn.useRestApi`).
+                     * @param {function(*, *, *): void} onQueryCallback - `(err, data, meta)`
+                     *   terminal for both branches of the dispatch.
+                     * @returns {void}
+                     */
+                    var register = async function (trigger, queryParams, onQueryCallback) {
                         // // JUNE 2021 patch
                         // // Adding support for FTS since it is not implemented in sdkVersion 2:
                         // // variables not replaced by value
@@ -1134,137 +1175,90 @@ function Couchbase(conn, infos) {
                         // ftsClause = null;
 
 
-                        // #B11-listener-fix: use typeof(cb) === 'function' so that passing null
-                        // as cb (direct-callback/promisify path) skips .once() registration.
-                        // The direct-callback path calls _mainCallback from onQueryCallback
-                        // closure without emitting the trigger, so the .once() listener would
-                        // never fire and would leak on the singleton. Query runs via the
-                        // !self._isRegisteredFromProto fallback block below instead.
-                        if ( typeof(self.once) === 'function' && typeof(cb) === 'function' ) {
-                            self._isRegisteredFromProto = true;
-                            //console.debug('registered trigger: ', trigger, self._isRegisteredFromProto);
-                            self.once(trigger, function onComplete(err, data, meta){
-                                //console.debug('received ', trigger, meta, err);
-                                try {
-                                    cb(err, data, meta)
-                                } catch (onCompleteError) {
-                                    // catch errors inside the call of the user code
-                                    cb(onCompleteError)
-                                }
-                            });
-                            // if (/triggerToDebug/.test(trigger)) {
-                            //     console.log('[ ' + trigger + '] onQuery => ', query, queryParams);
-                            // }
+                        // #B429 — ONE dispatch path. `cb` is gone from the signature: it was
+                        // always the caller's settlement hook, and settlement no longer happens
+                        // here. The explicit trailing callback is already in onQueryCallback's
+                        // closure as _mainCallback, and the Promise/.onComplete() path assigns
+                        // its own per-call resolver to _mainCallback before calling register().
+                        //
+                        // The shared-emitter registration this function used to perform is
+                        // REMOVED. It read:
+                        //
+                        //     if ( typeof(self.once) === 'function' && typeof(cb) === 'function' ) {
+                        //         self._isRegisteredFromProto = true;
+                        //         self.once(trigger, function onComplete(err, data, meta){
+                        //             try { cb(err, data, meta) } catch (e) { cb(e) }
+                        //         });
+                        //         ... byte-identical copy of the dispatch below ...
+                        //     }
+                        //
+                        // The trigger is keyed on entity+method only and `self` is a process-wide
+                        // singleton, so ONE completion woke EVERY in-flight caller of that method
+                        // and removed their listeners — measured cross-delivery on in-order AND
+                        // out-of-order completion, plus an error leaking from one call form into
+                        // another. `self._isRegisteredFromProto` is removed with it: it gated only
+                        // the second dispatch block and was reset to false at the top of every
+                        // invocation, so it never actually starved a query (measured: both
+                        // mixed-call-form orders settle correctly), but as a mutable flag on the
+                        // shared entity it was a standing hazard with no remaining purpose.
 
-                            if ( /^true$/i.test(conn.useRestApi) ) {
-                                conn._cluster.restQuery(trigger, query, queryParams, onQueryCallback);
-                                return;
-                            }
-
-                            conn._cluster.query(query, queryOptions)
-                                .catch( function onError(err) {
-                                    // #B153 — guard the N1QL `cause` envelope. A socket-level /
-                                    // pre-query failure (node warming up, connection loss) has no
-                                    // `cause`; reading err.cause.first_error_message on it threw a
-                                    // TypeError that the catch below swallowed, so onQueryCallback
-                                    // never fired and the request hung forever. Build a usable error
-                                    // on BOTH paths (forwarding the raw error preserves its
-                                    // code/errno for downstream classification) and always settle.
-                                    //
-                                    // #B153 residual — synthesize ONLY when there is envelope text to
-                                    // surface. The node binding marshals first_error_code /
-                                    // first_error_message onto EVERY query error, so a CLIENT-side SDK
-                                    // timeout arrives with a defined-but-EMPTY message; building
-                                    // `new Error('')` from it destroyed the typed class name
-                                    // (Un/AmbiguousTimeoutError) the classifier matches on, and a
-                                    // retryable timeout was reported permanent. Raw-forwarding is
-                                    // lossless here: the raw error keeps `.cause`, so even an
-                                    // empty-message server envelope still classifies off the code table.
-                                    var error;
-                                    if ( err && err.cause && typeof(err.cause.first_error_message) != 'undefined' && err.cause.first_error_message !== '' ) {
-                                        error = new Error(err.cause.first_error_message);
-                                        error.stack = trigger +'\n'+ err.cause.http_body;
-                                        error.cause = err.cause;
-                                    } else {
-                                        error = (err instanceof Error) ? err : new Error(String(err));
-                                    }
-                                    try {
-                                        onQueryCallback(error);
-                                    } catch (_err) {
-                                        console.error(_err.stack);
-                                    }
-                                })
-                                .then( function onResult(data, meta) {
-                                    try {
-                                        if ( typeof(data) == 'undefined' ) {
-                                            data = { rows: []}
-                                        }
-                                        onQueryCallback(false, data.rows, data.meta);
-                                    } catch (_err) {
-                                        _err.stack = '[ ' + trigger + '] onQueryCallbackError: \n\t- Did you leave any bad comments ?\n\t- Did you try to run your query ?\r\n'+ query +'\r\n'+ _err.stack;
-                                        console.error(_err.stack);
-                                    }
-                                });
-                            // Added on 2023-03-25
+                        if ( /^true$/i.test(conn.useRestApi) ) {
+                            conn._cluster.restQuery(trigger, query, queryParams, onQueryCallback);
                             return;
+                        }
 
-
-                        } // else  promise case
-
-
-                        if (!self._isRegisteredFromProto) {
-                            //console.debug('regular trigger: ', trigger, self._isRegisteredFromProto);
-                            // if (/triggerToDebug/.test(trigger)) {
-                            //     console.log('[ ' + trigger + '] onQuery => ', query, queryParams);
-                            // }
-
-                            if ( /^true$/i.test(conn.useRestApi) ) {
-                                conn._cluster.restQuery(trigger, query, queryParams, onQueryCallback);
-                                return;
-                            }
-                            conn._cluster.query(query, queryOptions)
-                                .catch( function onError(err) {
-                                    // #B153 — guard the N1QL `cause` envelope. A socket-level /
-                                    // pre-query failure (node warming up, connection loss) has no
-                                    // `cause`; reading err.cause.first_error_message on it threw a
-                                    // TypeError that the catch below swallowed, so onQueryCallback
-                                    // never fired and the request hung forever. Build a usable error
-                                    // on BOTH paths (forwarding the raw error preserves its
-                                    // code/errno for downstream classification) and always settle.
-                                    //
-                                    // #B153 residual — synthesize ONLY when there is envelope text to
-                                    // surface. The node binding marshals first_error_code /
-                                    // first_error_message onto EVERY query error, so a CLIENT-side SDK
-                                    // timeout arrives with a defined-but-EMPTY message; building
-                                    // `new Error('')` from it destroyed the typed class name
-                                    // (Un/AmbiguousTimeoutError) the classifier matches on, and a
-                                    // retryable timeout was reported permanent. Raw-forwarding is
-                                    // lossless here: the raw error keeps `.cause`, so even an
-                                    // empty-message server envelope still classifies off the code table.
-                                    var error;
-                                    if ( err && err.cause && typeof(err.cause.first_error_message) != 'undefined' && err.cause.first_error_message !== '' ) {
-                                        error = new Error(err.cause.first_error_message);
-                                        error.stack = trigger +'\n'+ err.cause.http_body;
-                                        error.cause = err.cause;
-                                    } else {
-                                        error = (err instanceof Error) ? err : new Error(String(err));
-                                    }
-                                    try {
-                                        onQueryCallback(error);
-                                    } catch (_err) {
-                                        console.error(_err.stack);
-                                    }
-                                })
-                                .then( function onResult(data) {
+                        // #B431 — two-argument .then(onResult, onError), NOT .catch(...).then(...).
+                        // A .catch() handler that returns normally RESOLVES the promise it
+                        // produces, so a trailing .then() ran on EVERY error with `data`
+                        // undefined and settled the caller a SECOND time with a bogus empty
+                        // success. Measured: one failed query invoked an explicit callback twice
+                        // — (Error, null, undefined) then (false, null, {}). The two-argument
+                        // form makes the handlers mutually exclusive branches.
+                        conn._cluster.query(query, queryOptions)
+                            .then(
+                                function onResult(data) {
                                     try {
                                         let rows = (data && typeof(data.rows) != 'undefined') ? data.rows : [];
                                         let meta = (data && typeof(data.meta) != 'undefined') ? data.meta : {};
                                         onQueryCallback(false, rows, meta);
                                     } catch (_err) {
+                                        _err.stack = '[ ' + trigger + '] onQueryCallbackError: \n\t- Did you leave any bad comments ?\n\t- Did you try to run your query ?\r\n'+ query +'\r\n'+ _err.stack;
                                         console.error(_err.stack);
                                     }
-                                });
-                        }
+                                },
+                                function onError(err) {
+                                    // #B153 — guard the N1QL `cause` envelope. A socket-level /
+                                    // pre-query failure (node warming up, connection loss) has no
+                                    // `cause`; reading err.cause.first_error_message on it threw a
+                                    // TypeError that the catch below swallowed, so onQueryCallback
+                                    // never fired and the request hung forever. Build a usable error
+                                    // on BOTH paths (forwarding the raw error preserves its
+                                    // code/errno for downstream classification) and always settle.
+                                    //
+                                    // #B153 residual — synthesize ONLY when there is envelope text to
+                                    // surface. The node binding marshals first_error_code /
+                                    // first_error_message onto EVERY query error, so a CLIENT-side SDK
+                                    // timeout arrives with a defined-but-EMPTY message; building
+                                    // `new Error('')` from it destroyed the typed class name
+                                    // (Un/AmbiguousTimeoutError) the classifier matches on, and a
+                                    // retryable timeout was reported permanent. Raw-forwarding is
+                                    // lossless here: the raw error keeps `.cause`, so even an
+                                    // empty-message server envelope still classifies off the code table.
+                                    var error;
+                                    if ( err && err.cause && typeof(err.cause.first_error_message) != 'undefined' && err.cause.first_error_message !== '' ) {
+                                        error = new Error(err.cause.first_error_message);
+                                        error.stack = trigger +'\n'+ err.cause.http_body;
+                                        error.cause = err.cause;
+                                    } else {
+                                        error = (err instanceof Error) ? err : new Error(String(err));
+                                    }
+                                    try {
+                                        onQueryCallback(error);
+                                    } catch (_err) {
+                                        console.error(_err.stack);
+                                    }
+                                }
+                            );
                     } //EO register
 
                     // ─────────────────────────────────────────────────────────────
@@ -1320,6 +1314,14 @@ function Couchbase(conn, infos) {
                             }
                         };
 
+                        // #B429 — the Promise path settles through the SAME per-call closure
+                        // the explicit-callback path uses. onQueryCallback reads _mainCallback
+                        // from this method's scope, so assigning it here (after the
+                        // unserializable-parameter check above, which must keep throwing for
+                        // this form) routes completion into _deliver() instead of the shared
+                        // `self.once(trigger)` rendezvous that used to broadcast it.
+                        _mainCallback = _internalCb;
+
                         // Backward-compatible .onComplete(cb):
                         //   chains on the Promise resolution so the callback
                         //   receives (err, data, meta) exactly as before.
@@ -1335,39 +1337,29 @@ function Couchbase(conn, infos) {
                         // Preserves original timing: .onComplete() and await both
                         // have time to set up before the query fires.
                         //
-                        // _isRegisteredFromProto guard is intentionally REMOVED here.
+                        // #B429 — `_isRegisteredFromProto` is GONE from this connector.
+                        // It was a mutable flag on the shared entity singleton used to gate
+                        // register()'s second dispatch block; with a single dispatch path and
+                        // per-call settlement it has no remaining purpose. The hazard it was
+                        // last documented as causing — a callback-path call setting it true so
+                        // a subsequent Promise-path call skipped register() and hung forever —
+                        // cannot recur: nothing reads it. (It was in fact already inert, since
+                        // every invocation reset it to false before dispatching; measured, both
+                        // mixed-call-form orders settle correctly.)
                         //
-                        // Background: the old _proto.onComplete() called register()
-                        // synchronously, so the guard prevented accidental double-
-                        // registration if .onComplete() was called more than once.
-                        //
-                        // With Option B, .onComplete() only chains on the Promise — it
-                        // never calls register(). So there is no double-registration
-                        // risk. More importantly, _isRegisteredFromProto is a shared
-                        // flag on `self` (the connector entity). When a _mainCallback-
-                        // path call (e.g. util.promisify) sets the flag to true, any
-                        // *subsequent* Promise-path call on the SAME entity would see
-                        // the flag set and skip register() — silently dropping the N1QL
-                        // query and hanging the await forever.
-                        //
-                        // Example that broke: inside account.entity.delete, the call
-                        // promisify(db.accountEntity.getOneByIdAndJwtLogin)() runs first
-                        // (sets _isRegisteredFromProto=true via register()), then
-                        // await db.accountEntity.getAllOwnedCompaniesIds() (Promise path)
-                        // hit the guard and skipped register() — query never fired.
                         setTimeout(function() {
-                            register(trigger, queryOptions, onQueryCallback, _internalCb);
+                            register(trigger, queryOptions, onQueryCallback);
                         }, 0);
 
                         return _promise;
 
                     } else {
-                        // Direct callback path (util.promisify or explicit _mainCallback).
-                        // Pass null as cb so register() skips .once() registration —
-                        // _mainCallback is already in onQueryCallback's closure and will
-                        // be called there directly. register() runs the query via the
-                        // !self._isRegisteredFromProto fallback block.
-                        register(trigger, queryOptions, onQueryCallback, null)
+                        // Direct callback path (util.promisify or an explicit trailing
+                        // callback). _mainCallback is already in onQueryCallback's closure;
+                        // register() dispatches the query and onQueryCallback settles this
+                        // call through _deliver(). Identical to the Promise path above apart
+                        // from who supplies _mainCallback.
+                        register(trigger, queryOptions, onQueryCallback)
                     }
                 }
 
@@ -1395,6 +1387,22 @@ function Couchbase(conn, infos) {
      * @param {array} rec collection
      * @param {object} [options] e.g: { consistency: 2 }
      *
+     * @returns {Promise<Array>} resolves with the RETURNING rows. Carries an
+     *   `.onComplete(cb)` shim for backward compatibility, called as
+     *   `(err, data, meta)`. Since #B429 the promise is settled by THIS call's own
+     *   resolver — concurrent bulkInsert calls on one entity no longer cross-deliver.
+     *
+     * @example
+     * // Promise form
+     * var rows = await myEntity.bulkInsert({ 'doc-1': { values: { a: 1 } } });
+     *
+     * @example
+     * // Callback shim
+     * myEntity.bulkInsert({ 'doc-1': { values: { a: 1 } } })
+     *     .onComplete(function (err, rows) {
+     *         if (err) { return next(err); }
+     *         // rows === the RETURNING payload
+     *     });
      */
     var bulkInsert = function(rec, options) {
 
@@ -1495,86 +1503,137 @@ function Couchbase(conn, infos) {
 
             var self = this;
 
+            // #B429 — bulkInsert settles per call, exactly once, like the query path.
+            // The Promise below used to be created AFTER the dispatch and woken by
+            // `self.once(trigger)` on the shared entity singleton, so two concurrent
+            // bulkInsert calls on one entity both received whichever finished first
+            // (measured). The resolver is hoisted here so the handlers can settle THIS
+            // call directly; the trigger is still emitted, purely for observability.
+            var _resolve, _reject, _internalData, _internalMeta;
+            var _promise = new Promise(function(resolve, reject) {
+                _resolve = resolve;
+                _reject  = reject;
+            });
+            var _settled = false;
+            /**
+             * Settle THIS bulkInsert call's promise, at most once.
+             *
+             * @inner
+             * @param {Error|boolean} err - the error, or `false` on success.
+             * @param {Array} data - the RETURNING rows.
+             * @param {object} [meta] - the driver's result metadata.
+             * @returns {void}
+             */
+            var _settle = function(err, data, meta) {
+                if (_settled) {
+                    return;
+                }
+                _settled = true;
+                if (err) {
+                    _reject(err);
+                } else {
+                    _internalData = data;
+                    _internalMeta = meta;
+                    _resolve(data);
+                }
+            };
+
             var err = false;
             // cluster resolved via the shared dual-shape helper (was a bare
             // conn._scope._bucket._cluster deref).
+            // #B431 — two-argument .then(onResult, onError), NOT .catch(...).then(...):
+            // the trailing .then() used to run on EVERY error with `data` undefined, which
+            // here threw `TypeError: Cannot read properties of undefined (reading 'rows')`
+            // into the inner try and logged a spurious error on every failed bulkInsert
+            // (measured). register()'s dispatch carries the same fix.
             resolveCluster(conn).query(query, queryOptions)
-                .catch( function onError(err) {
-                    try {
-                        // #QI — finalize bulkInsert query entry on error
-                        if (_biQueryEntry) {
-                            _biQueryEntry.durationMs = Date.now() - _biQueryEntry._startMs;
-                            // _startMs is kept for the Flow tab timeline (#FI)
-                            _biQueryEntry.error = err.message || String(err);
-                        }
-                        // #B153 — guard the N1QL `cause` envelope (see the register() onError
-                        // sites): a socket-level failure has no `cause`, and reading
-                        // err.cause.first_error_message on it threw a swallowed TypeError so
-                        // self.emit never fired and the request hung. Emit a usable error on
-                        // BOTH paths (the raw error preserves its code/errno).
-                        // #B153 residual — the empty-message clause: a CLIENT-side SDK timeout
-                        // carries a defined-but-EMPTY first_error_message, so synthesizing from it
-                        // destroyed the typed class name the classifier matches on. Synthesize only
-                        // when there is envelope text; raw-forwarding keeps `.cause` either way.
-                        var error;
-                        if ( err && err.cause && typeof(err.cause.first_error_message) != 'undefined' && err.cause.first_error_message !== '' ) {
-                            error = new Error(err.cause.first_error_message);
-                            error.stack = trigger +'\n'+ err.cause.http_body;
-                            error.cause = err.cause;
-                        } else {
-                            error = (err instanceof Error) ? err : new Error(String(err));
-                        }
-                        self.emit(trigger, lib.connectorError.stamp(error)); // #CE1: classify transient vs permanent
-                    } catch (_err) {
-                        console.error(_err.stack);
-                    }
-                })
-                .then( function onResult(data) {
-                    try {
-                        var _data = data.rows, _meta = data.meta;
-                        if (!_data || _data.length == 0) {
-                            _data = null
-                        }
+                .then(
+                    function onResult(data) {
+                        try {
+                            // #B431 — guard the payload the way register()'s onResult does.
+                            var _data = (data && typeof(data.rows) != 'undefined') ? data.rows : [];
+                            var _meta = (data && typeof(data.meta) != 'undefined') ? data.meta : {};
+                            if (!_data || _data.length == 0) {
+                                _data = null
+                            }
 
-                        // #QI — finalize bulkInsert query entry on success
-                        if (_biQueryEntry) {
-                            _biQueryEntry.durationMs = Date.now() - _biQueryEntry._startMs;
-                            // _startMs is kept for the Flow tab timeline (#FI)
-                            _biQueryEntry.resultCount = _data ? (Array.isArray(_data) ? _data.length : 1) : 0;
-                            try { _biQueryEntry.resultSize = _data ? JSON.stringify(_data).length : 0; } catch(_e) { _biQueryEntry.resultSize = 0; }
-                            // #QI — extract index usage from query profile or EXPLAIN cache
-                            if (_meta && _meta.profile) {
-                                _biQueryEntry.indexes = extractIndexes(_meta.profile);
-                            } else {
-                                var _biStmt = _biQueryEntry.statement;
-                                if (_explainCache.has(_biStmt)) {
-                                    _biQueryEntry.indexes = _explainCache.get(_biStmt);
+                            // #QI — finalize bulkInsert query entry on success
+                            if (_biQueryEntry) {
+                                _biQueryEntry.durationMs = Date.now() - _biQueryEntry._startMs;
+                                // _startMs is kept for the Flow tab timeline (#FI)
+                                _biQueryEntry.resultCount = _data ? (Array.isArray(_data) ? _data.length : 1) : 0;
+                                try { _biQueryEntry.resultSize = _data ? JSON.stringify(_data).length : 0; } catch(_e) { _biQueryEntry.resultSize = 0; }
+                                // #QI — extract index usage from query profile or EXPLAIN cache
+                                if (_meta && _meta.profile) {
+                                    _biQueryEntry.indexes = extractIndexes(_meta.profile);
                                 } else {
-                                    explainForIndexes(conn, _biStmt, _biQueryEntry, queryOptions);
+                                    var _biStmt = _biQueryEntry.statement;
+                                    if (_explainCache.has(_biStmt)) {
+                                        _biQueryEntry.indexes = _explainCache.get(_biStmt);
+                                    } else {
+                                        explainForIndexes(conn, _biStmt, _biQueryEntry, queryOptions);
+                                    }
                                 }
                             }
-                        }
 
-                        if (!err && _meta && typeof(_meta.errors) != 'undefined' ) {
-                            err = new Error('`GenericN1QLError::bulkInsert`\n'+_meta.errors[0].msg);
-                            err.status = 403;
-                            if (_biQueryEntry) _biQueryEntry.error = err.message;
-                        } else if (err) {
-                            err.status  = 500;
-                            err.message = '`GenericN1QLError::bulkInsert`\n'+ err.message;
-                            err.stack   = '`GenericN1QLError::bulkInsert`\n'+ err.stack;
-                            if (_biQueryEntry) _biQueryEntry.error = err.message;
-                        }
-                        if (envIsDev) {
-                            console.debug('[ bulkInsert response ] : err ? '+ err + ', meta : \n'+ JSON.stringify(_meta) +'\n data :\n'+ JSON.stringify(_data) );
-                        }
+                            if (!err && _meta && typeof(_meta.errors) != 'undefined' ) {
+                                err = new Error('`GenericN1QLError::bulkInsert`\n'+_meta.errors[0].msg);
+                                err.status = 403;
+                                if (_biQueryEntry) _biQueryEntry.error = err.message;
+                            } else if (err) {
+                                err.status  = 500;
+                                err.message = '`GenericN1QLError::bulkInsert`\n'+ err.message;
+                                err.stack   = '`GenericN1QLError::bulkInsert`\n'+ err.stack;
+                                if (_biQueryEntry) _biQueryEntry.error = err.message;
+                            }
+                            if (envIsDev) {
+                                console.debug('[ bulkInsert response ] : err ? '+ err + ', meta : \n'+ JSON.stringify(_meta) +'\n data :\n'+ JSON.stringify(_data) );
+                            }
 
-                        self.emit(trigger, err, data.rows, data.meta);
+                            // #B429 — settle THIS call first, then emit for observability only.
+                            _settle(err, _data, _meta);
+                            self.emit(trigger, err, _data, _meta);
 
-                    } catch (_err) {
-                        console.error(_err.stack);
+                        } catch (_err) {
+                            console.error(_err.stack);
+                        }
+                    },
+                    function onError(err) {
+                        try {
+                            // #QI — finalize bulkInsert query entry on error
+                            if (_biQueryEntry) {
+                                _biQueryEntry.durationMs = Date.now() - _biQueryEntry._startMs;
+                                // _startMs is kept for the Flow tab timeline (#FI)
+                                _biQueryEntry.error = err.message || String(err);
+                            }
+                            // #B153 — guard the N1QL `cause` envelope (see the register() onError
+                            // sites): a socket-level failure has no `cause`, and reading
+                            // err.cause.first_error_message on it threw a swallowed TypeError so
+                            // self.emit never fired and the request hung. Emit a usable error on
+                            // BOTH paths (the raw error preserves its code/errno).
+                            // #B153 residual — the empty-message clause: a CLIENT-side SDK timeout
+                            // carries a defined-but-EMPTY first_error_message, so synthesizing from it
+                            // destroyed the typed class name the classifier matches on. Synthesize only
+                            // when there is envelope text; raw-forwarding keeps `.cause` either way.
+                            var error;
+                            if ( err && err.cause && typeof(err.cause.first_error_message) != 'undefined' && err.cause.first_error_message !== '' ) {
+                                error = new Error(err.cause.first_error_message);
+                                error.stack = trigger +'\n'+ err.cause.http_body;
+                                error.cause = err.cause;
+                            } else {
+                                error = (err instanceof Error) ? err : new Error(String(err));
+                            }
+                            // #CE1: classify transient vs permanent — stamped ONCE here, then
+                            // carried unchanged into both the settlement and the emit below.
+                            error = lib.connectorError.stamp(error);
+                            // #B429 — settle THIS call first; the emit is observability only.
+                            _settle(error);
+                            self.emit(trigger, error);
+                        } catch (_err) {
+                            console.error(_err.stack);
+                        }
                     }
-                });
+                );
 
 
             // CB-QUAL-3 fix: bulkInsert previously returned a plain {onComplete} _proto object.
@@ -1592,12 +1651,21 @@ function Couchbase(conn, infos) {
             //         })
             //     }
             // }
-            var _resolve, _reject, _internalData, _internalMeta;
-            var _promise = new Promise(function(resolve, reject) {
-                _resolve = resolve;
-                _reject  = reject;
-            });
-
+            // #B429 — the resolver is created ABOVE the dispatch now (see _settle), so the
+            // duplicate construction that used to sit here is gone, and with it the
+            // shared-emitter rendezvous that settled this call:
+            //
+            //     self.once(trigger, function(err, data, meta){
+            //         if (envIsDev) { console.debug('[ bulkInsert triggered ] '+ trigger + ' - Rec count: '+ recCount); }
+            //         if (err) { _reject(err); } else { _internalData = data; _internalMeta = meta; _resolve(data); }
+            //     });
+            //
+            // `trigger` is keyed on entity+method only and `self` is a process-wide
+            // singleton, so two concurrent bulkInsert calls on one entity both settled
+            // from whichever completed first (measured). The CB-QUAL-3 note above is
+            // therefore only half-true as written: bulkInsert did adopt Option B's
+            // Promise + .onComplete() shape, but kept the shared `once` as the thing that
+            // settled it — which is exactly the defect the query path carried.
             _promise.onComplete = function(cb) {
                 _promise.then(
                     function()    { cb(null, _internalData, _internalMeta); },
@@ -1606,18 +1674,12 @@ function Couchbase(conn, infos) {
                 return _promise;
             };
 
-            self.once(trigger, function(err, data, meta){
-                if (envIsDev) {
-                    console.debug('[ bulkInsert triggered ] '+ trigger + ' - Rec count: '+ recCount);
-                }
-                if (err) {
-                    _reject(err);
-                } else {
-                    _internalData = data;
-                    _internalMeta = meta;
-                    _resolve(data);
-                }
-            });
+            if (envIsDev) {
+                _promise.then(
+                    function() { console.debug('[ bulkInsert triggered ] '+ trigger + ' - Rec count: '+ recCount); },
+                    function() {}
+                );
+            }
 
             return _promise;
 

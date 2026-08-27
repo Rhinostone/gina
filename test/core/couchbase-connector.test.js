@@ -402,12 +402,15 @@ describe('08 - #B153: onError guards err.cause so the query always settles', fun
     var src;
     before(function() { src = fs.readFileSync(CONNECTOR, 'utf8'); });
 
-    it('all three N1QL onError sites guard err.cause before reading first_error_message', function() {
+    it('both N1QL onError sites guard err.cause before reading first_error_message', function() {
         // The trailing `!== ''` clause is the #B153 RESIDUAL fix (see §08b): without
         // it this regex is an unanchored substring of the tightened guard and would
         // keep counting 3 while pinning nothing about the empty-message branch.
         var guardCount = (src.match(/err && err\.cause && typeof\(err\.cause\.first_error_message\) != 'undefined' && err\.cause\.first_error_message !== ''/g) || []).length;
-        assert.equal(guardCount, 3, 'all three onError sites carry the cause guard');
+        // #B429 — 2, not 3: register()'s two byte-identical dispatch blocks were collapsed
+        // into one when the shared-emitter branch was removed. The remaining sites are
+        // register()'s single onError and bulkInsert's.
+        assert.equal(guardCount, 2, 'both onError sites carry the cause guard');
         // every `new Error(err.cause.first_error_message)` now sits inside a guarded branch
         var b153 = (src.match(/#B153/g) || []).length;
         assert.ok(b153 >= 3, 'each fixed site is annotated with the bug id');
@@ -533,9 +536,10 @@ describe('08 - #B153: onError guards err.cause so the query always settles', fun
         return e;
     }
 
-    it('the new empty-message clause is present at all three onError sites', function() {
+    it('the new empty-message clause is present at both onError sites', function() {
         var clause = (src.match(/&& err\.cause\.first_error_message !== ''/g) || []).length;
-        assert.equal(clause, 3, 'each site synthesizes only when there is envelope text to surface');
+        // #B429 — 2, not 3 (see the guard-count pin above: duplicate dispatch block removed).
+        assert.equal(clause, 2, 'each site synthesizes only when there is envelope text to surface');
         // control: the clause is genuinely counted, not matched by accident
         assert.equal((src.match(/&& err\.cause\.first_error_message !== 'x'/g) || []).length, 0);
     });
