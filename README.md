@@ -62,30 +62,30 @@ open https://localhost:3100
 
 > **npm 12+** blocks install scripts by default, and gina's post-install bootstraps `~/.gina` and the framework dependencies. Install with `npm install -g gina@latest --allow-scripts=gina`, or allow it once for all global installs with `npm config set allow-scripts=gina --location=user`. (Not needed on npm ≤ 11.)
 
-## What's in 0.6.17
+## What's in 0.6.18
 
 > **Restart your bundles AND rebuild them.** This release changes the browser
-> bundle: `gina.min.js` differs from `0.6.16` (`gina.min.css` and
+> bundle: `gina.min.js` differs from `0.6.17` (`gina.min.css` and
 > `gina.onload.min.js` are unchanged). A restart alone updates the server half
 > only — each bundle bakes its own copy of the client assets, so the validator
 > fix below would not reach a browser at all.
 
-> **No settings reset.** `0.6.17` is a patch — the `shortVersion` stays `0.6`, so
+> **No settings reset.** `0.6.18` is a patch — the `shortVersion` stays `0.6`, so
 > your `~/.gina/0.6/settings.json` is untouched. (`0.6.0` was the reset.)
 
-**A dropped-connection routing defect, and three validator rules that could not
-run on the server.** The headline is an availability fix: once a route cache was
-warm, a request rejected by a route's `requirements` was dispatched anyway and the
-connection was dropped with no HTTP response at all — no status, no body. Alongside
-it, three documented validator rules threw on every server-side call, and a
-redirect-route log flood that could account for most of a bundle's warning volume
-is gone. **No action is required for any of the three** — each is a strict
-improvement over behaviour that previously failed; details in the
+**A form-validation lockout, and a per-request cost paid by every render.** The
+headline is a correctness fix with an availability consequence: a field validated
+by a `query` (live-check) rule got the wrong verdict whenever its value contained
+a `+` — an email plus-address being the common case — and because a `query` rule
+also gates the submit trigger, an affected visitor could not submit the form at
+all. Alongside it, the dotted-path data setter behind every render no longer
+deep-merges its way through the render tree, which also ends a silent mutation of
+the per-process forms catalog. **One behaviour change needs your attention** if a
+bundle relied on live-check bodies being URL-decoded — details in the
 [migration guide](https://gina.io/docs/migration).
 
-- **Fixed — a rejected route no longer drops the connection once the cache is warm (#B422).** The route cache is keyed `method:pathname`, and on the isaac engine the query string is stripped before dispatch, so every query variant of one pathname shares a single cache entry. The warm path re-evaluated the route's `requirements` on each hit and then discarded the verdict, force-matching a request the requirements had just rejected and dispatching it with no routing description — an unhandled promise rejection at the dispatch target deref, and the connection closed with no HTTP response at all. The warm path now honours the verdict: a rejecting or throwing requirement evaluation is treated as a cache miss and falls through to the routing scan, which answers correctly — `404` when nothing matches, the sibling rule when one does, or a `500` naming the rule when a `validator::` requirement throws (previously also a dropped connection). The cache entry is kept, so variants the requirements accept stay warm. Defence in depth: the router now answers a named `500` instead of throwing when dispatched without a resolved `param.control`.
-- **Fixed — the `toFloat`, `set` and `format` validator rules are context-safe (#B398).** All three are documented rules that threw on every server-side call. `toFloat` opened by reading the live DOM element unguarded, so server-side rule sets could not coerce a float at all; it now reads the live value only when one is reachable and otherwise uses the submitted value — which on the server *is* the raw value — so it works in both contexts (a missing comma in the same statement, which leaked `isFloatingWithCommas` as an implicit global into every page, is fixed with it). `set` assigns the field value in both contexts and reflects it onto the DOM element only in the browser, where an element exists. `format` — which already worked in both contexts when chained after `isDate`, as its documentation shows — now reports a non-`Date` value as a named rule-authoring error pointing at the missing `isDate`, instead of the opaque `val.format is not a function`. The guide's [middleware page](https://gina.io/docs/guides/middleware) also gained a section on reading configuration efficiently.
-- **Fixed — a redirect route no longer floods the log with `source[host] is undefined` warnings (#B423).** Redirect rules are deliberately excluded from the per-rule host/hostname defaulting, so those keys are absent on them — but the per-request routing copy assigned them unconditionally, creating properties holding `undefined` on the cached routing clone. Because that clone lives for the process lifetime, every later no-arg `getConfig()` emitted one `host` and one `hostname` warning per redirect rule, indefinitely; measured by a consumer at roughly three quarters of that log line's total volume, drowning the genuine warnings it exists to surface. The copy is now existence-guarded: an absent key stays absent, and rules that do carry a host or hostname are copied exactly as before. This removes log noise rather than a functional defect — the clone had been substituting `null`, which every reader already treated the same as absent. Reached only from template and view routes, so API-only bundles were never affected.
+- **Fixed — a `query` rule no longer mis-validates a value containing `+` (#B425).** The live-check body is JSON, but the request was labelled `application/x-www-form-urlencoded`, so the server correctly url-decoded it before parsing and turned every `+` into a space. The mangled body was still valid JSON, so nothing errored — the endpoint answered `200` with a verdict computed from a corrupted value. Because a `query` rule also gates the submit trigger, the common case of an email plus-address such as `alias+tag@example.com` was a hard lockout on sign-in and password-recovery forms rather than a warning. The request now sends `application/json` when the body is JSON, matching what the form-submit and file-removal paths already did. An explicit per-rule `headers` override still wins, so a rule that already declares its own `Content-Type` is unchanged. **Action required only if you relied on the decode:** live-check bodies are no longer URL-decoded at all, so `%XX` sequences reach your action verbatim, and field values are sent raw.
+- **Fixed — the render data setter no longer walks and rewrites the shared forms catalog on every request (#P39).** The dotted-path setter behind every render (`page.view.*`, `page.environment.*`, `page.forms`, …) used to build the path as a JSON string, parse it, and deep-merge the result into the render data — and that merge recursed into every object value it grafted, re-merging each array inside it with itself and writing the copies back into the caller's object. For a bundle with a real forms catalog that was roughly 0.4 to 1.5 ms of CPU per request *and* a silent mutation of the per-process catalog, whose arrays were swapped for equal copies on every render. A first write is now stored by reference without being walked, missing intermediates are created directly, and only a genuine collision goes through the merge — so the value semantics are unchanged (first write wins; an object written onto an object leaf still deep-fills), the catalog is never touched, and the 59 primitive writes of a render cost about a fifth of what they did (66.6 → 14.8 µs). One deliberate difference: writing an array onto an existing array leaf now merges the two once instead of twice, where the old path produced duplicate elements; no framework route writes an array-bearing path twice.
 
 ## Documentation
 

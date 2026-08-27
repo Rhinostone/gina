@@ -1302,57 +1302,79 @@ function SuperController(options) {
 
     }
 
-    // replaced: for...in — use Object.keys() (#P22)
-    var parseDataObject = function(o, obj, override) {
-
-        var keys = Object.keys(o);
-        for (var ki = 0; ki < keys.length; ++ki) {
-            var i = keys[ki];
-            if ( o[i] !== null && typeof(o[i]) == 'object' || override && o[i] !== null && typeof(o[i]) == 'object' ) {
-                parseDataObject(o[i], obj);
-            } else if (o[i] == '_content_'){
-                o[i] = obj
-            }
-        }
-
-        return o
-    }
-
     /**
-     * Set data
+     * Set a value in the render data tree (`local.userData`) by dotted path.
      *
-     * @param {string} nave -  variable name to set
-     * @param {string|object} value - value to set
-     * @param {boolean} [override]
+     * `set('page.view.title', 'Home')` writes `local.userData.page.view.title`,
+     * creating missing intermediates as plain objects and REPLACING an
+     * intermediate that is not a plain object (`null`, an array, a primitive) —
+     * the same rule `lib/merge` applies when it descends. Contract at the leaf:
+     *
+     *  - first write wins: a later `set()` to an existing leaf keeps the existing
+     *    value. The `override` argument is accepted for signature compatibility
+     *    and is INERT — it never reached the merge in the previous implementation
+     *    either (#B427);
+     *  - an object written onto an existing object leaf deep-fills it (missing
+     *    keys added, existing keys kept), through `lib/merge`;
+     *  - a first-write value is stored BY REFERENCE and is never walked, copied
+     *    or mutated — `set('page.forms', conf.content.forms)` must not touch the
+     *    shared per-process forms catalog.
+     *
+     * #P39 slice 2 (2026-08-27) — was: a JSON-string path builder + JSON.parse
+     * + a `parseDataObject` walk + a merge of the built subtree into
+     * `local.userData`, per call. That merge recursed into every grafted object
+     * value and re-merged each array inside it with itself, which cost
+     * 0.4–1.5 ms per request for a real forms catalog AND swapped the shared
+     * catalog's arrays for copies on every request (a mutation of the caller's
+     * object). Measured ×4.5 on the 59 primitive sets of a render and ×800+ on
+     * the catalog set. Equivalence to the retired implementation is pinned by
+     * test/core/controller-set-path.test.js.
+     *
+     * @param {string} name - dotted path (`a.b.c`); a name without a dot is a flat key
+     * @param {*} value - value to store; a flat key's value must be a string (backslashes stripped)
+     * @param {boolean} [override] - accepted, inert: first write wins (#B427)
      *
      * @returns {void}
+     *
+     * @throws {Error} when a path segment is `__proto__` (it would write through the prototype accessor)
+     *
+     * @example
+     * set('page.view.title', 'Home');
+     * set('page.view.title', 'Other');          // ignored — first write wins
+     * set('page.forms', conf.content.forms);    // stored by reference, never mutated
      * */
     var set = function(name, value, override) {
 
-        var override = ( typeof(override) != 'undefined' ) ? override : false;
-
         if ( typeof(name) == 'string' && /\./.test(name) ) {
-            var keys        = name.split(/\./g)
-                , newObj    = {}
-                , str       = '{'
-                , _count    = 0;
-
-            for (let k = 0, len = keys.length; k<len; ++k) {
-                str +=  "\""+ keys.splice(0,1)[0] + "\":{";
-
-                ++_count;
-                if (k == len-1) {
-                    str = str.substring(0, str.length-1);
-                    str += "\"_content_\"";
-                    for (let c = 0; c<_count; ++c) {
-                        str += "}"
-                    }
-                }
+            var keys = name.split(/\./g), last = keys.length - 1;
+            var node = local.userData;
+            if ( node === null || typeof(node) != 'object' ) {
+                node = local.userData = {};
             }
-
-            newObj = parseDataObject(JSON.parse(str), value, override);
-            local.userData = merge(local.userData, newObj);
-
+            for (var i = 0; i < last; ++i) {
+                var k = keys[i];
+                if (k === '__proto__') {
+                    throw new Error('[SuperController::set] `__proto__` is not a valid path segment in `' + name + '`');
+                }
+                var next = node[k];
+                if ( next === null || typeof(next) != 'object' || Array.isArray(next) ) {
+                    next = node[k] = {};
+                }
+                node = next;
+            }
+            var leaf = keys[last];
+            if (leaf === '__proto__') {
+                throw new Error('[SuperController::set] `__proto__` is not a valid path segment in `' + name + '`');
+            }
+            if ( typeof(node[leaf]) == 'undefined' ) {
+                // first write: by reference — the value is not walked, copied or mutated
+                node[leaf] = value;
+            } else {
+                // collision: the exact leaf-level branch the retired whole-tree merge reached
+                var one = {};
+                one[leaf] = value;
+                merge(node, one);
+            }
         } else if ( typeof(local.userData[name]) == 'undefined' ) {
             local.userData[name] = value.replace(/\\/g, '');
         }
