@@ -3446,11 +3446,32 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
         // TODO - support regexp for validIf
         var validIf = ( typeof(options.validIf) == 'undefined' ) ? true : options.validIf;
 
+        // #FORMCT (query path) — capture the rule's OWN Content-Type BEFORE the merge
+        // below: after it, a rule-declared value and the `xhrOptions` default are
+        // indistinguishable (both are just `queryOptions.headers['Content-Type']`), and the
+        // resolution at `enctype` must tell them apart so an explicit per-rule override keeps
+        // winning. `merge` is variadic and earlier sources win, so `options` already beats
+        // `xhrOptions` — this only preserves the PROVENANCE the merge erases.
+        var ruleContentType = ( options && options.headers ) ? options.headers['Content-Type'] : null;
+
         queryOptions = merge(queryOptions, options, xhrOptions);
         delete queryOptions.data;
         delete queryOptions.validIf;
 
+        // #FORMCT (query path) — the live-check body is JSON (`JSON.stringify` above).
+        // Honor an EXPLICIT rule-declared Content-Type; otherwise send application/json — NOT
+        // the urlencoded default inherited from `xhrOptions` — or the server url-decodes the
+        // JSON body ('+' -> space, decodeURIComponent) before JSON.parse and corrupts values
+        // such as email "+aliases", which parses cleanly and answers 200 with a wrong verdict.
+        // Mirrors the non-binary send path's resolution in the plugin's main.js.
         var enctype = queryOptions.headers['Content-Type'];
+        if (
+            ( !ruleContentType || ruleContentType == '' )
+            && typeof(queryData) == 'string'
+            && /^[\[{]/.test(queryData.trim())
+        ) {
+            enctype = 'application/json; charset=UTF-8';
+        }
         var result      = null
             , $target   = this.target
             //, id        = $target.getAttribute('id')
