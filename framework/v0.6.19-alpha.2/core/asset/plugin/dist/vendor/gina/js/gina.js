@@ -2189,7 +2189,8 @@ function Merge() {
      * @param {object|Array} target    - Target (base) object or array
      * @param {object|Array} source    - Source object or array to merge into target
      * @param {boolean}      [override=false] - Pass `true` to let `source` overwrite existing target keys; by default they are preserved
-     * @returns {object|Array} Merged result (mutates and returns `target`)
+     * @returns {object|Array} Merged result (mutates and returns `target`; never
+     *   rewrites `source` — a subtree the target lacks is referenced, not walked, #B428)
      *
      * @example
      * merge({ a: 1 }, { b: 2 })          // { a: 1, b: 2 }
@@ -2285,6 +2286,17 @@ function Merge() {
 
                             // Prevent never-ending loop
                             if (target === copy) {
+                                continue
+                            }
+                            // #B428 — a value merged into ITSELF is identity: skip it.
+                            // A key the target lacks is grafted by reference below
+                            // (`clone[ prop ] = copy[ prop ]`), then the recursion
+                            // `browse(clone, copy)` met that graft with src === copy and
+                            // merged every array inside it with itself, writing the
+                            // copies back INTO the caller's object (identity churn +
+                            // silent primitive dedupe). Object/array references only —
+                            // equal primitives keep the original path.
+                            if (copy !== null && typeof(copy) == 'object' && src === copy) {
                                 continue
                             }
 

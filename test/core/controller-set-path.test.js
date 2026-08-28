@@ -277,17 +277,21 @@ describe('03 - contract', function () {
         assert.equal(n.local.userData.n.k, null);
     });
 
-    it('a first-write value is stored by reference and is NOT mutated (the retired implementation swapped its inner arrays — firing control)', function () {
+    it('a first-write value is stored by reference and is NOT mutated', function () {
+        // This arm used to carry a firing control: the retired implementation
+        // swapped `old.rules.form.field.isInList` for a copy. That swap was
+        // lib/merge re-walking a grafted source — #B428, fixed in 0.6.19 — so
+        // it can no longer fire through the frozen oracle either. The lib-level
+        // lock, with its own red-first control against the pre-fix bytes, is
+        // test/lib/merge-b428.test.js; this arm now pins set()'s contract only.
         function catalog() { return { rules: { form: { field: { isInList: ['a', 'b'], isString: [2, 40] } } } }; }
         var live = catalog(), liveInner = live.rules.form.field.isInList;
         var n = makeLive(); n.set('page.view.x', 'y'); n.set('page.forms', live);
         assert.strictEqual(n.local.userData.page.forms, live, 'stored by reference');
         assert.strictEqual(live.rules.form.field.isInList, liveInner, 'the caller\'s inner array keeps its identity');
-        var old = catalog(), oldInner = old.rules.form.field.isInList;
+        var old = catalog();
         var o = makeFrozen(); o.set('page.view.x', 'y'); o.set('page.forms', old);
-        assert.strictEqual(o.local.userData.page.forms, old, 'control: the retired implementation also referenced the object');
-        assert.notStrictEqual(old.rules.form.field.isInList, oldInner, 'control: ...but swapped its inner array for a copy');
-        assert.deepStrictEqual(old.rules.form.field.isInList, ['a', 'b'], 'control: contents were preserved, only identity churned');
+        assert.strictEqual(o.local.userData.page.forms, old, 'the retired implementation also referenced the object');
     });
 
     it('a `__proto__` segment throws a named error, at either position, and leaves Object.prototype clean', function () {
