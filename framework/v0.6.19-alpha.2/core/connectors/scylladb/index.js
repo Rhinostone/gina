@@ -10,6 +10,7 @@
 var fs        = require('fs');
 var sqlParser = require('./../sql-parser');
 var paramRedact = require('./../param-redact'); // #B350 — bound-value redaction for dev/Inspector sinks
+var settleOnce  = require('./../settle-once');   // #B432 — per-call at-most-once settlement
 var lib       = require('./../../../lib') || require.cache[require.resolve('./../../../lib')];
 var inherits  = lib.inherits;
 var console   = lib.logger;
@@ -350,6 +351,8 @@ function Scylladb(conn, infos) {
                 return _promise;
 
             } else {
+                // #B432 — settle at most once; a throwing callback is reported, never re-invoked.
+                var _deliver = settleOnce(trigger, _mainCallback, console);
                 conn.execute(queryString, args, { prepare: true }).then(function(result) {
                     if (_queryEntry) {
                         _queryEntry.durationMs = Date.now() - _queryEntry._startMs;
@@ -359,14 +362,14 @@ function Scylladb(conn, infos) {
                         _queryEntry.resultCount = raw ? (Array.isArray(raw) ? raw.length : 1) : 0;
                         try { _queryEntry.resultSize = raw ? JSON.stringify(raw).length : 0; } catch(_e) { _queryEntry.resultSize = 0; }
                     }
-                    _mainCallback(null, raw);
+                    _deliver(null, raw);
                 }).catch(function(err) {
                     if (_queryEntry) {
                         _queryEntry.durationMs = Date.now() - _queryEntry._startMs;
                         _queryEntry.error      = err.message || String(err);
                     }
                     err.message = '[ ' + source + ' ]\n' + err.message;
-                    _mainCallback(lib.connectorError.stamp(err));
+                    _deliver(lib.connectorError.stamp(err));
                 });
             }
         };

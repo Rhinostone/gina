@@ -11,6 +11,7 @@ var fs       = require('fs');
 var loader   = require('./lib/pipeline-loader');
 var lib      = require('./../../../lib') || require.cache[require.resolve('./../../../lib')];
 var paramRedact = require('./../param-redact'); // #B350 — bound-value redaction for dev/Inspector sinks
+var settleOnce  = require('./../settle-once');   // #B432 — per-call at-most-once settlement
 var inherits = lib.inherits;
 var console  = lib.logger;
 
@@ -350,6 +351,10 @@ function Mongodb(conn, infos) {
                 _mainCallback = args.pop();
             }
 
+            // #B432 — ONE per-call guard for every settle path below (unknown-op
+            // branch and callback-mode dispatch both used to settle twice).
+            var _deliver = settleOnce(trigger, _mainCallback, console);
+
             for (var t = 0, tLen = paramTypes.length; t < tLen && t < args.length; t++) {
                 args[t] = castParam(args[t], paramTypes[t]);
             }
@@ -358,7 +363,7 @@ function Mongodb(conn, infos) {
             try {
                 resolvedBody = resolveArgs(body, args);
             } catch (e) {
-                if (_mainCallback) return _mainCallback(e);
+                if (_mainCallback) { _deliver(e); return; }
                 return Promise.reject(e);
             }
 
@@ -401,11 +406,11 @@ function Mongodb(conn, infos) {
                         break;
                     default:
                         var unknownErr = new Error('[Mongodb] unknown op `' + op + '` in ' + source);
-                        if (_mainCallback) return _mainCallback(unknownErr);
+                        if (_mainCallback) { _deliver(unknownErr); return; }
                         return Promise.reject(unknownErr);
                 }
             } catch (e) {
-                if (_mainCallback) return _mainCallback(e);
+                if (_mainCallback) { _deliver(e); return; }
                 return Promise.reject(e);
             }
 
@@ -491,14 +496,14 @@ function Mongodb(conn, infos) {
                         _queryEntry.resultCount = raw ? (Array.isArray(raw) ? raw.length : 1) : 0;
                         try { _queryEntry.resultSize = raw ? JSON.stringify(raw).length : 0; } catch(_e) { _queryEntry.resultSize = 0; }
                     }
-                    _mainCallback(null, raw);
+                    _deliver(null, raw);
                 }).catch(function(err) {
                     if (_queryEntry) {
                         _queryEntry.durationMs = Date.now() - _queryEntry._startMs;
                         _queryEntry.error      = err.message || String(err);
                     }
                     err.message = '[ ' + source + ' ]\n' + err.message;
-                    _mainCallback(lib.connectorError.stamp(err));
+                    _deliver(lib.connectorError.stamp(err));
                 });
             }
         };

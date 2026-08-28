@@ -261,12 +261,17 @@ describe('02 - MongoDB connector: index.js source', function() {
     });
 
     it('callback path uses node-style (err, result) signature', function() {
-        assert.ok(/_mainCallback\(null, raw\)/.test(src));
+        // #B432 routes BOTH callback-path settles through the per-call guard
+        // (`_deliver`, built by core/connectors/settle-once.js), so the delivery
+        // sites are named for the guard rather than for the raw callback. The
+        // contract asserted here is unchanged: the callback path still delivers
+        // node-style `(err, result)`.
+        assert.ok(/_deliver\(null, raw\)/.test(src));
         // #CE1 wraps the error argument in the transient-vs-permanent classifier
-        // (`_mainCallback(lib.connectorError.stamp(err))`). stamp() returns the
-        // same err, so the node-style signature is unchanged — this tolerates
-        // both the bare and the stamped form.
-        assert.ok(/_mainCallback\((?:lib\.connectorError\.stamp\()?err\)?\)/.test(src));
+        // (`_deliver(lib.connectorError.stamp(err))`). stamp() returns the same
+        // err, so the node-style signature is unchanged — this tolerates both
+        // the bare and the stamped form.
+        assert.ok(/_deliver\((?:lib\.connectorError\.stamp\()?err\)?\)/.test(src));
     });
 
     it('builds _queryEntry with type:MQL and connector:mongodb', function() {

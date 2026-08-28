@@ -10,6 +10,7 @@
 var fs        = require('fs');
 var sqlParser = require('./../sql-parser'); // #SQL1 state-machine comment stripper
 var paramRedact = require('./../param-redact'); // #B350 — bound-value redaction for dev/Inspector sinks
+var settleOnce  = require('./../settle-once');   // #B432 — per-call at-most-once settlement
 var lib       = require('./../../../lib') || require.cache[require.resolve('./../../../lib')];
 var inherits  = lib.inherits;
 var console   = lib.logger;
@@ -467,6 +468,8 @@ function Sqlite(conn, infos) {
 
             } else {
                 // Direct callback path (util.promisify or explicit callback)
+                // #B432 — settle at most once; a throwing callback is reported, never re-invoked.
+                var _deliver = settleOnce(trigger, _mainCallback, console);
                 try {
                     var result = execute(args);
                     if (_queryEntry) {
@@ -474,14 +477,14 @@ function Sqlite(conn, infos) {
                         _queryEntry.resultCount = result ? (Array.isArray(result) ? result.length : 1) : 0;
                         try { _queryEntry.resultSize = result ? JSON.stringify(result).length : 0; } catch(_e) { _queryEntry.resultSize = 0; }
                     }
-                    _mainCallback(null, result);
+                    _deliver(null, result);
                 } catch (e) {
                     if (_queryEntry) {
                         _queryEntry.durationMs = Date.now() - _queryEntry._startMs;
                         _queryEntry.error = e.message || String(e);
                     }
                     e.message = '[ ' + source + ' ]\n' + e.message;
-                    _mainCallback(lib.connectorError.stamp(e));
+                    _deliver(lib.connectorError.stamp(e));
                 }
             }
         };
