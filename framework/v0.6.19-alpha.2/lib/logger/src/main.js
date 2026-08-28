@@ -67,6 +67,53 @@ var helpers         = require('../../../helpers');
 // before any sink renders it — and on the raw `self.log` path.
 var redact          = require('./redact');
 
+/**
+ * Is `value` an Error — including one minted in another realm (a `vm`
+ * context, a worker's transferred error), which `instanceof Error` misses?
+ *
+ * #B434 — both stdout writers used to route any `instanceof Object` argument
+ * through a property walk that sees ENUMERABLE own props only; an Error's
+ * `message` and `stack` are non-enumerable, so a bare Error rendered as `{}`.
+ *
+ * @private
+ * @param {*} value
+ * @returns {boolean}
+ */
+var isError = function(value) {
+    return value instanceof Error || util.types.isNativeError(value);
+};
+
+/**
+ * Render an Error the way Node's own `console.error` does: the stack, then any
+ * enumerable own props, then the `cause` chain / `AggregateError` members.
+ *
+ * @private
+ * @param {Error} err
+ * @returns {string} A (usually multi-line) description
+ *
+ * @example
+ * var err = new Error('boom'); err.code = 'E_BOOM';
+ * inspectError(err);
+ * // 'Error: boom\n    at …stack frames… {\n  code: \'E_BOOM\'\n}'
+ */
+var inspectError = function(err) {
+    return util.inspect(err);
+};
+
+/**
+ * `JSON.stringify` replacer for the raw `console.log` path: an Error nested
+ * inside a logged object is rendered through `inspectError()` instead of
+ * collapsing to `{}`. Every other value passes through untouched.
+ *
+ * @private
+ * @param {string} key
+ * @param {*} value
+ * @returns {*}
+ */
+var errorReplacer = function(key, value) {
+    return isError(value) ? inspectError(value) : value;
+};
+
 // #M22 — merge-eval fallback removed; the circular chain that produced a partial merge was broken at the merge.js side (direct require of utils/prototypes.json_clone instead of helpers/index.js's for-loop loader, which transitively required lib/logger).
 // BO - publishing hack
 if ( typeof(JSON.clone) == 'undefined' ) {
@@ -593,6 +640,11 @@ function Logger() {
             if (args[i] instanceof Function) {
                 content += args[i].toString() + ""
             }
+            else if (isError(args[i])) {
+                // #B434 — before the Object branch: parse() would only see the
+                // enumerable own props and drop the message and stack
+                content += inspectError(args[i]) + ' '
+            }
             else if (args[i] instanceof Object) {
                 // careful, [ parse ] will be out of the main execution context: passing it for recursive use
                 content += parse(parse, args[i], "")
@@ -680,7 +732,12 @@ function Logger() {
 
         for (var attr in obj) {
             ++l;
-            if (obj[attr] instanceof Function) {
+            if (isError(obj[attr])) {
+                // #B434 — a nested Error keeps its message and stack (it used to
+                // recurse into an enumerable-props walk and render as `{}`)
+                str += (isArray ? '' : '"'+attr+'": ') + inspectError(obj[attr]);
+                str += (l<len) ? ', ' : '';
+            } else if (obj[attr] instanceof Function) {
                 str += attr +': [Function]';
                 // if you want ot have it all replace by the following line
                 //str += attr +':'+ obj[attr].toString();
@@ -863,9 +920,12 @@ function Logger() {
         //To handle logs with coma separated arguments.
         for (let i=0; i<args.length; ++i) {
 
-            if (args[i] instanceof Object) {
+            if (isError(args[i])) {
+                // #B434 — JSON.stringify(new Error()) is `{}`: message and stack are non-enumerable
+                content += inspectError(args[i]);
+            } else if (args[i] instanceof Object) {
                 //console.log("\n...", args[i], args[i].toString());
-                content += JSON.stringify(args[i], null, '\t');
+                content += JSON.stringify(args[i], errorReplacer, '\t');
             } else {
                 content += args[i];
 
