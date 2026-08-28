@@ -183,6 +183,56 @@
         }
       }
     },
+    "log": {
+      "type": "object",
+      "description": "Logging options for this bundle. Today: `redact` — pre-render log redaction (#B433). Every log message is redacted BEFORE it is rendered and dispatched, so stdout, `gina tail`, the file transport and the Inspector taps all receive the same masked line, and JSON-mode lines cannot be corrupted. ON by default. Boot config: read at config load (the earliest point the block is merged and resolved, so connector-init lines are already covered); changes need a bundle restart. Process-wide: in a merged process (every bundle on one port) the effective rule set is the UNION of every bundle's block; otherwise only the started bundle's block applies.",
+      "additionalProperties": false,
+      "properties": {
+        "redact": {
+          "type": "object",
+          "description": "Log redaction rules. A malformed block (unknown key, non-boolean flag, invalid or empty-matching pattern) refuses the boot — a pattern dropped silently is a leak.",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Master switch — STRICTLY boolean (a string \"false\" refuses to boot). Union semantics across a merged process: one bundle enabling redaction is enough for the whole process to redact.",
+              "default": true
+            },
+            "defaults": {
+              "type": "boolean",
+              "description": "Apply the built-in pattern set: JSON Web Tokens; URL userinfo passwords (`scheme://user:PASSWORD@host`); `Bearer` / `Basic` credentials; named credential query keys (`token`, `access_token`, `refresh_token`, `id_token`, `api_key`/`apikey`, `secret`, `client_secret`, `password`/`passwd`/`pwd`/`passcode`, `auth`, `authorization`, `signature`/`sig`, `otp`, `session_token`) with the key kept and the value masked; api-key style headers (`x-api-key`, `x-auth-token`, …). Deliberately NOT included: a bare long-hex path segment — a content-address key served from storage and an opaque 64-hex credential are the same shape, so add `(?<![0-9a-f])[0-9a-f]{64}(?![0-9a-f])` under `patterns` yourself when your credentials look like that (anchor on the character class — a leading `\\b` never fires against a prefixed `key_<hex>` segment). Measured on 433k real log lines: 0 false positives; ~1 µs per line.",
+              "default": true
+            },
+            "secrets": {
+              "type": "boolean",
+              "description": "Mask, verbatim, every value the secrets resolver substituted for a `${secret:KEY}` placeholder anywhere in this bundle's configs (settings, connectors, routing…) — so a connection string or a connector error can never print a secret. Zero false positives by construction. Values shorter than 8 characters are skipped, with a boot warning naming the config path.",
+              "default": true
+            },
+            "patterns": {
+              "type": "array",
+              "description": "Your own rules, applied to the whole message with the `g` flag (always enforced — without it only the first credential on a line would be masked). String form: a regex source whose whole match becomes `[REDACTED]`. Object form: `{ \"pattern\": \"(sig=)[^&\\\\s]+\", \"flags\": \"gi\", \"replacement\": \"$1[REDACTED]\", \"name\": \"signed-links\" }` — `replacement` follows String.prototype.replace ($1 keeps a group). A pattern that does not compile, or that matches the empty string, refuses the boot. Backtracking behaviour of your own patterns is yours to check.",
+              "default": [],
+              "items": {
+                "oneOf": [
+                  { "type": "string", "minLength": 1 },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["pattern"],
+                    "properties": {
+                      "pattern": { "type": "string", "minLength": 1, "description": "Regex source (JavaScript syntax)" },
+                      "flags": { "type": "string", "description": "Regex flags; `g` is added when missing", "default": "g" },
+                      "replacement": { "type": "string", "description": "Replacement text; `$1`…`$9` reference capture groups", "default": "[REDACTED]" },
+                      "name": { "type": "string", "description": "Optional label for diagnostics" }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
     "secrets": {
       "type": "object",
       "description": "Where `${secret:KEY}` placeholders in this bundle's JSON configs are resolved from. Omit the block entirely and resolution behaves exactly as it always has: the framework environment first, then process.env, failing closed when a key is unset or empty. Declaring it adds a lower-precedence file tier; it never removes or reorders the environment tiers above it.",

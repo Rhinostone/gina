@@ -36,6 +36,7 @@ var path   = require('path');
 var fs     = require('fs');
 
 var FW = require('../fw');
+var SETTLE_ONCE = require(path.join(FW, 'core/connectors/settle-once.js')); // #B432 — the guard the extracted store bytes now call
 
 /**
  * The four connectors.json-driven stores, with the declaration prefix used to
@@ -125,7 +126,8 @@ function extractMethod(src, decl) {
  * @inner
  */
 function compile(body) {
-    return new Function('noop', 'oneDay', 'return (' + body + ');')(noop, ONE_DAY);
+    // #B432 — the extracted bytes wrap `fn` through the shared guard; inject it.
+    return new Function('noop', 'oneDay', 'settleOnce', 'return (' + body + ');')(noop, ONE_DAY, SETTLE_ONCE);
 }
 
 /**

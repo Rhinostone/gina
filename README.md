@@ -62,30 +62,35 @@ open https://localhost:3100
 
 > **npm 12+** blocks install scripts by default, and gina's post-install bootstraps `~/.gina` and the framework dependencies. Install with `npm install -g gina@latest --allow-scripts=gina`, or allow it once for all global installs with `npm config set allow-scripts=gina --location=user`. (Not needed on npm ≤ 11.)
 
-## What's in 0.6.18
+## What's in 0.6.19
 
 > **Restart your bundles AND rebuild them.** This release changes the browser
-> bundle: `gina.min.js` differs from `0.6.17` (`gina.min.css` and
+> bundle: `gina.min.js` differs from `0.6.18` (`gina.min.css` and
 > `gina.onload.min.js` are unchanged). A restart alone updates the server half
-> only — each bundle bakes its own copy of the client assets, so the validator
+> only — each bundle bakes its own copy of the client assets, so the `merge()`
 > fix below would not reach a browser at all.
 
-> **No settings reset.** `0.6.18` is a patch — the `shortVersion` stays `0.6`, so
+> **No settings reset.** `0.6.19` is a patch — the `shortVersion` stays `0.6`, so
 > your `~/.gina/0.6/settings.json` is untouched. (`0.6.0` was the reset.)
 
-**A form-validation lockout, and a per-request cost paid by every render.** The
-headline is a correctness fix with an availability consequence: a field validated
-by a `query` (live-check) rule got the wrong verdict whenever its value contained
-a `+` — an email plus-address being the common case — and because a `query` rule
-also gates the submit trigger, an affected visitor could not submit the form at
-all. Alongside it, the dotted-path data setter behind every render no longer
-deep-merges its way through the render tree, which also ends a silent mutation of
-the per-process forms catalog. **One behaviour change needs your attention** if a
-bundle relied on live-check bodies being URL-decoded — details in the
-[migration guide](https://gina.io/docs/migration).
+**Two security fixes, and a family of connector callback defects closed.** Log
+redaction is now built in and on by default, so a credential carried in a request
+URL no longer reaches stdout in plaintext; and concurrent calls to the same
+Couchbase entity method no longer cross-deliver each other's results. Around
+them, every connector's callback delivery was audited: a callback that throws is
+no longer invoked a second time, a failed Couchbase query no longer settles its
+caller twice, a logged `Error` keeps its message and stack, and `merge()` no
+longer rewrites the object it was given. **Two changes may require action** —
+log redaction for every project, the Couchbase change only if you use that
+connector — details in the [migration guide](https://gina.io/docs/migration).
 
-- **Fixed — a `query` rule no longer mis-validates a value containing `+` (#B425).** The live-check body is JSON, but the request was labelled `application/x-www-form-urlencoded`, so the server correctly url-decoded it before parsing and turned every `+` into a space. The mangled body was still valid JSON, so nothing errored — the endpoint answered `200` with a verdict computed from a corrupted value. Because a `query` rule also gates the submit trigger, the common case of an email plus-address such as `alias+tag@example.com` was a hard lockout on sign-in and password-recovery forms rather than a warning. The request now sends `application/json` when the body is JSON, matching what the form-submit and file-removal paths already did. An explicit per-rule `headers` override still wins, so a rule that already declares its own `Content-Type` is unchanged. **Action required only if you relied on the decode:** live-check bodies are no longer URL-decoded at all, so `%XX` sequences reach your action verbatim, and field values are sent raw.
-- **Fixed — the render data setter no longer walks and rewrites the shared forms catalog on every request (#P39).** The dotted-path setter behind every render (`page.view.*`, `page.environment.*`, `page.forms`, …) used to build the path as a JSON string, parse it, and deep-merge the result into the render data — and that merge recursed into every object value it grafted, re-merging each array inside it with itself and writing the copies back into the caller's object. For a bundle with a real forms catalog that was roughly 0.4 to 1.5 ms of CPU per request *and* a silent mutation of the per-process catalog, whose arrays were swapped for equal copies on every render. A first write is now stored by reference without being walked, missing intermediates are created directly, and only a genuine collision goes through the merge — so the value semantics are unchanged (first write wins; an object written onto an object leaf still deep-fills), the catalog is never touched, and the 59 primitive writes of a render cost about a fifth of what they did (66.6 → 14.8 µs). One deliberate difference: writing an array onto an existing array leaf now merges the two once instead of twice, where the old path produced duplicate elements; no framework route writes an array-bearing path twice.
+- **Security — credentials in a request URL no longer reach the logs (#B433).** The HTTP access line — and 45 sibling sites across both engines, every render delegate and the CSRF filter — logged the URL as received, so a password-reset token, a signed download link or a one-time invite was written to stdout verbatim with no seam to redact it. Every log message is now redacted before it is rendered and dispatched, at the logger's single pre-render point, so stdout, `gina tail`, the file transport and the Inspector all receive the same masked line. Configured per bundle in `settings.json > log.redact` and **on by default**: a built-in set masks JSON Web Tokens, URL userinfo passwords, `Bearer`/`Basic` credentials, named credential query keys (`token`, `access_token`, `api_key`, `secret`, `password`, `signature`, `otp`, …, keeping the key and masking the value) and api-key style headers; every value the secrets resolver substituted for a `${secret:KEY}` placeholder is masked verbatim; and `patterns` takes your own rules. A bare long-hex path segment is deliberately not a default — add `(?<![0-9a-f])[0-9a-f]{64}(?![0-9a-f])` yourself when your credentials take that shape. **Behaviour change:** masked values now appear in logs where the raw value used to; set `log.redact.enabled` to `false` to opt out. Also new: `console.setRedaction(block, options)` and `lib.secrets.getResolvedValues(conf)`.
+- **Security — concurrent Couchbase entity reads no longer cross-deliver results (#B429).** The completion trigger carried no call identity and was emitted on a process-wide singleton, so the first query to finish woke every in-flight caller of that method with its own payload: two concurrent reads with different arguments could each receive the other's rows, a third caller could receive an error belonging to a different call, and a single response could blend rows from two callers — a confidentiality and authorization concern where the method reads a user-scoped record, not only a correctness one. Every call now settles from its own identity. **Action required only if you use the Couchbase connector** — see the migration guide.
+- **Fixed — a Couchbase callback that throws is no longer invoked twice (#B430).** The delivery path wrapped the callback in a `try` whose `catch` called the same callback again with identical arguments. The throw is now reported with the query trigger for context and the callback is never re-entered.
+- **Fixed — a failed Couchbase query no longer settles its caller twice (#B431).** Each dispatch chained `.catch(onError).then(onResult)` sequentially, so every error was followed by a bogus empty success — the canonical `if (err) { return next(err); } render(data);` shape ran both branches. Failed `bulkInsert` calls also logged a spurious `TypeError`; that is gone.
+- **Fixed — an entity query callback is no longer invoked twice when the callback itself throws (#B432).** The sqlite, mongodb and scylladb connectors delivered results inside a `try` or a `.then()` whose error path called the same callback a second time with the caller's own exception dressed up as a database failure. A throwing callback is now logged once, as `[ <label> ] callback exception:`, and never re-entered.
+- **Fixed — a logged `Error` object keeps its message, stack, own properties and `cause` chain (#B434).** Both log writers walked enumerable properties only, so `console.error(err)` rendered `{}` (or just `{"code": …}`). Errors now render the way Node's own console does — directly, among other arguments, nested inside a logged object, and on `console.log` alike — and the rendered message still goes through redaction. Passing `err.stack` as a string keeps working unchanged.
+- **Fixed — `merge()` no longer rewrites the object it was given (#B428).** A source subtree merged into an existing target level that lacked its key was referenced and then walked again as if merged into itself: every array inside the caller's object was replaced by a copy at every depth, and an array of primitives silently lost its duplicates. A subtree that is the same object on both sides is now skipped, so a grafted source keeps its arrays and duplicates and the result references it. Merging two different values is unchanged. `lib/merge` is part of the browser bundle — hence the rebuild.
 
 ## Documentation
 

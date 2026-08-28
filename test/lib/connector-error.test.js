@@ -258,7 +258,9 @@ describe('#CE1 §05 — wiring: every connector stamps, and lib registers the mo
         var src = fs.readFileSync(path.join(CONN, 'couchbase', 'index.js'), 'utf8');
         assert.match(src, /if \(err\) \{\s*lib\.connectorError\.stamp\(err\);/,
             'stamps err once at the top of the if(err) block (covers every downstream emit/callback)');
-        assert.match(src, /self\.emit\(trigger, lib\.connectorError\.stamp\(error\)\)/,
-            'the bulkInsert error is stamped inline as it is emitted');
+        // #B429 — bulkInsert now stamps ONCE into a local and carries it into both the
+        // per-call settlement and the observability emit (it previously stamped twice).
+        assert.match(src, /error = lib\.connectorError\.stamp\(error\);[\s\S]{0,200}?self\.emit\(trigger, error\)/,
+            'the bulkInsert error is stamped on the path that settles and emits it');
     });
 });

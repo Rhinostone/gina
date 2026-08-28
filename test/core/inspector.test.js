@@ -3778,7 +3778,10 @@ describe('34 - queryOptions fix: conn._cluster.query() receives queryOptions', f
         var src = getCbSrc34();
         // Find all conn._cluster.query(query, ...) calls — match across whitespace
         var matches = src.match(/conn\._cluster\.query\(query,\s*(\w+)\)/g);
-        assert.ok(matches && matches.length >= 2, 'expected at least two conn._cluster.query() calls');
+        // #B429 — one call site now: register()'s duplicated dispatch block was removed with
+        // the shared-emitter branch. The invariant this pin exists for is the loop below —
+        // EVERY such call receives queryOptions, never queryParams — which is unchanged.
+        assert.ok(matches && matches.length >= 1, 'expected at least one conn._cluster.query() call');
         for (var i = 0; i < matches.length; i++) {
             assert.ok(
                 matches[i].indexOf('queryOptions') > -1,
