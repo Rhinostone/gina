@@ -276,6 +276,61 @@ function getResolvedPaths(config) {
 }
 
 /**
+ * Read the value now sitting at one dotted path recorded by `resolve()`
+ * (`db.password`, `items[0]`, `a.b[2].c`).
+ *
+ * @inner
+ * @private
+ * @param {object} config - The walked config object
+ * @param {string} dotted - A path in `getResolvedPaths()`'s notation
+ * @returns {*} The value, or `undefined` when the path no longer resolves
+ */
+function readPath(config, dotted) {
+    var node = config;
+    var re   = /([^.\[\]]+)|\[(\d+)\]/g;
+    var m;
+    while ((m = re.exec(dotted)) !== null) {
+        if (node === null || typeof node !== 'object') {
+            return undefined;
+        }
+        node = node[ typeof m[2] !== 'undefined' ? Number(m[2]) : m[1] ];
+    }
+    return node;
+}
+
+/**
+ * Return every `${secret:KEY}` substitution `resolve()` performed on
+ * `config`, as `{ path, value }` pairs — the values as they now sit in the
+ * config. Backs the log-redaction seam (#B433): the logger masks these values
+ * verbatim wherever they appear in a log line, so a connection string or a
+ * misconfigured connector never prints a secret. Must be called with the
+ * SAME object `resolve()` walked (the record is keyed by identity).
+ *
+ * @memberof module:lib/secrets
+ * @function getResolvedValues
+ * @param {object} config - The config object previously passed to `resolve()`
+ * @returns {Array<{path: string, value: *}>} One entry per substituted path;
+ *   empty when `config` was never resolved or nothing was substituted
+ *
+ * @example
+ * var conf = { db: { password: '${secret:DB_PASSWORD}' }, items: ['${secret:A}', 'literal'] };
+ * process.env.DB_PASSWORD = 'correct-horse';
+ * process.env.A = 'battery-staple';
+ * secrets.resolve(conf);
+ * secrets.getResolvedValues(conf);
+ * // → [{ path: 'db.password', value: 'correct-horse' }, { path: 'items[0]', value: 'battery-staple' }]
+ * secrets.getResolvedValues({}); // → []
+ */
+function getResolvedValues(config) {
+    var paths = getResolvedPaths(config);
+    var out   = [];
+    for (var i = 0; i < paths.length; i++) {
+        out.push({ path: paths[i], value: readPath(config, paths[i]) });
+    }
+    return out;
+}
+
+/**
  * Enumerate the distinct `${secret:KEY}` placeholder keys present in
  * `config`, without resolving any of them. Read-only and non-throwing:
  * unlike `resolve()`, it never calls a backend, never mutates `config`,
@@ -445,6 +500,7 @@ module.exports = {
     resolveBundleSrc: sources.resolveBundleSrc,
     resolve: resolve,
     getResolvedPaths: getResolvedPaths,
+    getResolvedValues: getResolvedValues,
     getRequiredKeys: getRequiredKeys,
     selectBackend: selectBackend,
     // Declaration validation, re-exported from ./declaration so the

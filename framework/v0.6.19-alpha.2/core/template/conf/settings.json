@@ -340,6 +340,36 @@
       "authz": true
     }
   },
+  // #B433 — log redaction. Every log message is redacted BEFORE it is rendered
+  // and dispatched, so stdout, `gina tail`, the file transport and the Inspector
+  // all receive the same masked line. ON by default.
+  //
+  //   redact.enabled  — master switch (strict boolean). Process-wide: in a
+  //                     merged process one bundle enabling it is enough.
+  //   redact.defaults — apply the built-in set: JWTs, URL userinfo passwords
+  //                     (scheme://user:PASSWORD@host), `Bearer`/`Basic`
+  //                     credentials, named credential query keys (token,
+  //                     access_token, api_key, secret, password, signature, otp,
+  //                     …) and api-key style headers. A bare long-hex path
+  //                     segment is deliberately NOT a default (a content-address
+  //                     key and an opaque credential look the same) — add it
+  //                     under `patterns` if your credentials take that shape.
+  //   redact.secrets  — mask, verbatim, every value the secrets resolver
+  //                     substituted for a ${secret:KEY} placeholder in this
+  //                     bundle's configs (values shorter than 8 characters are
+  //                     skipped with a warning at boot).
+  //   redact.patterns — your own rules, applied with the `g` flag: a regex
+  //                     source string (whole match → "[REDACTED]") or an object
+  //                     { "pattern": "(sig=)[^&]+", "flags": "gi", "replacement": "$1[REDACTED]" }.
+  //                     An invalid pattern refuses the boot.
+  "log": {
+    "redact": {
+      "enabled": true,
+      "defaults": true,
+      "secrets": true,
+      "patterns": []
+    }
+  },
   // #INS9b — authenticated /_gina/agent SSE endpoint. The agent stream
   // (combined Inspector data + server-log SSE) is dev-only by default. Set
   // agent.enabled=true and provide a key to expose it OUTSIDE dev mode (e.g.

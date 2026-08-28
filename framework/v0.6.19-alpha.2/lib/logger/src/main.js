@@ -62,6 +62,10 @@ var colors = {
 var merge           = require('../../merge');
 var inherits        = require('../../inherits');
 var helpers         = require('../../../helpers');
+// #B433 — pre-render log redaction engine (pure, dependency-free). Applied at
+// emit() — the single point where every levelled message exists as a string
+// before any sink renders it — and on the raw `self.log` path.
+var redact          = require('./redact');
 
 // #M22 — merge-eval fallback removed; the circular chain that produced a partial merge was broken at the merge.js side (direct require of utils/prototypes.json_clone instead of helpers/index.js's for-loop loader, which transitively required lib/logger).
 // BO - publishing hack
@@ -94,6 +98,16 @@ function Logger() {
 
     // retrieve context
     var ctx = getContext('loggerInstance') || { initialized: false }; // jshint ignore:line
+    // #B433 — redaction state lives on the persisted context, never on a group's
+    // options: the level closures of every group (built once, kept in
+    // ctx._loggers) close over the FIRST module instance's emit(), and a merged
+    // process shares one logger for every bundle — so the state must be
+    // process-wide and must survive a lib/logger re-require. `blocks`/`secrets`
+    // are keyed by bundle (group) so a bundle's config reload replaces its own
+    // contribution; `state` is the compiled union handed to redact.apply().
+    if ( typeof(ctx._redact) == 'undefined' ) {
+        ctx._redact = { blocks: {}, secrets: {}, state: null };
+    }
 
     var self            = {}
         , loggers       = {}
@@ -629,6 +643,13 @@ function Logger() {
     // Forwarding flow to containers
     var emit = function(opt, severity, content, skipFormating) {
 
+        // #B433 — redact BEFORE the envelope is minted: one pass per message
+        // (not per flow), and the marker lands inside `content`, so the JSON
+        // rendered downstream by the default container cannot be corrupted.
+        if ( ctx._redact && ctx._redact.state ) {
+            content = redact.apply(ctx._redact.state, content);
+        }
+
         skipFormating = (typeof(skipFormating) != 'undefined' && /true/i.test(skipFormating)) ? true : false;
         // Sample of a payload
         // process.emit('logger#default', JSON.stringify({
@@ -747,6 +768,60 @@ function Logger() {
         return
     }
 
+    /**
+     * <console>.setRedaction — #B433
+     *
+     * Install (or replace) one bundle's contribution to the process-wide log
+     * redaction: its `settings.json > log.redact` block plus the secret values
+     * the secrets resolver substituted for it. The effective rule set is the
+     * UNION of every installed bundle (a merged process shares this logger),
+     * recompiled on every call, and applied to every message at `emit()` and on
+     * the raw `console.log` path before any sink renders it.
+     *
+     * Called by `core/config.js` at config load, right after the bundle's
+     * `${secret:KEY}` placeholders are resolved. Throws on an invalid block so
+     * the boot refuses instead of dropping a pattern silently.
+     *
+     * @param {object} [block] - The `log.redact` object (absent = defaults on)
+     * @param {object} [options]
+     * @param {string} [options.group='gina'] - The bundle this contribution belongs to
+     * @param {Array<{path: string, value: *}>} [options.secrets] - Resolved secrets (`lib.secrets.getResolvedValues()`)
+     * @returns {{enabled: boolean, rules: number, secrets: number, skippedSecrets: string[]}}
+     *   What is now effective, plus the config paths of secrets too short to redact
+     * @throws {Error} When the block is malformed (unknown key, non-boolean flag,
+     *   invalid or empty-matching pattern)
+     *
+     * @example
+     * var summary = console.setRedaction({ patterns: ['\\b[0-9a-f]{64}\\b'] }, { group: 'api@myproject' });
+     * // summary → { enabled: true, rules: 7, secrets: 0, skippedSecrets: [] }
+     * console.setRedaction({ enabled: false }, { group: 'api@myproject' }); // this bundle opts out
+     */
+    self.setRedaction = function(block, options) {
+        options = options || {};
+        var group = ( typeof(options.group) == 'string' && options.group.length > 0 ) ? options.group : 'gina';
+        // compileBlock throws on a malformed block — nothing is installed in that case
+        var compiled = redact.compileBlock(block, group);
+        var parts    = redact.partitionSecrets(compiled.secrets ? options.secrets : []);
+
+        ctx._redact.blocks[group]  = compiled;
+        ctx._redact.secrets[group] = parts.values;
+
+        var blocks = [], values = [];
+        for (var g in ctx._redact.blocks) {
+            blocks.push(ctx._redact.blocks[g]);
+            values = values.concat(ctx._redact.secrets[g] || []);
+        }
+        ctx._redact.state = redact.compileState(blocks, values);
+
+        return {
+            enabled        : !!ctx._redact.state,
+            rules          : ctx._redact.state ? ctx._redact.state.rules.length : 0,
+            secrets        : ctx._redact.state ? ctx._redact.state.secretCount : 0,
+            skippedSecrets : parts.skipped,
+            minSecretLength: redact.MIN_SECRET_LENGTH
+        };
+    }
+
     self.pauseReporting = function() {
         loggers[ctx._options.name]._options.isReporting = false;
     }
@@ -816,6 +891,13 @@ function Logger() {
         }
 
         if (content != '') {
+
+            // #B433 — the raw path bypasses emit(), so it redacts on its own.
+            // Every URL-bearing framework site is levelled (measured: 0 of 46
+            // use console.log), so this is belt-and-braces for application code.
+            if ( ctx._redact && ctx._redact.state ) {
+                content = redact.apply(ctx._redact.state, content);
+            }
 
             // intercepte already formated messages
             if ( /^\S\[\d+[m]/.test(content) && /\n$/.test(content) ) {

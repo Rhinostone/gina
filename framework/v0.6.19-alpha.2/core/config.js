@@ -3162,6 +3162,40 @@ function Config(opt, contextResetNeeded) {
             return callback(secretErr);
         }
 
+        // #B433 — log redaction. Install this bundle's `settings.log.redact`
+        // block plus the secret values just resolved above into the logger,
+        // HERE rather than at server start: this is the earliest point at which
+        // the block is merged and resolved, so every later boot line (connector
+        // init included) is already covered. Only the bundle this process was
+        // started for contributes, unless the bundles share one process
+        // (merged mode), in which case every bundle does — the logger unions
+        // them. Fail-closed like the secrets seam: a malformed block is a config
+        // error that refuses the boot, because a pattern dropped silently is a
+        // leak. `getResolvedValues` must read the SAME object `resolve()` walked.
+        try {
+            var _logBlock    = ( conf[bundle][env].content && conf[bundle][env].content.settings ) ? conf[bundle][env].content.settings.log : undefined;
+            var _redactBlock = ( _logBlock && typeof(_logBlock) == 'object' && !Array.isArray(_logBlock) ) ? _logBlock.redact : undefined;
+            if ( typeof(_logBlock) != 'undefined' && ( typeof(_logBlock) != 'object' || _logBlock === null || Array.isArray(_logBlock) ) ) {
+                throw new Error('`settings.log` must be an object');
+            }
+            var _redactApplies = ( bundle === self.startingApp ) || ( self.Host && typeof(self.Host.isStandalone) == 'function' && self.Host.isStandalone() === true );
+            if ( _redactApplies && typeof(console.setRedaction) == 'function' ) {
+                var _redactSummary = console.setRedaction(_redactBlock, {
+                    group   : bundle,
+                    secrets : secrets.getResolvedValues(self.envConf[bundle][env])
+                });
+                for (var _rs = 0; _rs < _redactSummary.skippedSecrets.length; _rs++) {
+                    console.warn('[CONFIG][loadBundleConfig] log.redact: the secret resolved at `'+ _redactSummary.skippedSecrets[_rs] +'` in `'+ bundle +'/'+ env +'` is shorter than '+ _redactSummary.minSecretLength +' characters and is NOT added to the log redaction set');
+                }
+            }
+        } catch (redactErr) {
+            console.debug(
+                '[CONFIG][loadBundleConfig] Invalid `settings.log` in `'
+                + bundle +'/'+ env +':'+ scope +'`: '+ redactErr.message
+            );
+            return callback(redactErr);
+        }
+
         // #I18N — eager-load this bundle's message catalogs
         // (bundle/locales/<culture>.json) once per bundle at boot, mirroring the
         // secrets.resolve seam above. Opt-in: a bundle with no locales/ dir is
