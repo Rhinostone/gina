@@ -2426,6 +2426,13 @@ function Merge() {
      * validator rule `"setFlash": [null, "message"]` on the client-side
      * rules path.
      *
+     * An OBJECT element of `options` fills a HOLE of `target` (an index the
+     * target lacks) by copying its keys; an occupied index — an existing
+     * object, a primitive or `null` — is never written into. That guard is
+     * #B437: the hole test runs on the deduped rebuild, whose indexes shift
+     * against a target carrying duplicate primitives, so the key write used to
+     * reach a string or null and throw, killing the whole merge.
+     *
      * @inner
      * @private
      * @param {Array} options  - Source array (merged INTO target)
@@ -2638,10 +2645,18 @@ function Merge() {
                         if (typeof (newTarget[a]) == 'undefined')
                             newTarget[a] = {};
 
-
-                        for (let k in options[a]) {
-                            if (!newTarget[a].hasOwnProperty(k)) {
-                                newTarget[a][k] = options[a][k]
+                        // #B437 — the hole test above ran on the DEDUPED rebuild; after
+                        // the rebind `newTarget = target` the same index can hold a
+                        // primitive or null on the real target (a target carrying
+                        // duplicate primitives is SHORTER once deduped), and writing
+                        // keys into a string / null threw a TypeError that killed the
+                        // whole merge. An occupied slot is not a hole: skip it, as the
+                        // chain below already does for an object at an occupied index.
+                        if (newTarget[a] !== null && typeof(newTarget[a]) == 'object') {
+                            for (let k in options[a]) {
+                                if (!newTarget[a].hasOwnProperty(k)) {
+                                    newTarget[a][k] = options[a][k]
+                                }
                             }
                         }
 
