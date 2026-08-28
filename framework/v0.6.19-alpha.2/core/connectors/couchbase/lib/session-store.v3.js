@@ -6,6 +6,10 @@ var gina            = require('../../../../core/gna');
 var lib             = gina.lib;
 var console         = lib.logger;
 
+// #B432 — express-session must see exactly one callback. Each method below
+// wraps `fn` at entry, so a callback that THROWS can no longer be re-invoked
+// by that method's own error path (see core/connectors/settle-once.js).
+var settleOnce      = require('./../../settle-once');
 /*!
  * Connect - Couchbase
  * Copyright(c) 2014 Christopher Mina <christopher.mina@gmail.com>
@@ -127,6 +131,7 @@ module.exports = function(session, bundle){
 
     CouchbaseStore.prototype.get = async function(sid, fn){
         if ('function' !== typeof fn) { fn = noop; }
+        fn = settleOnce('couchbase:session#get', fn, console);
         sid = this.prefix + sid;
         console.debug('[SessionStore v3] GET "' + sid + '"');
 
@@ -190,6 +195,7 @@ module.exports = function(session, bundle){
 
     CouchbaseStore.prototype.set = async function(sid, sess, fn){
         if ('function' !== typeof fn) { fn = noop; }
+        fn = settleOnce('couchbase:session#set', fn, console);
         sid = this.prefix + sid;
         try {
 
@@ -242,6 +248,7 @@ module.exports = function(session, bundle){
 
     CouchbaseStore.prototype.destroy = function(sid, fn){
         if ('function' !== typeof fn) { fn = noop; }
+        fn = settleOnce('couchbase:session#destroy', fn, console);
         sid = this.prefix + sid;
         //this.client.remove(sid, fn);
         this.client
@@ -271,6 +278,7 @@ module.exports = function(session, bundle){
 
     CouchbaseStore.prototype.touch = function (sid, sess, fn) {
         if ('function' !== typeof fn) { fn = noop; }
+        fn = settleOnce('couchbase:session#touch', fn, console);
 
         var sid = this.prefix + sid
             , maxAge = sess.cookie.maxAge

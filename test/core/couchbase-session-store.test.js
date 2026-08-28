@@ -18,6 +18,7 @@ var path   = require('path');
 var fs     = require('fs');
 
 var FW = require('../fw');
+var SETTLE_ONCE = require(path.join(FW, 'core/connectors/settle-once.js')); // #B432 — the guard the extracted store bytes now call
 var STORE_V3 = path.join(FW, 'core/connectors/couchbase/lib/session-store.v3.js');
 var STORE_V4 = path.join(FW, 'core/connectors/couchbase/lib/session-store.v4.js');
 
@@ -409,9 +410,12 @@ function extractMethod(src, decl) {
     assert.ok(end > open, 'method body must terminate');
 
     // `oneDay`, `noop` and `debug` are module-scope closure vars in the store.
-    return new Function('oneDay', 'noop', 'debug',
+    // #B432 — the extracted method bytes now wrap `fn` through the shared guard,
+    // so the harness scope must carry it (the real export, not a stand-in: the
+    // guard IS part of the shipped behaviour under test).
+    return new Function('oneDay', 'noop', 'debug', 'settleOnce',
         'return (' + src.slice(fnStart, end) + ');'
-    )(86400, function () {}, function () {});
+    )(86400, function () {}, function () {}, SETTLE_ONCE);
 }
 
 /**
@@ -631,9 +635,10 @@ describe('09 - session-store v3/v4: constructor requires options.db (#B167)', fu
         assert.equal(depth, 0, 'braces must balance — an unbalanced slice is not a control');
 
         var FakeStore = function () {};
-        return new Function('Store', 'bundle',
+        // #B432 — see the note on the sibling extractor above.
+        return new Function('Store', 'bundle', 'settleOnce',
             'return (' + src.slice(declIdx, end) + ');'
-        )(FakeStore, 'testbundle');
+        )(FakeStore, 'testbundle', SETTLE_ONCE);
     }
 
     /**

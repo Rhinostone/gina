@@ -40,6 +40,7 @@ var path   = require('path');
 var fs     = require('fs');
 
 var FW = require('../fw');
+var SETTLE_ONCE = require(path.join(FW, 'core/connectors/settle-once.js')); // #B432 — the guard the extracted store bytes now call
 
 var STORES = {
     redis    : { file: path.join(FW, 'core/connectors/redis/lib/session-store.js'),    setDecl: 'RedisStore.prototype.set = ' },
@@ -137,7 +138,8 @@ function extractMethod(src, declPrefix) {
  * @inner
  */
 function compile(fnSrc) {
-    return new Function('oneDay', 'debug', 'return (' + fnSrc + ');')(ONE_DAY, noop);
+    // #B432 — the extracted bytes wrap `fn` through the shared guard; inject it.
+    return new Function('oneDay', 'debug', 'settleOnce', 'return (' + fnSrc + ');')(ONE_DAY, noop, SETTLE_ONCE);
 }
 
 /**

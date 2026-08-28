@@ -392,4 +392,116 @@ describe('04 - the guard is wired at each fixed site (source pins)', function ()
     });
 });
 
+
+// ─── §05 session-store parity — the same contract, over shipped store bytes ──
+describe('05 - session stores settle their callback exactly once', function () {
+
+    /**
+     * Extract a prototype method's source and execute THOSE bytes.
+     *
+     * The stores are factory closures needing live config, a driver and gina
+     * globals, so booting one is disproportionate for a defect that lives
+     * entirely inside a method body. Extraction keeps the test on shipped bytes
+     * with no drift-prone replica (the documented escape hatch for modules that
+     * cannot be required in isolation).
+     *
+     * @inner
+     * @param {string} src  - file source
+     * @param {string} decl - the declaration to locate, e.g. 'Store.prototype.get = '
+     * @returns {function} the compiled method, scope-injected
+     */
+    function extract(src, decl) {
+        var at = src.indexOf(decl);
+        assert.ok(at > -1, 'harness fault: declaration not found -> ' + decl);
+        assert.equal(src.indexOf(decl, at + 1), -1, 'harness fault: declaration is not unique -> ' + decl);
+        var i = at, depth = 0, started = false, end = -1;
+        for (; i < src.length; i++) {
+            if (src[i] === '{') { depth++; started = true; }
+            else if (src[i] === '}') {
+                depth--;
+                if (started && depth === 0) { end = i; break; }
+            }
+        }
+        assert.ok(end > -1, 'harness fault: unbalanced braces extracting ' + decl);
+        var body = src.slice(at + decl.length, end + 1);
+        var noop = function () {};
+        return new Function('settleOnce', 'console', 'noop', 'bundle',
+            'return (' + body + ');')(settleOnceReal, console, noop, 'testbundle');
+    }
+
+    var settleOnceReal = require(path.join(FW, 'core/connectors/settle-once.js'));
+
+    var STORES = [
+        {   name: 'sqlite',   file: 'sqlite/lib/session-store.js',
+            decl: 'SqliteStore.prototype.get = ',
+            self: { prefix: 's:', _stmtGet: { get: function () { return { data: '{"a":1}' }; } } },
+            args: function (cb) { return ['sid', cb]; } },
+        {   name: 'mongodb',  file: 'mongodb/lib/session-store.js',
+            decl: 'MongodbStore.prototype.get = ',
+            self: { _coll: { findOne: function () { return Promise.resolve({ sess: '{"a":1}' }); } } },
+            args: function (cb) { return ['sid', cb]; } },
+        {   name: 'scylladb', file: 'scylladb/lib/session-store.js',
+            decl: 'ScylladbStore.prototype.get = ',
+            self: { table: 't', client: { execute: function () { return Promise.resolve({ rows: [{ sess: '{"a":1}' }] }); } } },
+            args: function (cb) { return ['sid', cb]; } },
+        {   name: 'redis',    file: 'redis/lib/session-store.js',
+            decl: 'RedisStore.prototype.get = ',
+            self: { prefix: 's:', client: { get: function (k, cb) { cb(null, '{"a":1}'); } } },
+            args: function (cb) { return ['sid', cb]; } },
+        {   name: 'couchbase v3', file: 'couchbase/lib/session-store.v3.js',
+            decl: 'CouchbaseStore.prototype.set = ',
+            self: { prefix: 's:', ttl: 100, client: { upsert: function () { return Promise.resolve(); } } },
+            args: function (cb) { return ['sid', { cookie: { maxAge: 100000 } }, cb]; } },
+        {   name: 'couchbase v4', file: 'couchbase/lib/session-store.v4.js',
+            decl: 'CouchbaseStore.prototype.set = ',
+            self: { prefix: 's:', ttl: 100, client: { upsert: function () { return Promise.resolve(); } } },
+            args: function (cb) { return ['sid', { cookie: { maxAge: 100000 } }, cb]; } }
+    ];
+
+    STORES.forEach(function (st) {
+        it(st.name + ': a throwing callback is invoked exactly once  (discriminating)', async function () {
+            var src = fs.readFileSync(path.join(FW, 'core/connectors/' + st.file), 'utf8');
+            var method = extract(src, st.decl);
+            var r = await captureCalls(function (cb) {
+                // Throw on the FIRST invocation only. A callback that throws every
+                // time makes the replay's own throw escape the method and reject the
+                // capture promise, so the arm goes red via an escaped exception
+                // rather than the assertion — red for the right reason, but it reads
+                // like a harness fault. Throwing once keeps the second (wrong) settle
+                // observable and makes the pre-fix failure a clean `2 !== 1`.
+                var n = 0;
+                var thrower = function () {
+                    cb.apply(null, arguments);
+                    if (++n === 1) { throw new Error('cb-boom'); }
+                };
+                method.apply(st.self, st.args(thrower));
+            });
+            assert.equal(r.timedOut, false, 'the callback must be invoked at all');
+            assert.equal(r.calls.length, 1, 'a throwing store callback must not be re-invoked by the method error path');
+        });
+    });
+
+    it('EVERY guarded store method wraps fn BEFORE any settle (wrap census)', function () {
+        var FILES = [
+            ['sqlite/lib/session-store.js', 4],
+            ['mongodb/lib/session-store.js', 7],
+            ['scylladb/lib/session-store.js', 7],
+            ['redis/lib/session-store.js', 4],
+            ['couchbase/lib/session-store.v3.js', 4],
+            ['couchbase/lib/session-store.v4.js', 4]
+        ];
+        FILES.forEach(function (f) {
+            var src = fs.readFileSync(path.join(FW, 'core/connectors/' + f[0]), 'utf8');
+            var methods = src.match(/\.prototype\.[a-zA-Z]+\s*=\s*(?:async\s+)?function/g) || [];
+            var wraps   = src.match(/fn = settleOnce\(/g) || [];
+            assert.equal(methods.length, f[1], f[0] + ': unexpected method count — a new method may be unguarded');
+            assert.equal(wraps.length, f[1], f[0] + ': every callback-taking method must wrap fn');
+            // the wrap must precede the first settle in each method, or it guards nothing
+            var firstWrap = src.indexOf('fn = settleOnce(');
+            var firstNorm = src.indexOf("typeof fn");
+            assert.ok(firstNorm > -1 && firstWrap > firstNorm, f[0] + ': the wrap must follow normalization');
+        });
+    });
+});
+
 after(function () { fs.rmSync(TMP, { recursive: true, force: true }); });

@@ -10,6 +10,10 @@
 var gina    = require('../../../../core/gna');
 var lib     = gina.lib;
 var console = lib.logger;
+// #B432 — express-session must see exactly one callback. Each method below
+// wraps `fn` at entry, so a callback that THROWS can no longer be re-invoked
+// by that method's own error path (see core/connectors/settle-once.js).
+var settleOnce = require('./../../settle-once');
 
 /**
  * One day in seconds — default TTL when cookie.maxAge is absent.
@@ -254,6 +258,7 @@ module.exports = function(session, bundle) {
      */
     MongodbStore.prototype.get = function(sid, fn) {
         if ('function' !== typeof fn) fn = noop;
+        fn = settleOnce('mongodb:session#get', fn, console);
         console.debug('[MongodbStore] GET ' + sid);
 
         this._coll.findOne({ _id: sid, expiresAt: { $gt: new Date() } }).then(function(doc) {
@@ -281,6 +286,7 @@ module.exports = function(session, bundle) {
      */
     MongodbStore.prototype.set = function(sid, sess, fn) {
         if ('function' !== typeof fn) fn = noop;
+        fn = settleOnce('mongodb:session#set', fn, console);
         var maxAge = sess.cookie && sess.cookie.maxAge;
         var ttl    = this.ttl || ('number' === typeof maxAge ? maxAge / 1000 | 0 : oneDay);
 
@@ -328,6 +334,7 @@ module.exports = function(session, bundle) {
      */
     MongodbStore.prototype.touch = function(sid, sess, fn) {
         if ('function' !== typeof fn) fn = noop;
+        fn = settleOnce('mongodb:session#touch', fn, console);
         var maxAge = sess.cookie && sess.cookie.maxAge;
         var ttl    = this.ttl || ('number' === typeof maxAge ? maxAge / 1000 | 0 : oneDay);
         if (ttl <= 0) return fn(null);
@@ -360,6 +367,7 @@ module.exports = function(session, bundle) {
      */
     MongodbStore.prototype.destroy = function(sid, fn) {
         if ('function' !== typeof fn) fn = noop;
+        fn = settleOnce('mongodb:session#destroy', fn, console);
         this._coll.deleteOne({ _id: sid })
             .then(function() { fn && fn(null); })
             .catch(function(err) { fn && fn(err); });
@@ -374,6 +382,7 @@ module.exports = function(session, bundle) {
      */
     MongodbStore.prototype.length = function(fn) {
         if ('function' !== typeof fn) fn = noop;
+        fn = settleOnce('mongodb:session#length', fn, console);
         this._coll.countDocuments({ expiresAt: { $gt: new Date() } })
             .then(function(count) { fn(null, count); })
             .catch(function(err) { fn(err); });
@@ -388,6 +397,7 @@ module.exports = function(session, bundle) {
      */
     MongodbStore.prototype.clear = function(fn) {
         if ('function' !== typeof fn) fn = noop;
+        fn = settleOnce('mongodb:session#clear', fn, console);
         this._coll.deleteMany({})
             .then(function() { fn && fn(null); })
             .catch(function(err) { fn && fn(err); });
@@ -401,6 +411,7 @@ module.exports = function(session, bundle) {
      */
     MongodbStore.prototype.all = function(fn) {
         if ('function' !== typeof fn) fn = noop;
+        fn = settleOnce('mongodb:session#all', fn, console);
         this._coll.find({ expiresAt: { $gt: new Date() } }).toArray().then(function(docs) {
             var out = {};
             for (var i = 0; i < docs.length; i++) {

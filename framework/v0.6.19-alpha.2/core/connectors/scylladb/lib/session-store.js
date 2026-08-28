@@ -10,6 +10,10 @@
 var gina    = require('../../../../core/gna');
 var lib     = gina.lib;
 var console = lib.logger;
+// #B432 — express-session must see exactly one callback. Each method below
+// wraps `fn` at entry, so a callback that THROWS can no longer be re-invoked
+// by that method's own error path (see core/connectors/settle-once.js).
+var settleOnce = require('./../../settle-once');
 
 /**
  * One day in seconds — default TTL when cookie.maxAge is absent.
@@ -203,6 +207,7 @@ module.exports = function(session, bundle) {
      */
     ScylladbStore.prototype.get = function(sid, fn) {
         if ('function' !== typeof fn) fn = noop;
+        fn = settleOnce('scylladb:session#get', fn, console);
         var query = 'SELECT sess FROM ' + this.table + ' WHERE sid = ?';
         console.debug('[ScylladbStore] GET ' + sid);
 
@@ -231,6 +236,7 @@ module.exports = function(session, bundle) {
      */
     ScylladbStore.prototype.set = function(sid, sess, fn) {
         if ('function' !== typeof fn) fn = noop;
+        fn = settleOnce('scylladb:session#set', fn, console);
         var maxAge = sess.cookie && sess.cookie.maxAge;
         var ttl    = this.ttl || ('number' === typeof maxAge ? maxAge / 1000 | 0 : oneDay);
 
@@ -272,6 +278,7 @@ module.exports = function(session, bundle) {
      */
     ScylladbStore.prototype.touch = function(sid, sess, fn) {
         if ('function' !== typeof fn) fn = noop;
+        fn = settleOnce('scylladb:session#touch', fn, console);
         var maxAge = sess.cookie && sess.cookie.maxAge;
         var ttl    = this.ttl || ('number' === typeof maxAge ? maxAge / 1000 | 0 : oneDay);
         if (ttl <= 0) return fn(null);
@@ -297,6 +304,7 @@ module.exports = function(session, bundle) {
      */
     ScylladbStore.prototype.destroy = function(sid, fn) {
         if ('function' !== typeof fn) fn = noop;
+        fn = settleOnce('scylladb:session#destroy', fn, console);
         var query = 'DELETE FROM ' + this.table + ' WHERE sid = ?';
         this.client.execute(query, [sid], { prepare: true })
             .then(function() { fn && fn(null); })
@@ -312,6 +320,7 @@ module.exports = function(session, bundle) {
      */
     ScylladbStore.prototype.length = function(fn) {
         if ('function' !== typeof fn) fn = noop;
+        fn = settleOnce('scylladb:session#length', fn, console);
         var query = 'SELECT COUNT(*) AS n FROM ' + this.table;
         this.client.execute(query, [], { prepare: true }).then(function(result) {
             var rows = result.rows || [];
@@ -332,6 +341,7 @@ module.exports = function(session, bundle) {
      */
     ScylladbStore.prototype.clear = function(fn) {
         if ('function' !== typeof fn) fn = noop;
+        fn = settleOnce('scylladb:session#clear', fn, console);
         var query = 'TRUNCATE ' + this.table;
         this.client.execute(query, [], { prepare: false })
             .then(function() { fn && fn(null); })
@@ -346,6 +356,7 @@ module.exports = function(session, bundle) {
      */
     ScylladbStore.prototype.all = function(fn) {
         if ('function' !== typeof fn) fn = noop;
+        fn = settleOnce('scylladb:session#all', fn, console);
         var query = 'SELECT sid, sess FROM ' + this.table;
         this.client.execute(query, [], { prepare: true }).then(function(result) {
             var out = {};

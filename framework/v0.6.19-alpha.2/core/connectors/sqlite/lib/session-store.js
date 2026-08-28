@@ -10,6 +10,10 @@
 var gina    = require('../../../../core/gna');
 var lib     = gina.lib;
 var console = lib.logger;
+// #B432 — express-session must see exactly one callback. Each method below
+// wraps `fn` at entry, so a callback that THROWS can no longer be re-invoked
+// by that method's own error path (see core/connectors/settle-once.js).
+var settleOnce = require('./../../settle-once');
 
 /**
  * One day in seconds — default TTL when cookie.maxAge is absent.
@@ -186,6 +190,7 @@ module.exports = function(session, bundle) {
      */
     SqliteStore.prototype.get = function(sid, fn) {
         if ('function' !== typeof fn) fn = noop;
+        fn = settleOnce('sqlite:session#get', fn, console);
         var key = this.prefix + sid;
         var now = Math.floor(Date.now() / 1000);
         console.debug('[SqliteStore] GET "' + key + '"');
@@ -214,6 +219,7 @@ module.exports = function(session, bundle) {
      */
     SqliteStore.prototype.set = function(sid, sess, fn) {
         if ('function' !== typeof fn) fn = noop;
+        fn = settleOnce('sqlite:session#set', fn, console);
         var key    = this.prefix + sid;
         var maxAge = sess.cookie && sess.cookie.maxAge;
         var ttl    = this.ttl || ('number' === typeof maxAge ? maxAge / 1000 | 0 : oneDay);
@@ -255,6 +261,7 @@ module.exports = function(session, bundle) {
      */
     SqliteStore.prototype.destroy = function(sid, fn) {
         if ('function' !== typeof fn) fn = noop;
+        fn = settleOnce('sqlite:session#destroy', fn, console);
         try {
             this._stmtDel.run(this.prefix + sid);
             fn();
@@ -280,6 +287,7 @@ module.exports = function(session, bundle) {
      */
     SqliteStore.prototype.touch = function(sid, sess, fn) {
         if ('function' !== typeof fn) fn = noop;
+        fn = settleOnce('sqlite:session#touch', fn, console);
         var maxAge  = sess.cookie && sess.cookie.maxAge;
         var ttl     = this.ttl || ('number' === typeof maxAge ? maxAge / 1000 | 0 : oneDay);
         // #B166 — never stamp a past expiry; siblings guard identically.
