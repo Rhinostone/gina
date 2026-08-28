@@ -15,6 +15,15 @@ let Eio = null;
 
 // Lightweight debug logger — gated on LOG_LEVEL so zero cost in production.
 // Format mirrors lib/logger template: [date] [debug  ][gina:isaac] message
+// Deliberately retained with no call sites (#B435): the producer half of the
+// boot-diagnostic channel. lib/cmd/bundle/start.js's child.stderr filter
+// forwards lines matching `[debug  ][gina:` raw to the CLI client — no other
+// write from a daemon-spawned bundle reaches the operator (console.error does
+// not match the filter; stdout is captured but not forwarded). Writing
+// straight to stderr keeps it usable before lib/logger is ready and immune to
+// the logger's own failure modes — which also means it bypasses log redaction
+// (#B433): keep messages free of URLs and credentials. Format changes must
+// preserve `] [debug  ][gina:` — test/core/debug-log.test.js pins the contract.
 var _isDebugLog = function() {
     return process.env.LOG_LEVEL === 'debug' || process.env.LOG_LEVEL === 'trace';
 };
