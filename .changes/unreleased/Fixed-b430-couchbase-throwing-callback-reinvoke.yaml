@@ -1,3 +1,0 @@
-kind: Fixed
-body: '#B430 — a couchbase entity callback that throws is no longer invoked a second time with the same payload. The delivery path wrapped the callback in a `try`, and its `catch` branch called the very same callback again with the identical arguments — so a callback whose own body threw ran twice, and a deterministic throw was logged only after the second pass, while a one-off throw silently got a second run over the same data. The throw is now reported with the query trigger for context and the callback is never re-entered. Affects the explicit trailing-callback form. Server-side only — pickup is a bundle restart, no re-bake.'
-time: 2026-08-27T19:45:20+01:00
