@@ -849,7 +849,7 @@ function Logger() {
      *   invalid or empty-matching pattern)
      *
      * @example
-     * var summary = console.setRedaction({ patterns: ['\\b[0-9a-f]{64}\\b'] }, { group: 'api@myproject' });
+     * var summary = console.setRedaction({ patterns: ['(?<![0-9a-f])[0-9a-f]{64}(?![0-9a-f])'] }, { group: 'api@myproject' });
      * // summary → { enabled: true, rules: 7, secrets: 0, skippedSecrets: [] }
      * console.setRedaction({ enabled: false }, { group: 'api@myproject' }); // this bundle opts out
      */

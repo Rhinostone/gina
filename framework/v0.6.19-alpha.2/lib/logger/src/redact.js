@@ -40,9 +40,13 @@
  * patterns are compiled at config load and refused when invalid or when they
  * match the empty string; their backtracking behaviour is the consumer's.
  *
+ * Anchor a hex-credential pattern on the character class (lookarounds), not
+ * `\b`: a leading `\b` never fires against a prefixed segment (`key_<hex>` —
+ * `_` is a word character), and the miss is silent.
+ *
  * @example
  * var redact = require('./redact');
- * var state  = redact.compileState([redact.compileBlock({ patterns: ['\\b[0-9a-f]{64}\\b'] }, 'demo')]);
+ * var state  = redact.compileState([redact.compileBlock({ patterns: ['(?<![0-9a-f])[0-9a-f]{64}(?![0-9a-f])'] }, 'demo')]);
  * redact.apply(state, 'GET [200] /reset?token=abc123def456'); // → 'GET [200] /reset?token=[REDACTED]'
  * redact.apply(null,  'GET [200] /reset?token=abc123def456'); // → unchanged (no state)
  */
