@@ -137,6 +137,11 @@ var releaseBanner = require('./release-banner');
 // exports value (not a Module object), so a plain `require()` here returns
 // undefined and crashes the module-level read. Push upstream to gina-io/gina.
 var libRef          = require('../../lib') || require.cache[require.resolve('../../lib')];
+// #B433 hardening — bind the logger explicitly. Until now this file reached it
+// only because lib/routing reassigns the global at require time; an explicit
+// binding keeps every log line here on the redacting, container-dispatched
+// writer regardless of that side effect.
+var console         = libRef.logger;
 var Collection      = libRef.Collection;
 var merge           = libRef.merge;
 // #NJ3 — static HTML cache writes. Module-scoped render-cache dispatcher

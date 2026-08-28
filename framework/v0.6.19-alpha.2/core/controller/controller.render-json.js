@@ -1,6 +1,11 @@
 const fs = require('fs');
 
 const lib               = require('./../../lib') || require.cache[require.resolve('./../../lib')];
+// #B433 hardening — bind the logger explicitly. Until now this file reached it
+// only because lib/routing reassigns the global at require time; an explicit
+// binding keeps every log line here on the redacting, container-dispatched
+// writer regardless of that side effect.
+var console             = lib.logger;
 const Collection        = lib.Collection;
 const renderCache       = new lib.RenderCache();
 var statusCodes         = requireJSON( _( getPath('gina').core + '/status.codes') );

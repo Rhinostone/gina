@@ -44,6 +44,11 @@
  */
 
 const libRef = require('./../../lib') || require.cache[require.resolve('./../../lib')];
+// #B433 hardening — bind the logger explicitly. Until now this file reached it
+// only because lib/routing reassigns the global at require time; an explicit
+// binding keeps every log line here on the redacting, container-dispatched
+// writer regardless of that side effect.
+var console  = libRef.logger;
 const merge  = libRef.merge;
 // Collection — filters the asset list to common-only when rendering without a
 // layout (isWithoutLayout XHR/popin responses), mirroring render-nunjucks.js /
