@@ -153,6 +153,7 @@ function Sqlite(conn, infos) {
         // so all subsequent QI entries benefit automatically.
         if (envIsDev) {
             process.on('inspector#indexes', function(_cb) {
+                _cb = settleOnce('sqlite:inspector#indexes', _cb, console); // #B432
                 if (_liveIntrospected) {
                     return _cb(null, 'sqlite', infos.database, _knownIndexes);
                 }

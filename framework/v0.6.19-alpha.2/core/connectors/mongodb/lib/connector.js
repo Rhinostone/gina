@@ -13,6 +13,12 @@ var lib          = gina.lib;
 var console      = lib.logger;
 var inherits     = lib.inherits;
 
+// #B432 — the ready handler is the model layer's boot continuation and must run
+// exactly once: a handler that THROWS can no longer be re-invoked with a
+// fabricated `Connection failed` by onReady's own error path (see
+// core/connectors/settle-once.js).
+var settleOnce   = require('./../../settle-once');
+
 /**
  * MongoDB connector — creates a `mongodb` MongoClient.
  *
@@ -144,6 +150,9 @@ function MongodbConnector(conf) {
      * @param {function} fn - `fn(err, conn)` where `conn` is the mongodb Db instance.
      */
     this.onReady = function(fn) {
+        // #B432 — guard ONLY a function: an unconditional wrap would turn a
+        // missing callback from a loud `fn is not a function` into a silent hang.
+        if (typeof fn === 'function') fn = settleOnce('mongodb:connector#onReady', fn, console);
         if (_err) return fn(_err, null);
 
         _client.connect().then(function() {

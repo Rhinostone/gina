@@ -677,4 +677,197 @@ describe('06 - job stores settle their callback exactly once', function () {
     });
 });
 
+// ─── §07 connector open paths + the sqlite Inspector index listener ──────────
+describe('07 - connector onReady and the sqlite inspector#indexes listener settle exactly once', function () {
+
+    var settleOnceReal = require(path.join(FW, 'core/connectors/settle-once.js'));
+
+    /**
+     * Extract a declaration's function and execute THOSE bytes with a named
+     * scope — the §06 extractor's shape. `onReady` is a constructor-closure
+     * method over `_err` / `_client` / `_conn`, and the sqlite listener is an
+     * anonymous function over `conn` / `infos` / `_liveIntrospected`; neither
+     * can be reached through a booted instance without a live driver, so the
+     * closure variables are injected by name.
+     *
+     * @inner
+     * @param {string} src   - file source
+     * @param {string} decl  - text immediately preceding the function, e.g. `this.onReady = `
+     * @param {object} scope - closure bindings the body reads or assigns, by name
+     * @returns {function} the compiled function
+     */
+    function extractScoped(src, decl, scope) {
+        var at = src.indexOf(decl);
+        assert.ok(at > -1, 'harness fault: declaration not found -> ' + decl);
+        assert.equal(src.indexOf(decl, at + 1), -1, 'harness fault: declaration is not unique -> ' + decl);
+        var i = at, depth = 0, started = false, end = -1;
+        for (; i < src.length; i++) {
+            if (src[i] === '{') { depth++; started = true; }
+            else if (src[i] === '}') {
+                depth--;
+                if (started && depth === 0) { end = i; break; }
+            }
+        }
+        assert.ok(end > -1, 'harness fault: unbalanced braces extracting ' + decl);
+        var body  = src.slice(at + decl.length, end + 1);
+        var names = Object.keys(scope);
+        var ctor  = Function.apply(null, names.concat(['return (' + body + ');']));
+        return ctor.apply(null, names.map(function (n) { return scope[n]; }));
+    }
+
+    /** @inner @returns {object} a logger stand-in that records `error` and swallows the rest */
+    function recorder() {
+        var seen = [];
+        return { seen: seen, error: function (m) { seen.push(String(m)); }, debug: function () {}, warn: function () {}, info: function () {} };
+    }
+
+    /** @inner strip both comment forms so a pin cannot be satisfied by the fix's own prose */
+    function liveOf(t) {
+        return t.replace(/\/\*[\s\S]*?\*\//g, '')
+                .split('\n').filter(function (l) { return !/^\s*\/\//.test(l); }).join('\n');
+    }
+
+    // ── the two connector open paths ─────────────────────────────────────────
+    // `mode`: 'ok' (connect resolves) · 'connect-fails' (driver rejects) ·
+    // 'ctor-failed' (`_err` already set — the synchronous early-return path).
+    var CONNECTORS = [
+        {   name: 'mongodb', file: 'mongodb/lib/connector.js', label: 'mongodb:connector#onReady',
+            scope: function (rep, mode) {
+                return {
+                    _err: mode === 'ctor-failed' ? new Error('[MongodbConnector] Failed to create client: boom') : null,
+                    _db: null, _dbName: 'db', console: rep, settleOnce: settleOnceReal,
+                    _client: {
+                        connect: function () { return mode === 'connect-fails' ? Promise.reject(new Error('ECONNREFUSED')) : Promise.resolve(); },
+                        db: function () { return { real: true }; }
+                    }
+                };
+            } },
+        {   name: 'scylladb', file: 'scylladb/lib/connector.js', label: 'scylladb:connector#onReady',
+            scope: function (rep, mode) {
+                return {
+                    _err: mode === 'ctor-failed' ? new Error('[ScylladbConnector] Failed to create client: boom') : null,
+                    console: rep, settleOnce: settleOnceReal,
+                    _conn: { _name: 'ks', connect: function () { return mode === 'connect-fails' ? Promise.reject(new Error('ECONNREFUSED')) : Promise.resolve(); } }
+                };
+            } }
+    ];
+
+    CONNECTORS.forEach(function (c) {
+        function onReadyIn(mode, rep) {
+            var src = fs.readFileSync(path.join(FW, 'core/connectors/' + c.file), 'utf8');
+            return extractScoped(src, '    this.onReady = ', c.scope(rep, mode));
+        }
+        /** @inner run onReady with a handler that throws on its FIRST invocation only (see §05 for why once) */
+        async function throwingHandler(mode, rep) {
+            return captureCalls(function (cb) {
+                var n = 0;
+                onReadyIn(mode, rep)(function () {
+                    cb.apply(null, arguments);
+                    if (++n === 1) { throw new Error('cb-boom'); }
+                });
+            });
+        }
+
+        it(c.name + ': a throwing ready handler is invoked exactly once, and the single settle is the SUCCESS  (discriminating)', async function () {
+            var rep = recorder();
+            var r = await throwingHandler('ok', rep);
+            assert.equal(r.timedOut, false, 'the handler must be invoked at all');
+            assert.equal(r.calls.length, 1, 'a throwing ready handler must not be re-invoked by the connect error path');
+            assert.ok(!r.calls[0][0] && r.calls[0][1], 'the one settle carries (null, conn)');
+            assert.equal(rep.seen.length, 1, 'the handler exception is reported exactly once');
+            assert.ok(rep.seen[0].indexOf(c.label) > -1 && rep.seen[0].indexOf('cb-boom') > -1, 'reported under the connector label: ' + rep.seen[0]);
+        });
+
+        it(c.name + ': a throwing ready handler is never handed a fabricated `Connection failed`  (discriminating)', async function () {
+            var r = await throwingHandler('ok', recorder());
+            r.calls.forEach(function (args) {
+                assert.ok(!(args[0] && /Connection failed/.test(args[0].message)),
+                    'the handler\'s own exception must not come back dressed as a connection failure: ' + (args[0] && args[0].message));
+            });
+        });
+
+        it(c.name + ': a REAL connection failure settles once, carrying `Connection failed`  (control)', async function () {
+            var rep = recorder();
+            var r = await captureCalls(function (cb) { onReadyIn('connect-fails', rep)(cb); });
+            assert.equal(r.timedOut, false);
+            assert.equal(r.calls.length, 1);
+            assert.match(r.calls[0][0].message, /Connection failed: ECONNREFUSED/);
+            assert.equal(rep.seen.length, 0, 'a driver failure is not a handler exception');
+        });
+
+        it(c.name + ': a client construction failure settles once, synchronously  (control)', async function () {
+            var rep = recorder();
+            var r = await captureCalls(function (cb) { onReadyIn('ctor-failed', rep)(cb); });
+            assert.equal(r.calls.length, 1);
+            assert.match(r.calls[0][0].message, /Failed to create client/);
+            assert.equal(rep.seen.length, 0);
+        });
+
+        it(c.name + ': wraps the ready callback at entry, and ONLY when it is a function (source pin)', function () {
+            var live = liveOf(fs.readFileSync(path.join(FW, 'core/connectors/' + c.file), 'utf8'));
+            assert.match(live, /var settleOnce\s*=\s*require\('\.\/\.\.\/\.\.\/settle-once'\);/, 'requires the shared guard');
+            var decl = live.indexOf('this.onReady = function(fn) {');
+            var wrap = live.indexOf("if (typeof fn === 'function') fn = settleOnce('" + c.label + "', fn, console);");
+            var first = live.indexOf('fn(', decl);
+            assert.ok(decl > -1 && wrap > decl, 'the guard is applied inside onReady');
+            // an UNCONDITIONAL wrap would turn a missing callback from a loud
+            // `fn is not a function` into a silent boot hang — measured
+            assert.ok(wrap < first, 'the wrap precedes the first settle');
+        });
+    });
+
+    // ── the sqlite Inspector index listener (synchronous driver ⇒ the settle sits INSIDE the try) ──
+    function sqliteListener(rep, opts) {
+        var src = fs.readFileSync(path.join(FW, 'core/connectors/sqlite/index.js'), 'utf8');
+        return extractScoped(src, "process.on('inspector#indexes', ", {
+            _liveIntrospected: !!opts.live, _knownIndexes: null, infos: { database: 'db' },
+            console: rep, settleOnce: settleOnceReal,
+            conn: { prepare: function () {
+                if (opts.prepareThrows) { throw new Error('SQLITE_BUSY'); }
+                return { all: function () { return []; } };
+            } }
+        });
+    }
+
+    it('sqlite listener: a throwing collector is invoked exactly once, with the live index payload  (discriminating)', async function () {
+        var rep = recorder();
+        var r = await captureCalls(function (cb) {
+            var n = 0;
+            sqliteListener(rep, {})(function () {
+                cb.apply(null, arguments);
+                if (++n === 1) { throw new Error('cb-boom'); }
+            });
+        });
+        assert.equal(r.timedOut, false);
+        assert.equal(r.calls.length, 1, 'a throwing collector must not be re-invoked by the introspection catch');
+        assert.ok(!r.calls[0][0] && r.calls[0][1] === 'sqlite' && r.calls[0][2] === 'db', 'the one settle is the success payload');
+        assert.equal(rep.seen.length, 1);
+        assert.ok(rep.seen[0].indexOf('sqlite:inspector#indexes') > -1, 'reported under the listener label');
+    });
+
+    it('sqlite listener: an already-introspected connector answers once from cache  (control)', async function () {
+        var rep = recorder();
+        var r = await captureCalls(function (cb) { sqliteListener(rep, { live: true })(cb); });
+        assert.equal(r.calls.length, 1);
+        assert.equal(r.calls[0][1], 'sqlite');
+        assert.equal(rep.seen.length, 0);
+    });
+
+    it('sqlite listener: a driver failure during introspection settles once, carrying the error  (control)', async function () {
+        var rep = recorder();
+        var r = await captureCalls(function (cb) { sqliteListener(rep, { prepareThrows: true })(cb); });
+        assert.equal(r.calls.length, 1);
+        assert.match(r.calls[0][0].message, /SQLITE_BUSY/);
+        assert.equal(rep.seen.length, 0, 'a driver failure is not a collector exception');
+    });
+
+    it('sqlite listener: the collector is wrapped at listener entry, before the cache check (source pin)', function () {
+        var live = liveOf(fs.readFileSync(path.join(FW, 'core/connectors/sqlite/index.js'), 'utf8'));
+        var decl  = live.indexOf("process.on('inspector#indexes'");
+        var wrap  = live.indexOf("_cb = settleOnce('sqlite:inspector#indexes', _cb, console);");
+        var check = live.indexOf('if (_liveIntrospected)', decl);
+        assert.ok(decl > -1 && wrap > decl && wrap < check, 'the wrap must sit inside the listener, ahead of the first settle');
+    });
+});
+
 after(function () { fs.rmSync(TMP, { recursive: true, force: true }); });
