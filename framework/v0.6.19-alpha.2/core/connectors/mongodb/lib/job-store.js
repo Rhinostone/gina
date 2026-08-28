@@ -62,6 +62,11 @@
  */
 var STATES = require('../../../../lib/job/src/main').STATES;
 
+// #B432 — `lib/job` must see exactly one callback. Each method below wraps
+// `fn` at entry, so a callback that THROWS can no longer be re-invoked by
+// that method's own error path (see core/connectors/settle-once.js).
+var settleOnce = require('./../../settle-once');
+
 /**
  * No-op callback used when a caller omits one.
  * @inner
@@ -213,6 +218,7 @@ module.exports = function MongodbJobStore(connConf, bundle, injected) {
          */
         set: function(id, record, fn) {
             if (typeof fn !== 'function') fn = noop;
+            fn = settleOnce('mongodb:job#set', fn, console);
             var json;
             try {
                 json = JSON.stringify(record);
@@ -242,6 +248,7 @@ module.exports = function MongodbJobStore(connConf, bundle, injected) {
          */
         get: function(id, fn) {
             if (typeof fn !== 'function') fn = noop;
+            fn = settleOnce('mongodb:job#get', fn, console);
             coll.findOne({ _id: id }).then(function(doc) {
                 if (!doc) return fn(null, null);
                 var rec;
@@ -265,6 +272,7 @@ module.exports = function MongodbJobStore(connConf, bundle, injected) {
          */
         remove: function(id, fn) {
             if (typeof fn !== 'function') fn = noop;
+            fn = settleOnce('mongodb:job#remove', fn, console);
             coll.deleteOne({ _id: id })
                 .then(function(res) { fn(null, !!(res && res.deletedCount > 0)); })
                 .catch(function(err) { fn(err); });
@@ -281,6 +289,7 @@ module.exports = function MongodbJobStore(connConf, bundle, injected) {
          */
         list: function(filter, fn) {
             if (typeof fn !== 'function') fn = noop;
+            fn = settleOnce('mongodb:job#list', fn, console);
             var query = (filter && filter.state) ? { state: String(filter.state) } : {};
             coll.find(query).toArray().then(function(docs) {
                 var out = [];
@@ -311,6 +320,7 @@ module.exports = function MongodbJobStore(connConf, bundle, injected) {
          */
         sweep: function(now, fn) {
             if (typeof fn !== 'function') fn = noop;
+            fn = settleOnce('mongodb:job#sweep', fn, console);
             coll.deleteMany({
                 state:     { $in: [STATES.COMPLETED, STATES.FAILED] },
                 expiresAt: { $lte: now }

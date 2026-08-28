@@ -504,4 +504,177 @@ describe('05 - session stores settle their callback exactly once', function () {
     });
 });
 
+// ─── §06 job-store parity — the same contract, over shipped store bytes ──────
+describe('06 - job stores settle their callback exactly once', function () {
+
+    var settleOnceReal = require(path.join(FW, 'core/connectors/settle-once.js'));
+
+    /**
+     * Extract an OBJECT-LITERAL method's source and execute THOSE bytes.
+     *
+     * §05's extractor cannot be reused: the session stores are prototype
+     * methods reading instance state off `this`, so a stub `self` is enough.
+     * The job stores are object literals over FACTORY-CLOSURE variables
+     * (`stmtUpsert`, `coll`, `noop`, `STATES`) that no `this` can supply, so
+     * the scope has to be injected by name — hence a second, scope-aware
+     * extractor rather than a change to §05's.
+     *
+     * @inner
+     * @param {string} src   - file source
+     * @param {string} decl  - the declaration to locate, e.g. 'set: '
+     * @param {object} scope - closure bindings the method body reads, by name
+     * @returns {function} the compiled method, scope-injected
+     */
+    function extractMethod(src, decl, scope) {
+        var at = src.indexOf(decl);
+        assert.ok(at > -1, 'harness fault: declaration not found -> ' + decl);
+        assert.equal(src.indexOf(decl, at + 1), -1, 'harness fault: declaration is not unique -> ' + decl);
+        var i = at, depth = 0, started = false, end = -1;
+        for (; i < src.length; i++) {
+            if (src[i] === '{') { depth++; started = true; }
+            else if (src[i] === '}') {
+                depth--;
+                if (started && depth === 0) { end = i; break; }
+            }
+        }
+        assert.ok(end > -1, 'harness fault: unbalanced braces extracting ' + decl);
+        var body  = src.slice(at + decl.length, end + 1);
+        var names = Object.keys(scope);
+        var args  = names.map(function (n) { return scope[n]; });
+        // `new Function(array)` would pass the array as a SINGLE argument (joined
+        // by commas into one parameter list, with no body). Applying the ctor
+        // spreads the names, then the compiled function is called with the values.
+        var ctor = Function.apply(null, names.concat(['return (' + body + ');']));
+        return ctor.apply(null, args);
+    }
+
+    /** @inner @returns {object} a reporter that records instead of printing */
+    function recorder() {
+        var seen = [];
+        return { seen: seen, error: function (m) { seen.push(String(m)); } };
+    }
+
+    var ROWS = [
+        {
+            name : 'sqlite set',   file: 'sqlite/lib/job-store.js',  decl: '        set: ',
+            label: 'sqlite:job#set',
+            scope: function (rep) {
+                return { noop: function () {}, settleOnce: settleOnceReal, console: rep,
+                         stmtUpsert: { run: function () { return { changes: 1 }; } } };
+            },
+            args : function (cb) { return ['j1', { state: 'completed', expiresAt: 1, updatedAt: 1 }, cb]; }
+        },
+        {
+            // The most misleading pre-fix shape in the arc: the callback's own
+            // throw was caught by the PARSE catch, so the caller was told the
+            // stored record was corrupt.
+            name : 'sqlite get',   file: 'sqlite/lib/job-store.js',  decl: '        get: ',
+            label: 'sqlite:job#get',
+            scope: function (rep) {
+                return { noop: function () {}, settleOnce: settleOnceReal, console: rep,
+                         stmtGet: { get: function () { return { record: '{"a":1}' }; } } };
+            },
+            args : function (cb) { return ['j1', cb]; },
+            neverSays: 'could not parse'
+        },
+        {
+            name : 'mongodb set',  file: 'mongodb/lib/job-store.js', decl: '        set: ',
+            label: 'mongodb:job#set',
+            scope: function (rep) {
+                return { noop: function () {}, settleOnce: settleOnceReal, console: rep,
+                         coll: { replaceOne: function () { return Promise.resolve(); } } };
+            },
+            args : function (cb) { return ['j1', { state: 'completed', expiresAt: 1, updatedAt: 1 }, cb]; }
+        },
+        {
+            name : 'mongodb get',  file: 'mongodb/lib/job-store.js', decl: '        get: ',
+            label: 'mongodb:job#get',
+            scope: function (rep) {
+                return { noop: function () {}, settleOnce: settleOnceReal, console: rep,
+                         coll: { findOne: function () { return Promise.resolve({ record: '{"a":1}' }); } } };
+            },
+            args : function (cb) { return ['j1', cb]; }
+        }
+    ];
+
+    ROWS.forEach(function (row) {
+        it(row.name + ': a throwing callback is invoked exactly once  (discriminating)', async function () {
+            var src = fs.readFileSync(path.join(FW, 'core/connectors/' + row.file), 'utf8');
+            var rep = recorder();
+            var method = extractMethod(src, row.decl, row.scope(rep));
+            var seen = [];
+            var r = await captureCalls(function (cb) {
+                // Throw on the FIRST invocation only — §05's reasoning: a
+                // callback that throws every time makes the replay's own throw
+                // escape and read like a harness fault, instead of leaving the
+                // second (wrong) settle observable as a clean `2 !== 1`.
+                var n = 0;
+                var thrower = function (err) {
+                    seen.push(err);
+                    cb.apply(null, arguments);
+                    if (++n === 1) { throw new Error('cb-boom'); }
+                };
+                method.apply(null, row.args(thrower));
+            });
+            assert.equal(r.timedOut, false, 'the callback must be invoked at all');
+            assert.equal(r.calls.length, 1,
+                'a throwing job-store callback must not be re-invoked by the method error path');
+            assert.ok(!(seen[0] instanceof Error),
+                'the single settle is the SUCCESS; the caller\'s own throw must not come back as a store error');
+            if (row.neverSays) {
+                seen.forEach(function (e) {
+                    assert.ok(!(e && String(e.message || '').indexOf(row.neverSays) > -1),
+                        'the caller\'s exception must not be reported as: ' + row.neverSays);
+                });
+            }
+            // POSITIVE evidence the guard ran, not merely an absence of a
+            // second call: it reports the swallowed exception against its label.
+            assert.equal(rep.seen.length, 1, 'the callback exception must be reported exactly once');
+            assert.ok(rep.seen[0].indexOf(row.label) > -1,
+                'the report must name the operation: ' + row.label + ' -> ' + rep.seen[0]);
+            assert.ok(rep.seen[0].indexOf('cb-boom') > -1, 'the report must carry the caller\'s own throw');
+        });
+    });
+
+    it('EVERY job-store method taking a callback wraps fn BEFORE any settle (wrap census)', function () {
+        var FILES = [
+            ['mongodb/lib/job-store.js', 'mongodb', 5],
+            ['sqlite/lib/job-store.js',  'sqlite',  5]
+        ];
+        FILES.forEach(function (f) {
+            var src = fs.readFileSync(path.join(FW, 'core/connectors/' + f[0]), 'utf8');
+
+            // Object-literal methods at the store's own indentation. Counting
+            // them (not just the wraps) is what makes a NEW unguarded method
+            // fail this arm instead of passing unnoticed.
+            var re = /^ {8}([a-zA-Z]+): function\(([^)]*)\)/gm;
+            var methods = [], m;
+            while ((m = re.exec(src)) !== null) {
+                methods.push({ name: m[1], takesFn: /\bfn\b/.test(m[2]), at: m.index });
+            }
+            var cbMethods = methods.filter(function (x) { return x.takesFn; });
+            var wraps     = src.match(/fn = settleOnce\(/g) || [];
+            assert.equal(cbMethods.length, f[2],
+                f[0] + ': unexpected callback-taking method count — a new method may be unguarded');
+            assert.equal(wraps.length, f[2],
+                f[0] + ': every callback-taking method must wrap fn');
+
+            // Per method: the wrap must sit AFTER normalization and BEFORE the
+            // method ends, and its label must name THAT method — a copy-pasted
+            // label would otherwise tag every report with the wrong operation.
+            cbMethods.forEach(function (meth, i) {
+                var next  = methods[methods.indexOf(meth) + 1];
+                var slice = src.slice(meth.at, next ? next.at : src.length);
+                var norm  = slice.indexOf('typeof fn');
+                var wrap  = slice.indexOf('fn = settleOnce(');
+                assert.ok(norm > -1, f[0] + ' #' + meth.name + ': missing the fn normalization');
+                assert.ok(wrap > -1, f[0] + ' #' + meth.name + ': missing the settleOnce wrap');
+                assert.ok(wrap > norm, f[0] + ' #' + meth.name + ': the wrap must follow normalization');
+                assert.ok(slice.indexOf("settleOnce('" + f[1] + ':job#' + meth.name + "'") > -1,
+                    f[0] + ' #' + meth.name + ': the guard label must name this method');
+            });
+        });
+    });
+});
+
 after(function () { fs.rmSync(TMP, { recursive: true, force: true }); });

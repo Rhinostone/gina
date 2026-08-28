@@ -44,6 +44,11 @@
  */
 var STATES = require('../../../../lib/job/src/main').STATES;
 
+// #B432 — `lib/job` must see exactly one callback. Each method below wraps
+// `fn` at entry, so a callback that THROWS can no longer be re-invoked by
+// that method's own error path (see core/connectors/settle-once.js).
+var settleOnce = require('./../../settle-once');
+
 /**
  * No-op callback used when a caller omits one.
  * @inner
@@ -146,6 +151,7 @@ module.exports = function SqliteJobStore(connConf, bundle) {
          */
         set: function(id, record, fn) {
             if (typeof fn !== 'function') fn = noop;
+            fn = settleOnce('sqlite:job#set', fn, console);
             var json;
             try {
                 json = JSON.stringify(record);
@@ -176,6 +182,7 @@ module.exports = function SqliteJobStore(connConf, bundle) {
          */
         get: function(id, fn) {
             if (typeof fn !== 'function') fn = noop;
+            fn = settleOnce('sqlite:job#get', fn, console);
             var row;
             try {
                 row = stmtGet.get(id);
@@ -199,6 +206,7 @@ module.exports = function SqliteJobStore(connConf, bundle) {
          */
         remove: function(id, fn) {
             if (typeof fn !== 'function') fn = noop;
+            fn = settleOnce('sqlite:job#remove', fn, console);
             try {
                 var res = stmtDel.run(id);
                 fn(null, res.changes > 0);
@@ -218,6 +226,7 @@ module.exports = function SqliteJobStore(connConf, bundle) {
          */
         list: function(filter, fn) {
             if (typeof fn !== 'function') fn = noop;
+            fn = settleOnce('sqlite:job#list', fn, console);
             try {
                 var rows = (filter && filter.state) ? stmtListState.all(String(filter.state)) : stmtListAll.all();
                 var out  = [];
@@ -240,6 +249,7 @@ module.exports = function SqliteJobStore(connConf, bundle) {
          */
         sweep: function(now, fn) {
             if (typeof fn !== 'function') fn = noop;
+            fn = settleOnce('sqlite:job#sweep', fn, console);
             try {
                 var res = stmtSweep.run(now);
                 fn(null, res.changes);
