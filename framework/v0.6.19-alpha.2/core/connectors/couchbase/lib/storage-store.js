@@ -103,29 +103,13 @@
  */
 function noop() {}
 
-/**
- * Wrap a callback so it can fire at most once.
- *
- * Every verb here runs a promise chain nested inside another (the connection
- * gate, then a CAS retry loop), so a callback that THROWS would reject the
- * enclosing chain and reach a second, outer handler — delivering the caller's
- * own exception back to them as a store error. The guard makes the first
- * delivery the only one; the exception then surfaces as an unhandled
- * rejection, where it belongs, instead of being laundered into `err`.
- *
- * @inner
- * @param {function} fn - The callback to guard.
- * @returns {function} The guarded callback.
- */
-function once(fn) {
-    if (typeof fn !== 'function') { return noop; }
-    var called = false;
-    return function() {
-        if (called) { return; }
-        called = true;
-        return fn.apply(null, arguments);
-    };
-}
+// #B432 — every verb runs a promise chain nested inside another (the connection
+// gate, then a CAS retry loop), so a callback that THROWS would reject the
+// enclosing chain and reach a second, outer handler. Each verb wraps `fn` at
+// entry with the shared guard: one delivery, and the exception is reported
+// under the verb's label instead of being lost in the chain or logged as a
+// store failure (see core/connectors/settle-once.js).
+var settleOnce = require('./../../settle-once');
 
 /**
  * Secondary indexes this store needs, and the fields they cover. Created at
@@ -750,7 +734,7 @@ module.exports = function CouchbaseStorageStore(connConf, bundle, driverName, in
          * @returns {void}
          */
         set: function(key, meta, fn) {
-            fn = once(fn);
+            fn = settleOnce('couchbase:storage#set', fn, console);
             meta = meta || {};
             var d = docIdFor(key);
             if (d.error) { return fn(d.error); }
@@ -768,7 +752,7 @@ module.exports = function CouchbaseStorageStore(connConf, bundle, driverName, in
          * @returns {void}
          */
         get: function(key, fn) {
-            fn = once(fn);
+            fn = settleOnce('couchbase:storage#get', fn, console);
             var d = docIdFor(key);
             if (d.error) { return fn(d.error); }
             withCollection(function(coll) {
@@ -789,7 +773,7 @@ module.exports = function CouchbaseStorageStore(connConf, bundle, driverName, in
          * @returns {void}
          */
         remove: function(key, fn) {
-            fn = once(fn);
+            fn = settleOnce('couchbase:storage#remove', fn, console);
             var d = docIdFor(key);
             if (d.error) { return fn(d.error); }
             withCollection(function(coll) {
@@ -827,7 +811,7 @@ module.exports = function CouchbaseStorageStore(connConf, bundle, driverName, in
          * @returns {void}
          */
         acquireRef: function(key, meta, fn) {
-            fn = once(fn);
+            fn = settleOnce('couchbase:storage#acquireRef', fn, console);
             meta = meta || {};
             var d = docIdFor(key);
             if (d.error) { return fn(d.error); }
@@ -899,7 +883,7 @@ module.exports = function CouchbaseStorageStore(connConf, bundle, driverName, in
          * @returns {void}
          */
         releaseRef: function(key, fn) {
-            fn = once(fn);
+            fn = settleOnce('couchbase:storage#releaseRef', fn, console);
             var d = docIdFor(key);
             if (d.error) { return fn(d.error); }
 
@@ -948,7 +932,7 @@ module.exports = function CouchbaseStorageStore(connConf, bundle, driverName, in
          * @returns {void}
          */
         listZeroRefs: function(olderThanMs, limit, fn) {
-            fn = once(fn);
+            fn = settleOnce('couchbase:storage#listZeroRefs', fn, console);
             runQuery(zeroRefsStatement(safeLimit(limit, 100)), [driverName, olderThanMs], function(err, rows) {
                 if (err) {
                     // The sweep's own call passes no callback, so an error
@@ -977,7 +961,7 @@ module.exports = function CouchbaseStorageStore(connConf, bundle, driverName, in
          * @returns {void}
          */
         removeIfZero: function(key, fn) {
-            fn = once(fn);
+            fn = settleOnce('couchbase:storage#removeIfZero', fn, console);
             var d = docIdFor(key);
             if (d.error) { return fn(d.error); }
 
@@ -1011,7 +995,7 @@ module.exports = function CouchbaseStorageStore(connConf, bundle, driverName, in
          * @returns {void}
          */
         stats: function(fn) {
-            fn = once(fn);
+            fn = settleOnce('couchbase:storage#stats', fn, console);
             runQuery(statsStatement, [driverName], function(err, rows) {
                 if (err) {
                     console.error('[CouchbaseStorageStore] stats failed (bundle: ' + bundle + ', driver: '
@@ -1040,7 +1024,7 @@ module.exports = function CouchbaseStorageStore(connConf, bundle, driverName, in
          * @returns {void}
          */
         listKeys: function(afterKey, limit, fn) {
-            fn = once(fn);
+            fn = settleOnce('couchbase:storage#listKeys', fn, console);
             runQuery(
                 keysStatement(safeLimit(limit, 500)),
                 [driverName, ( typeof afterKey === 'string' ) ? afterKey : ''],

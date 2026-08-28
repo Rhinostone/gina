@@ -870,4 +870,117 @@ describe('07 - connector onReady and the sqlite inspector#indexes listener settl
     });
 });
 
+// ─── §08 couchbase storage-store — the exception is REPORTED, not lost or misattributed ──
+describe('08 - couchbase storage-store reports a throwing callback instead of losing it', function () {
+
+    var settleOnceReal = require(path.join(FW, 'core/connectors/settle-once.js'));
+    var STORE = path.join(FW, 'core/connectors/couchbase/lib/storage-store.js');
+
+    /** @inner §07's extractor: decl + brace match, executed with a named scope */
+    function extractScoped(src, decl, scope) {
+        var at = src.indexOf(decl);
+        assert.ok(at > -1, 'harness fault: declaration not found -> ' + decl);
+        assert.equal(src.indexOf(decl, at + 1), -1, 'harness fault: declaration is not unique -> ' + decl);
+        var i = at, depth = 0, started = false, end = -1;
+        for (; i < src.length; i++) {
+            if (src[i] === '{') { depth++; started = true; }
+            else if (src[i] === '}') { depth--; if (started && depth === 0) { end = i; break; } }
+        }
+        assert.ok(end > -1, 'harness fault: unbalanced braces extracting ' + decl);
+        var body = src.slice(at + decl.length, end + 1), names = Object.keys(scope);
+        return Function.apply(null, names.concat(['return (' + body + ');'])).apply(null, names.map(function (n) { return scope[n]; }));
+    }
+    function recorder() { var seen = []; return { seen: seen, error: function (m) { seen.push(String(m)); }, warn: function () {}, debug: function () {}, info: function () {} }; }
+    function liveOf(t) { return t.replace(/\/\*[\s\S]*?\*\//g, '').split('\n').filter(function (l) { return !/^\s*\/\//.test(l); }).join('\n'); }
+
+    /**
+     * Build one verb over a resolving driver stub. `withCollection` and
+     * `runQuery` are the store's OWN bytes, extracted the same way, so the
+     * chain a throw travels through is the shipped one.
+     *
+     * The `once` entry is a PRE-FIX SCOPE SHIM: the store used to bind a local
+     * `once()`, and the red-first run needs those bytes to compile so the arm
+     * goes red on the assertion (no report) rather than on a ReferenceError.
+     * Post-fix the file no longer references `once`, and the shim is inert.
+     */
+    function verb(name, rep) {
+        var src  = fs.readFileSync(STORE, 'utf8');
+        var coll = { upsert: function () { return Promise.resolve(); } };
+        var scope = {
+            settleOnce: settleOnceReal, console: rep, noop: function () {},
+            once: function (fn) { var called = false; return function () { if (called) { return; } called = true; return fn.apply(null, arguments); }; },
+            ready: Promise.resolve(coll), bundle: 'testbundle', driverName: 'assets', bucketName: 'bk', scopeName: 'sc', collectionName: 'co',
+            cluster: { query: function () { return Promise.resolve({ rows: [{ objects: 1 }] }); } },
+            couchbase: { QueryScanConsistency: { NotBounded: 'nb' } },
+            docIdFor: function (key) { return { id: 'doc::' + key }; }, buildDoc: function () { return {}; },
+            withDurability: function (o) { return o || {}; }, statsStatement: 'SELECT 1'
+        };
+        scope.withCollection = extractScoped(src, '    var withCollection = ', scope);
+        scope.runQuery       = extractScoped(src, '    var runQuery = ', scope);
+        return extractScoped(src, '        ' + name + ': ', scope);
+    }
+    var ROWS = [
+        { name: 'set',   args: function (cb) { return ['k', { size: 3 }, cb]; } },   // withCollection family — the exception was LOST
+        { name: 'stats', args: function (cb) { return [cb]; } }                     // runQuery family — the exception was logged as `stats failed`
+    ];
+
+    ROWS.forEach(function (row) {
+        it(row.name + ': a throwing callback is reported once, under the verb label  (discriminating)', async function () {
+            var rep = recorder();
+            var r = await captureCalls(function (cb) {
+                var n = 0;
+                verb(row.name, rep).apply(null, row.args(function () { cb.apply(null, arguments); if (++n === 1) { throw new Error('cb-boom'); } }));
+            });
+            assert.equal(r.timedOut, false);
+            assert.equal(r.calls.length, 1, 'delivery count is unchanged by the conversion');
+            var labelled = rep.seen.filter(function (m) { return m.indexOf('couchbase:storage#' + row.name) > -1 && m.indexOf('cb-boom') > -1; });
+            assert.equal(labelled.length, 1, 'the exception must be reported exactly once under the verb label; got: ' + JSON.stringify(rep.seen));
+        });
+        it(row.name + ': the caller\'s exception is never logged as a store failure  (discriminating for runQuery verbs)', async function () {
+            var rep = recorder();
+            await captureCalls(function (cb) {
+                var n = 0;
+                verb(row.name, rep).apply(null, row.args(function () { cb.apply(null, arguments); if (++n === 1) { throw new Error('cb-boom'); } }));
+            });
+            rep.seen.forEach(function (m) {
+                assert.ok(!/\] \w+ failed \(bundle/.test(m), 'the store must not attribute the caller\'s throw to itself: ' + m);
+            });
+        });
+    });
+
+    it('a driver failure still reaches the callback once, with no exception report  (control)', async function () {
+        var rep = recorder();
+        var src = fs.readFileSync(STORE, 'utf8');
+        var scope = { settleOnce: settleOnceReal, console: rep, noop: function () {},
+            once: function (fn) { return fn; }, ready: Promise.reject(new Error('ECONNREFUSED')),
+            docIdFor: function (key) { return { id: 'doc::' + key }; }, buildDoc: function () { return {}; }, withDurability: function (o) { return o || {}; } };
+        scope.ready.catch(function () {});
+        scope.withCollection = extractScoped(src, '    var withCollection = ', scope);
+        var r = await captureCalls(function (cb) { extractScoped(src, '        set: ', scope)('k', {}, cb); });
+        assert.equal(r.calls.length, 1);
+        assert.match(r.calls[0][0].message, /ECONNREFUSED/);
+        assert.equal(rep.seen.length, 0);
+    });
+
+    it('EVERY callback-taking verb wraps fn at entry with its own label; the local once() is gone (wrap census)', function () {
+        var src  = fs.readFileSync(STORE, 'utf8');
+        var live = liveOf(src);
+        assert.equal(live.indexOf('laundered into'), -1, 'the comment strip is real');
+        assert.ok(src.indexOf('once') > -1, 'control: the raw text still carries the token the negative pin is about');
+        assert.equal(live.indexOf('function once('), -1, 'the local guard is retired');
+        assert.match(live, /var settleOnce\s*=\s*require\('\.\/\.\.\/\.\.\/settle-once'\);/);
+        var re = /^ {8}([a-zA-Z]+): function\(([^)]*)\)/gm, verbs = [], m;
+        while ((m = re.exec(live)) !== null) { if (/\bfn\b/.test(m[2])) { verbs.push({ name: m[1], at: m.index }); } }
+        assert.equal(verbs.length, 9, 'unexpected callback-taking verb count — a new verb may be unguarded');
+        verbs.forEach(function (v, i) {
+            var next  = verbs[i + 1];
+            var slice = live.slice(v.at, next ? next.at : live.length);
+            var wrap  = slice.indexOf("fn = settleOnce('couchbase:storage#" + v.name + "', fn, console);");
+            var first = slice.indexOf('fn(');
+            assert.ok(wrap > -1, v.name + ': must wrap fn under its own label');
+            assert.ok(first === -1 || wrap < first, v.name + ': the wrap must precede the first settle');
+        });
+    });
+});
+
 after(function () { fs.rmSync(TMP, { recursive: true, force: true }); });
