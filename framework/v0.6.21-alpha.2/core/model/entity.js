@@ -686,7 +686,7 @@ function EntitySuper(conn, caller, injected) {
                         //         delete this._arguments[trigger];
                         //     }
                         // })
-                        .once(trigger, function () {// patched for Air Liquide: case when emit occurs before listener is ready
+                        .once(trigger, function () {// buffers an emit that arrives before its listener is attached
                             if (!this._arguments) {
                                 this._arguments = {}
                             }
