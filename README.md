@@ -62,35 +62,31 @@ open https://localhost:3100
 
 > **npm 12+** blocks install scripts by default, and gina's post-install bootstraps `~/.gina` and the framework dependencies. Install with `npm install -g gina@latest --allow-scripts=gina`, or allow it once for all global installs with `npm config set allow-scripts=gina --location=user`. (Not needed on npm ≤ 11.)
 
-## What's in 0.6.19
+## What's in 0.6.20
 
 > **Restart your bundles AND rebuild them.** This release changes the browser
-> bundle: `gina.min.js` differs from `0.6.18` (`gina.min.css` and
+> bundle: `gina.min.js` differs from `0.6.19` (`gina.min.css` and
 > `gina.onload.min.js` are unchanged). A restart alone updates the server half
 > only — each bundle bakes its own copy of the client assets, so the `merge()`
-> fix below would not reach a browser at all.
+> fixes below would not reach a browser at all. The security fix is server-side
+> and a restart is enough for it; the rebuild is owed to `lib/merge`.
 
-> **No settings reset.** `0.6.19` is a patch — the `shortVersion` stays `0.6`, so
+> **No settings reset.** `0.6.20` is a patch — the `shortVersion` stays `0.6`, so
 > your `~/.gina/0.6/settings.json` is untouched. (`0.6.0` was the reset.)
 
-**Two security fixes, and a family of connector callback defects closed.** Log
-redaction is now built in and on by default, so a credential carried in a request
-URL no longer reaches stdout in plaintext; and concurrent calls to the same
-Couchbase entity method no longer cross-deliver each other's results. Around
-them, every connector's callback delivery was audited: a callback that throws is
-no longer invoked a second time, a failed Couchbase query no longer settles its
-caller twice, a logged `Error` keeps its message and stack, and `merge()` no
-longer rewrites the object it was given. **Two changes may require action** —
-log redaction for every project, the Couchbase change only if you use that
-connector — details in the [migration guide](https://gina.io/docs/migration).
+**One security fix, and two `merge()` defects closed.** Concurrent calls to an
+emit-style entity method are now paired to the call each completion came from, so
+a single call that never signals completion can no longer desynchronise every
+caller that follows it — the same confidentiality shape as the `0.6.19` Couchbase
+fix, reached by a different route. Alongside it, `merge()` stops duplicating
+values a target already holds and stops throwing on a mixed array shape that
+could kill a boot. **One change may require action** — the new
+`model.emitTimeout` is opt-in and off by default, so nothing changes unless you
+set it; details in the [migration guide](https://gina.io/docs/migration).
 
-- **Security — credentials in a request URL no longer reach the logs (#B433).** The HTTP access line — and 45 sibling sites across both engines, every render delegate and the CSRF filter — logged the URL as received, so a password-reset token, a signed download link or a one-time invite was written to stdout verbatim with no seam to redact it. Every log message is now redacted before it is rendered and dispatched, at the logger's single pre-render point, so stdout, `gina tail`, the file transport and the Inspector all receive the same masked line. Configured per bundle in `settings.json > log.redact` and **on by default**: a built-in set masks JSON Web Tokens, URL userinfo passwords, `Bearer`/`Basic` credentials, named credential query keys (`token`, `access_token`, `api_key`, `secret`, `password`, `signature`, `otp`, …, keeping the key and masking the value) and api-key style headers; every value the secrets resolver substituted for a `${secret:KEY}` placeholder is masked verbatim; and `patterns` takes your own rules. A bare long-hex path segment is deliberately not a default — add `(?<![0-9a-f])[0-9a-f]{64}(?![0-9a-f])` yourself when your credentials take that shape. **Behaviour change:** masked values now appear in logs where the raw value used to; set `log.redact.enabled` to `false` to opt out. Also new: `console.setRedaction(block, options)` and `lib.secrets.getResolvedValues(conf)`.
-- **Security — concurrent Couchbase entity reads no longer cross-deliver results (#B429).** The completion trigger carried no call identity and was emitted on a process-wide singleton, so the first query to finish woke every in-flight caller of that method with its own payload: two concurrent reads with different arguments could each receive the other's rows, a third caller could receive an error belonging to a different call, and a single response could blend rows from two callers — a confidentiality and authorization concern where the method reads a user-scoped record, not only a correctness one. Every call now settles from its own identity. **Action required only if you use the Couchbase connector** — see the migration guide.
-- **Fixed — a Couchbase callback that throws is no longer invoked twice (#B430).** The delivery path wrapped the callback in a `try` whose `catch` called the same callback again with identical arguments. The throw is now reported with the query trigger for context and the callback is never re-entered.
-- **Fixed — a failed Couchbase query no longer settles its caller twice (#B431).** Each dispatch chained `.catch(onError).then(onResult)` sequentially, so every error was followed by a bogus empty success — the canonical `if (err) { return next(err); } render(data);` shape ran both branches. Failed `bulkInsert` calls also logged a spurious `TypeError`; that is gone.
-- **Fixed — an entity query callback is no longer invoked twice when the callback itself throws (#B432).** The sqlite, mongodb and scylladb connectors delivered results inside a `try` or a `.then()` whose error path called the same callback a second time with the caller's own exception dressed up as a database failure. A throwing callback is now logged once, as `[ <label> ] callback exception:`, and never re-entered.
-- **Fixed — a logged `Error` object keeps its message, stack, own properties and `cause` chain (#B434).** Both log writers walked enumerable properties only, so `console.error(err)` rendered `{}` (or just `{"code": …}`). Errors now render the way Node's own console does — directly, among other arguments, nested inside a logged object, and on `console.log` alike — and the rendered message still goes through redaction. Passing `err.stack` as a string keeps working unchanged.
-- **Fixed — `merge()` no longer rewrites the object it was given (#B428).** A source subtree merged into an existing target level that lacked its key was referenced and then walked again as if merged into itself: every array inside the caller's object was replaced by a copy at every depth, and an array of primitives silently lost its duplicates. A subtree that is the same object on both sides is now skipped, so a grafted source keeps its arrays and duplicates and the result references it. Merging two different values is unchanged. `lib/merge` is part of the browser bundle — hence the rebuild.
+- **Security — concurrent entity calls no longer receive each other's records (#B440).** Both call forms (`await entity.method()` and `util.promisify(entity.method)`) paired completions to callers by arrival order, with no call identity. One call that never signalled completion — it neither emitted its `<shortName>#<method>` trigger nor returned a Promise that settled, typically because something threw inside an asynchronous callback before the `emit` and was swallowed as an unhandled rejection — left its pending slot at the head of that method's queue forever: from then on every caller received the *next* caller's record and the last one hung, every later caller hung outright when calls did not overlap, and each further lost completion made it one caller worse. Where the method reads a user-scoped or ownership-bearing record, a check performed on the returned row could pass for the wrong principal — a confidentiality and authorization concern, not only a correctness one. The trigger is **data-dependent** (an unexpected record shape), not load-dependent: invisible in a load test, present in any long-lived process. Every call now runs inside its own async context and a completion is matched to that context whatever the completion order — which also closes the documented out-of-order residual of the `0.6.11` fix. A completion for a call that already settled is dropped rather than handed to the next caller, and a completion reaching the entity outside every call's context (a native driver calling back from a loop started at boot) still pairs in arrival order and now logs `DISPATCH:NO_CONTEXT` at debug level. The `promisify` form also chains on a Promise returned by the method — it used to discard it, so a Promise-returning method was only safe on the entity-context form. **New opt-in** `settings.json > model.emitTimeout` (ms) bounds a call that never completes: it rejects with an Error naming the trigger and logs a warning; absent or `0` keeps the previous behaviour, where that call — and now only that call — stays pending. Server-side only.
+- **Fixed — `merge()` no longer duplicates a number the target already holds (#B436).** `merge([9, 1], [1])` gave `[9, 1, 1]`, and `{ ports: [8080, 8124] }` merged with `{ ports: [8124] }` gave `[8080, 8124, 8124]`. A nested array is also merged once per level instead of twice, so `[1, 2]` + `[3, 4]` one level down is `[1, 2, 3, 4]` rather than `[1, 2, 3, 4, 3, 4]`, and merging the same source a second time is now a no-op. The rule that lets a source legitimately repeat a number (`[25]` + `[25, 25]` still gives `[25, 25]`) now compares counts instead of positions. An array shared by both sides below the top level is left untouched, closing a residual of the `0.6.19` source-mutation fix.
+- **Fixed — `merge()` no longer throws on a mixed array shape (#B437).** Merging a target array that repeats a primitive (`['v2', 'v2']`) with an array of objects raised `TypeError: Cannot create property 'id' on string`: the object-fill branch tested for a free index on the *deduped* copy of the target and then wrote into the real one, whose index still held the string (or `null`). A configuration overlay hitting that shape killed the boot instead of merging. An occupied index is now left alone — as it already was for an object landing on one — and the merge completes.
 
 ## Documentation
 
