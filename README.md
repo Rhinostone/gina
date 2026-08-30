@@ -62,31 +62,29 @@ open https://localhost:3100
 
 > **npm 12+** blocks install scripts by default, and gina's post-install bootstraps `~/.gina` and the framework dependencies. Install with `npm install -g gina@latest --allow-scripts=gina`, or allow it once for all global installs with `npm config set allow-scripts=gina --location=user`. (Not needed on npm ≤ 11.)
 
-## What's in 0.6.20
+## What's in 0.6.21
 
 > **Restart your bundles AND rebuild them.** This release changes the browser
-> bundle: `gina.min.js` differs from `0.6.19` (`gina.min.css` and
-> `gina.onload.min.js` are unchanged). A restart alone updates the server half
-> only — each bundle bakes its own copy of the client assets, so the `merge()`
-> fixes below would not reach a browser at all. The security fix is server-side
-> and a restart is enough for it; the rebuild is owed to `lib/merge`.
+> bundle: all three fixes below ship in `gina.min.js`. A restart alone updates
+> the server half only — each bundle bakes its own copy of the client assets,
+> so a restart without `gina bundle:build` leaves the browser running the old
+> code.
 
-> **No settings reset.** `0.6.20` is a patch — the `shortVersion` stays `0.6`, so
+> **No settings reset.** `0.6.21` is a patch — the `shortVersion` stays `0.6`, so
 > your `~/.gina/0.6/settings.json` is untouched. (`0.6.0` was the reset.)
 
-**One security fix, and two `merge()` defects closed.** Concurrent calls to an
-emit-style entity method are now paired to the call each completion came from, so
-a single call that never signals completion can no longer desynchronise every
-caller that follows it — the same confidentiality shape as the `0.6.19` Couchbase
-fix, reached by a different route. Alongside it, `merge()` stops duplicating
-values a target already holds and stops throwing on a mixed array shape that
-could kill a boot. **One change may require action** — the new
-`model.emitTimeout` is opt-in and off by default, so nothing changes unless you
-set it; details in the [migration guide](https://gina.io/docs/migration).
+**Three availability and correctness fixes, two of them reported from the
+field.** An outbound request that failed could hang its caller forever or take
+the bundle down; `merge()` threw on a null array element; and on Safari, every
+modifier chord — paste, select-all, copy, cut, undo — was dead in validated
+fields that suppress autocomplete. **One change may require action** —
+`options.timeout` on an outbound request was accepted but inert, and now
+actually aborts the request; details in the
+[migration guide](https://gina.io/docs/migration).
 
-- **Security — concurrent entity calls no longer receive each other's records (#B440).** Both call forms (`await entity.method()` and `util.promisify(entity.method)`) paired completions to callers by arrival order, with no call identity. One call that never signalled completion — it neither emitted its `<shortName>#<method>` trigger nor returned a Promise that settled, typically because something threw inside an asynchronous callback before the `emit` and was swallowed as an unhandled rejection — left its pending slot at the head of that method's queue forever: from then on every caller received the *next* caller's record and the last one hung, every later caller hung outright when calls did not overlap, and each further lost completion made it one caller worse. Where the method reads a user-scoped or ownership-bearing record, a check performed on the returned row could pass for the wrong principal — a confidentiality and authorization concern, not only a correctness one. The trigger is **data-dependent** (an unexpected record shape), not load-dependent: invisible in a load test, present in any long-lived process. Every call now runs inside its own async context and a completion is matched to that context whatever the completion order — which also closes the documented out-of-order residual of the `0.6.11` fix. A completion for a call that already settled is dropped rather than handed to the next caller, and a completion reaching the entity outside every call's context (a native driver calling back from a loop started at boot) still pairs in arrival order and now logs `DISPATCH:NO_CONTEXT` at debug level. The `promisify` form also chains on a Promise returned by the method — it used to discard it, so a Promise-returning method was only safe on the entity-context form. **New opt-in** `settings.json > model.emitTimeout` (ms) bounds a call that never completes: it rejects with an Error naming the trigger and logs a warning; absent or `0` keeps the previous behaviour, where that call — and now only that call — stays pending. Server-side only.
-- **Fixed — `merge()` no longer duplicates a number the target already holds (#B436).** `merge([9, 1], [1])` gave `[9, 1, 1]`, and `{ ports: [8080, 8124] }` merged with `{ ports: [8124] }` gave `[8080, 8124, 8124]`. A nested array is also merged once per level instead of twice, so `[1, 2]` + `[3, 4]` one level down is `[1, 2, 3, 4]` rather than `[1, 2, 3, 4, 3, 4]`, and merging the same source a second time is now a no-op. The rule that lets a source legitimately repeat a number (`[25]` + `[25, 25]` still gives `[25, 25]`) now compares counts instead of positions. An array shared by both sides below the top level is left untouched, closing a residual of the `0.6.19` source-mutation fix.
-- **Fixed — `merge()` no longer throws on a mixed array shape (#B437).** Merging a target array that repeats a primitive (`['v2', 'v2']`) with an array of objects raised `TypeError: Cannot create property 'id' on string`: the object-fill branch tested for a free index on the *deduped* copy of the target and then wrote into the real one, whose index still held the string (or `null`). A configuration overlay hitting that shape killed the boot instead of merging. An occupied index is now left alone — as it already was for an object landing on one — and the merge completes.
+- **Fixed — an outbound `route.request()` now settles its callback on every outcome (#B442).** The request object returned by `http(s).get` was discarded, so nothing could attach an `error` listener to it, and a failed outbound call took one of two paths — neither reaching your callback. When the failure code was one the process-level handler tolerates (`ECONNREFUSED`, `ECONNRESET`, `EPIPE`) the process survived and the callback was simply never invoked: no error, no log line, and in anything serialized (a worker at concurrency 1, a queue processor) a permanent stall with nothing to diagnose it by. When the code was not one of those (`ETIMEDOUT`, `EHOSTUNREACH`, `ENETUNREACH` — a peer that stops answering, a route that goes away) the unhandled `error` became an `uncaughtException` and the bundle was terminated. A response stream dying mid-body behaved like the first case for a different reason: the error was recorded and delivery waited on an `end` event a broken stream never emits. All exit paths now run through a single-settle latch, so the callback is invoked **exactly once** on every outcome and can never be invoked twice. **Action if you already set `options.timeout`:** it previously did nothing — it reached `http(s).get`, but Node only *emits* a `timeout` event and never destroys the socket, and the request object was unreachable. It is now honoured: on expiry the request is destroyed and the callback settles with an `Error` carrying `code === 'ETIMEDOUT'`. Re-check the value against your slowest legitimate response before upgrading, or remove the option to keep the previous unbounded behaviour. A request sent without a callback now warns on a dial failure instead of throwing.
+- **Fixed — `merge()` no longer throws on a null array element (#B443).** An id-keyed array carrying a `null` raised `TypeError: Cannot read properties of null` from deep inside the merge — on either operand, at any index. `typeof null` is `'object'`, so a null element passed every type test and the next property access dereferenced it; seven distinct shapes threw, across the collection entry guards, the id-roster loops, the override walk and the per-element tests. Since every configuration overlay travels through this code, any such shape was a whole-merge kill. A null element is now treated as an element with no key: it matches nothing, blocks nothing and contributes nothing. Shapes that previously worked are unchanged — the regression suite pins them byte-identical. This closes the read side of the family whose write side shipped in `0.6.20`.
+- **Fixed — Safari: modifier chords work again in validated fields with a suppressed autocomplete (#B444).** On Safari, a live-checked field carrying `autocomplete="off"` (or `"false"`) could not be pasted into — and select-all, copy, cut and undo were equally dead. Nothing was inserted, **no `paste` or `beforeinput` event was dispatched anywhere on the page**, and typing kept working, so nothing pointed at the framework. The form-level keydown proxy was cancelling the native keydown before the Safari typing interception could decide anything, and `preventDefault` on a native keydown suppresses the browser's editing command itself. The proxy now defers that decision to the interception, which deliberately lets modifier chords run natively. Typing interception, caret integrity and autofill suppression on those fields are unchanged; Chromium-family browsers were never affected.
 
 ## Documentation
 
