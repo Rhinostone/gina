@@ -326,11 +326,16 @@ function Merge() {
                 && options[0] != null
                 && typeof(options[0][keyComparison]) != 'undefined'
                 && typeof(target[0]) == 'object'
+                // #B443 - typeof passes for a null first element; mirror the
+                // options-side check two lines above or the next line dereferences it
+                && target[0] != null
                 && typeof(target[0][keyComparison]) != 'undefined'
             ) {
 
                 newTarget =  (Array.isArray(target)) ? Array.from(target) : JSON.clone(target);
                 for (var nt = 0, ntLen = newTarget.length; nt < ntLen; ++nt) {
+                    // #B443 - a null (or hole) at a later index has no key to contribute
+                    if (newTarget[nt] == null) { continue; }
                     newTargetIds.push(newTarget[nt][keyComparison]);
                 }
 
@@ -339,6 +344,10 @@ function Merge() {
                 a = 0;
                 aLen = _options.length;
                 for (var n = next || 0, nLen = target.length; n < nLen; ++n) {
+
+                    // #B443 - a null target element has no key: it can match nothing,
+                    // so it neither blocks nor contributes; skip the comparison slot
+                    if (target[n] == null) { continue; }
 
                     // if (newTargetIds.indexOf(target[n][keyComparison]) == -1) {
                     //     newTargetIds.push(target[n][keyComparison]);
@@ -349,6 +358,10 @@ function Merge() {
 
                     label:
                     for (a = a || 0; a < aLen; ++a) {
+
+                        // #B443 - same disposition for a null source element: no key,
+                        // nothing to push, advance the cursor past it
+                        if (_options[a] == null) { continue; }
 
                         if (_options[a][keyComparison] === target[n][keyComparison] ) {
 
@@ -433,6 +446,9 @@ function Merge() {
                 && options[0] != null
                 && typeof(options[0][keyComparison]) != 'undefined'
                 && typeof(target[0]) == 'object'
+                // #B443 - typeof passes for a null first element; mirror the
+                // options-side check two lines above or the next line dereferences it
+                && target[0] != null
                 && typeof(target[0][keyComparison]) != 'undefined'
             ) {
 
@@ -443,10 +459,16 @@ function Merge() {
                 i = 0;
                 a = 0; aLen = newTarget.length;
                 for (; a < aLen; ++a) {
+                    // #B443 - a null (or hole) at a later index has no key to contribute
+                    if (newTarget[a] == null) { continue; }
                     newTargetIds.push(newTarget[a][keyComparison]);
                 }
                 a = 0;
                 for (; a < aLen; ++a) {
+
+                    // #B443 - a null slot on the rebuilt target has no key; both arms
+                    // of the comparison below dereference it
+                    if (newTarget[a] == null) { continue; }
 
                     end:
                         for (var n = next || 0, nLen = _options.length; n < nLen; ++n) {
@@ -561,6 +583,7 @@ function Merge() {
                             && !/null/i.test(target[a])
                             && typeof (target[a][keyComparison]) != 'undefined'
                             && typeof (options[a]) != 'undefined'
+                            && options[a] != null
                             && typeof (options[a][keyComparison]) != 'undefined'
                             && target[a][keyComparison] == options[a][keyComparison]
                         ) {
@@ -581,6 +604,7 @@ function Merge() {
                             && !/null/i.test(target[a])
                             && typeof (target[a][localKeyComparison]) != 'undefined'
                             && typeof (options[a]) != 'undefined'
+                            && options[a] != null
                             && typeof (options[a][localKeyComparison]) != 'undefined'
                             && target[a][localKeyComparison] == options[a][localKeyComparison]
                         ) {
