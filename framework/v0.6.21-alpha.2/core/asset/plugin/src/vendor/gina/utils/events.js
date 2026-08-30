@@ -70,6 +70,10 @@ function addListener(target, element, name, callback) {
  * @param {string} name - event ID
  * @param {object|array|string} args - details
  * @param {object} [proxiedEvent]
+ * @returns {object|undefined} the dispatched event when a DOM element received
+ *      one - so a proxy can read the handler's decision (defaultPrevented) and
+ *      mirror it onto the native event it is proxying; undefined on the
+ *      customEvent (element-less) path
  */
 function triggerEvent (target, element, name, args, proxiedEvent) {
     if (typeof(element) != 'undefined' && element != null) {
@@ -110,6 +114,7 @@ function triggerEvent (target, element, name, args, proxiedEvent) {
                 //console.log('dispatching ['+name+'] to ', element.id, isAttachedToDOM, evt.detail);
                 element.dispatchEvent(evt)
             }
+            return evt;
 
         } else if (document.createEventObject) { // non standard
 
@@ -124,6 +129,7 @@ function triggerEvent (target, element, name, args, proxiedEvent) {
             }
 
             element.fireEvent('on' + name, evt);
+            return evt;
         }
 
     } else {

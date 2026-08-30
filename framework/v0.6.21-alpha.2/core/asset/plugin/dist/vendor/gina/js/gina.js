@@ -7688,6 +7688,10 @@ function addListener(target, element, name, callback) {
  * @param {string} name - event ID
  * @param {object|array|string} args - details
  * @param {object} [proxiedEvent]
+ * @returns {object|undefined} the dispatched event when a DOM element received
+ *      one - so a proxy can read the handler's decision (defaultPrevented) and
+ *      mirror it onto the native event it is proxying; undefined on the
+ *      customEvent (element-less) path
  */
 function triggerEvent (target, element, name, args, proxiedEvent) {
     if (typeof(element) != 'undefined' && element != null) {
@@ -7728,6 +7732,7 @@ function triggerEvent (target, element, name, args, proxiedEvent) {
                 //console.log('dispatching ['+name+'] to ', element.id, isAttachedToDOM, evt.detail);
                 element.dispatchEvent(evt)
             }
+            return evt;
 
         } else if (document.createEventObject) { // non standard
 
@@ -7742,6 +7747,7 @@ function triggerEvent (target, element, name, args, proxiedEvent) {
             }
 
             element.fireEvent('on' + name, evt);
+            return evt;
         }
 
     } else {
@@ -19361,8 +19367,21 @@ function ValidatorPlugin(rules, data, formId, culture) {
                 _evt = 'keydown.'+$el.id
             }
             if (gina.events[_evt]) {
-                cancelEvent(event);
-                triggerEvent(gina, $el, _evt, event.detail, event);
+                // #B444 - dispatch FIRST and let the namespaced handler decide:
+                // the native keydown is cancelled only when that handler asked
+                // for it (it prevents the synthetic event on the paths it
+                // re-implements, and deliberately does not on modifier chords,
+                // per the interception's own contract). Cancelling BEFORE the
+                // dispatch suppressed the browser's own editing commands for
+                // every chord - on a real-Safari UA that made paste, select-all,
+                // copy, cut and undo all dead on any live-checked
+                // autocomplete-suppressed field, with no event observable
+                // anywhere (gh issue #67).
+                // was: cancelEvent(event); triggerEvent(gina, $el, _evt, event.detail, event);
+                var _syntheticEvt = triggerEvent(gina, $el, _evt, event.detail, event);
+                if ( _syntheticEvt && _syntheticEvt.defaultPrevented ) {
+                    cancelEvent(event);
+                }
             }
         };
         var keyupProxyHandler = function(event) {
