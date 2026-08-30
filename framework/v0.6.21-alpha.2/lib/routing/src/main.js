@@ -1280,13 +1280,27 @@ function Routing() {
          * request current url
          * Attention: You should first try without an authentification middleware
          *
+         * The callback is settled EXACTLY ONCE, on every outcome: a successful response,
+         * a dial failure (ECONNREFUSED / EHOSTUNREACH / ENETUNREACH ...), a response stream
+         * that dies mid-body, or a timeout. Without a callback the request is fire-and-forget
+         * and a dial failure is reported with `console.warn` instead of being thrown.
          *
          * @param {boolean} [ignoreWebRoot]
          * @param {object} [options] - see: https://nodejs.org/api/https.html#https_new_agent_options
+         *      @param {number} [options.timeout] - milliseconds; on expiry the request is destroyed
+         *              and the callback settles with an Error carrying `code === 'ETIMEDOUT'`
          * @param {object} [_this] - current context: only used when `promisify`is used
          *
-         * @callback {callback} [cb] - see: https://nodejs.org/api/https.html#https_new_agent_options
-         *      @param {object} res
+         * @callback {callback} [cb]
+         *      @param {Error|string|boolean} err - an Error for transport failures, a string for a
+         *              broken response stream, `false` on success
+         *      @param {object|string} [data] - the response body, parsed when it is JSON
+         *
+         * @example
+         *      route.request(false, { timeout: 5000 }, function (err, data) {
+         *          if (err) { return handle(err); }
+         *          use(data);
+         *      });
          */
         route.request = function(ignoreWebRoot, options) {
 
@@ -1321,6 +1335,17 @@ function Routing() {
                 options.agent = false;
             }
             var agent = require(''+scheme);
+            // #B442: every exit path settles the caller exactly once. Before this guard the
+            // ClientRequest was discarded, so a dial failure had NO 'error' listener: a carved-out
+            // code (e.g. ECONNREFUSED, see lib/proc.js) left the caller waiting forever with
+            // nothing logged, and an uncarved one (ETIMEDOUT / EHOSTUNREACH / ENETUNREACH)
+            // escalated to uncaughtException and took the bundle down via dismiss(pid,'SIGTERM').
+            var settled = false;
+            var settle = function (err, data) {
+                if (settled) { return; }
+                settled = true;
+                cb(err, data);
+            };
             var onAgentResponse = function(res) {
 
                 var data = '', err = false;
@@ -1329,12 +1354,15 @@ function Routing() {
                     data += chunk;
                 });
                 res.on('error', function (error) {
-                    err = 'Failed to get mail content';
+                    // #B442: a response that dies mid-body never emits 'end', so assigning here
+                    // and waiting for 'end' to deliver meant the caller was never settled at all.
+                    err = 'route.request: response stream failed for ' + url;
                     if (error && typeof(error.stack) != 'undefined' ) {
-                        err += error.stack;
+                        err += '\n' + error.stack;
                     } else if ( typeof(error) == 'string' ) {
                         err += '\n' + error;
                     }
+                    settle(err);
                 });
                 res.on('end', function () {
                     if (/^\{/.test(data) ) {
@@ -1349,19 +1377,39 @@ function Routing() {
                         }
                     }
                     if (err) {
-                        cb(err);
+                        settle(err);
                         return;
                     }
 
-                    cb(false, data);
+                    settle(false, data);
                     return;
                 });
             }
+            var req = null;
             if (cb) {
-                agent.get(url, options, onAgentResponse);
+                req = agent.get(url, options, onAgentResponse);
+                // #B442: the dial-failure path. Without this the 'error' event has no listener.
+                req.on('error', function (error) {
+                    settle(error);
+                });
+                // #B442: `options.timeout` reaches http(s).get and Node EMITS 'timeout' without
+                // destroying the socket — and the request object used to be unreachable, so the
+                // option looked like a workaround and did nothing. Honour it here.
+                if ( options && typeof(options.timeout) != 'undefined' && options.timeout ) {
+                    req.on('timeout', function () {
+                        var e = new Error('route.request: timed out after ' + options.timeout + 'ms requesting ' + url);
+                        e.code = 'ETIMEDOUT';
+                        req.destroy(e);
+                    });
+                }
             } else {
                 // just throw the request without waiting/handling response
-                agent.get(url, options);
+                req = agent.get(url, options);
+                // #B442: nobody is waiting, but an unhandled 'error' here is still an
+                // uncaughtException — which is how a fire-and-forget call could kill the bundle.
+                req.on('error', function (error) {
+                    console.warn('[ ROUTING ] route.request: fire-and-forget request to ' + url + ' failed: ' + ( (error && error.message) ? error.message : error ));
+                });
             }
             return;
 
