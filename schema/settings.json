@@ -984,6 +984,22 @@
         }
       }
     },
+    "model": {
+      "type": "object",
+      "description": "Model-layer (entity) settings for this bundle.",
+      "additionalProperties": false,
+      "properties": {
+        "emitTimeout": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Opt-in bound, in milliseconds, on a call to an emit-style entity method that never signals completion (it neither emits its `<shortName>#<method>` trigger nor returns a Promise that settles). When exceeded, that call alone rejects with an Error naming the trigger, a warn line is logged, and its pending slot is released so later calls are unaffected. Absent or 0 (the default): no bound — a call that never completes stays pending, as it did before 0.6.20. Set it above the slowest legitimate operation in the bundle (bulk operations included); it applies to every entity of the bundle and is read once at startup.",
+          "examples": [
+            30000,
+            120000
+          ]
+        }
+      }
+    },
     "nunjucks": {
       "type": "object",
       "description": "Configuration for the nunjucks template engine (when render.engine is \"nunjucks\"). The package is never framework-bundled — it must exist in the project's node_modules.",
