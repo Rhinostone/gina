@@ -1,3 +1,0 @@
-kind: Fixed
-body: '`merge()` no longer throws `TypeError: Cannot create property ''id'' on string` when a target array that repeats a primitive (`[''v2'', ''v2'']`) is merged with an array of objects. The object-fill branch tested for a free index on the DEDUPED copy of the target and then wrote into the real one, whose index still held the string (or `null`), so a configuration overlay hitting that shape killed the boot instead of merging. An occupied index is now left alone — as it already was for an object landing on one — and the merge completes (#B437).'
-time: 2026-08-28T15:47:08+01:00
