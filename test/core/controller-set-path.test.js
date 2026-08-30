@@ -12,8 +12,9 @@
  *      a fresh `local` and the REAL lib/merge) against a FROZEN verbatim copy of the
  *      retired implementation, over every collision shape at depths 2..5, the
  *      framework's own call-site paths in file order, and a seeded fuzz. The trees must
- *      be deep-strict-equal after EVERY call. The single documented divergence — an
- *      array-valued leaf overwritten by another array — is asserted on its own in §04.
+ *      be deep-strict-equal after EVERY call. The one divergence it had to exclude — an
+ *      array-valued leaf overwritten by another array, which the retired whole-tree
+ *      merge doubled — closed with #B436 (0.6.20); §04 now asserts the agreement.
  *  §03 contract — first write wins; `override` is inert in BOTH implementations
  *      (#B427); object-onto-object deep-fills; the collision asymmetries; non-object
  *      intermediates are replaced; `undefined` creates the key; a first-write value is
@@ -312,16 +313,23 @@ describe('03 - contract', function () {
 });
 
 
-// ─── 04 — the one documented divergence ─────────────────────────────────────
+// ─── 04 — the divergence that closed with #B436 ─────────────────────────────
 
-describe('04 - documented delta: an array leaf overwritten by another array', function () {
+describe('04 - an array leaf overwritten by another array: the retired and live implementations now agree (the divergence closed with #B436)', function () {
 
-    it('the retired implementation merged the arrays TWICE (duplicates); the live one merges once — no framework site writes an array path twice', function () {
+    it('both implementations merge the arrays once; no framework site writes an array path twice', function () {
+        // This arm used to carry a firing control: the retired implementation,
+        // merging through the whole tree, merged the array leaf TWICE and produced
+        // extra elements. That double pass was lib/merge's #B436, fixed in 0.6.20,
+        // so it can no longer fire through the frozen oracle. The lib-level lock,
+        // with its own red-first control against the pre-fix bytes, is
+        // test/lib/merge-b436.test.js; this arm now pins set()'s contract and the
+        // agreement of the two implementations.
         var o = makeFrozen(), n = makeLive();
         o.set('a.b', [1, 2]); o.set('a.b', [2, 3]);
         n.set('a.b', [1, 2]); n.set('a.b', [2, 3]);
         assert.deepStrictEqual(n.local.userData.a.b, merge({ b: [1, 2] }, { b: [2, 3] }).b, 'live = a single leaf-level merge');
-        assert.ok(o.local.userData.a.b.length > n.local.userData.a.b.length, 'control: the retired double merge produced extra elements (' + JSON.stringify(o.local.userData.a.b) + ')');
+        assert.deepStrictEqual(o.local.userData.a.b, n.local.userData.a.b, 'the retired implementation now produces the same leaf (its double merge was #B436)');
         var arrayPathsWrittenTwice = 0;
         var seen = {};
         src.replace(/^\s*set\('([^']+)',\s*(\[|parameters|options\.conf\.content\.forms)/mg, function (m, p) { seen[p] = (seen[p] || 0) + 1; return m; });

@@ -12,16 +12,22 @@
  * given a FIFO queue + a single persistent dispatch listener (#M2); the fast-path
  * kept the scalar. This brings the fast-path to the same FIFO shape.
  *
- * What the fix guarantees, and what it does NOT:
- *   - starvation is ELIMINATED — every concurrent caller's callback is pushed,
- *     never overwritten, so no promise is orphaned (§03 pins this);
+ * What the #B394 fix guaranteed, and what #B440 (2026-08-30) added:
+ *   - the OVERWRITE starvation is eliminated — every concurrent caller's callback
+ *     is pushed, never overwritten, so no promise is orphaned by a sibling call
+ *     (§03 pins this);
  *   - cross-delivery is CLOSED for in-order completion — when the underlying
  *     operations finish in call order, each caller gets its own result (§02, §04);
- *   - a residual remains for OUT-OF-ORDER completion — FIFO pairs callers to
- *     results by ARRIVAL order, so if the operations finish out of call order the
- *     results swap. This is identical to Option B and is why the API docs point
- *     at returning a Promise for true per-call identity. §03 therefore pins
- *     "both settle", NOT "each own record".
+ *   - #B394 left a residual for OUT-OF-ORDER completion — FIFO paired callers to
+ *     results by ARRIVAL order, so if the operations finished out of call order
+ *     the results swapped — and, as #B440 measured, ONE call that never emitted
+ *     left its resolver at the head of the FIFO forever, so every later caller
+ *     received the NEXT caller's record (that is a different failure from the
+ *     overwrite starvation above, which this file's header used to call
+ *     "starvation ELIMINATED"). #B440 pairs each emit to the call it came from
+ *     (per-call AsyncLocalStorage identity), so §03 now pins "each own record";
+ *     the lost-emit shape and the opt-in bound are pinned by
+ *     entity-call-identity.test.js.
  *
  * Harness notes:
  *   - Each entity method MUST contain its trigger as a LITERAL string, or
@@ -151,23 +157,25 @@ describe('02 - concurrent calls, in-order completion: each caller its own record
 });
 
 
-describe('03 - concurrent calls, out-of-order completion: neither caller starves', function () {
-    it('both promises settle even when B completes before A', async function () {
-        // B emits before A → the pre-fix scalar overwrite orphaned caller A: its
-        // `.once` guard was false and its promise hung forever. FIFO settles both.
+describe('03 - concurrent calls, out-of-order completion: neither caller starves, each receives its own record', function () {
+    it('both promises settle, each with its own document, even when B completes before A', async function () {
+        // B emits before A → the pre-#B394 scalar overwrite orphaned caller A: its
+        // `.once` guard was false and its promise hung forever. FIFO settles both —
+        // and, since #B440 pairs each emit to the call it came from, each caller
+        // now receives ITS OWN record (before #B440 the FIFO swapped them here).
         LAT3.A = 60; LAT3.B = 20;
         var getRecord = promisify(ent3.getRecord);
         var pA = getRecord('A');
         var pB = getRecord('B');
         var rA = await settle(pA, HANG_MS);
         var rB = await settle(pB, HANG_MS);
-        // The load-bearing pin: NO starvation. (Results may be swapped here — the
-        // documented arrival-order residual — so we deliberately do not assert
-        // each-own; that is what the Promise-return contract is for.)
         assert.notEqual(rA.state, 'HUNG', 'caller A starved (promise never settled)');
         assert.notEqual(rB.state, 'HUNG', 'caller B starved (promise never settled)');
         assert.equal(rA.state, 'resolved');
         assert.equal(rB.state, 'resolved');
+        // #B440 — the tightened pin: out-of-order completion no longer swaps results
+        assert.equal(rA.v.key, 'A', 'caller A received the wrong record (arrival-order pairing)');
+        assert.equal(rB.v.key, 'B', 'caller B received the wrong record (arrival-order pairing)');
     });
 });
 

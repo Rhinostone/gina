@@ -2157,6 +2157,12 @@ define("requireLib", function(){});
  * - Missing keys are always filled from `source`; on a CONFLICTING key the
  *   `target` value is preserved by default.
  * - Pass `true` as the last argument (`override`) to make `source` win instead.
+ * - Arrays of primitives merge as an ordered union: the target's elements first,
+ *   then every source element the result lacks. A number the source repeats more
+ *   often than the result is topped up to the source's count (`[25]` + `[25,25]`
+ *   gives `[25,25]`), a value already present is never pushed again, and merging
+ *   the same source a second time is a no-op (#B436). A nested array is merged
+ *   once per level.
  *
  * @example
  * var merge = require('lib/merge');
@@ -2199,6 +2205,7 @@ function Merge() {
      * merge([1, 2],   [3, 4])            // [1, 2, 3, 4]
      * merge([1, 2],   [3, 4], true)      // [3, 4]
      * merge({ a: [null, 'x'] }, { a: [null, 'x'] })  // { a: [null, 'x'] } — null elements are preserved (#B226)
+     * merge({ ports: [8080, 8124] }, { ports: [8124] })  // { ports: [8080, 8124] } — a value already present is not pushed again (#B436)
      */
     var browse = function (_target, _source) {
 
@@ -2354,7 +2361,12 @@ function Merge() {
                                             } else {
                                                 clone[ prop ] = copy[ prop ] // don't override existing
                                             }
-                                        } else if ( Array.isArray(copy[ prop ]) && Array.isArray(clone[ prop ]) ) {
+                                        } else if ( createMode && Array.isArray(copy[ prop ]) && Array.isArray(clone[ prop ]) ) {
+                                            // #B436 — createMode has no recursion below, so this is its one
+                                            // pass; on an existing level the `browse(clone, copy)` recursion
+                                            // that follows merges this array itself, and merging it here too
+                                            // walked every nested array twice (and replaced an array SHARED
+                                            // by both sides with a deduped copy, past the #B428 identity guard)
                                             clone[ prop ] = mergeArray(copy[ prop ], clone[ prop ], override);
                                         }
                                     }
@@ -2425,6 +2437,19 @@ function Merge() {
      * first slot of positional argument arrays such as the documented
      * validator rule `"setFlash": [null, "message"]` on the client-side
      * rules path.
+     *
+     * An OBJECT element of `options` fills a HOLE of `target` (an index the
+     * target lacks) by copying its keys; an occupied index — an existing
+     * object, a primitive or `null` — is never written into. That guard is
+     * #B437: the hole test runs on the deduped rebuild, whose indexes shift
+     * against a target carrying duplicate primitives, so the key write used to
+     * reach a string or null and throw, killing the whole merge.
+     *
+     * Primitive elements form an ordered union — the target's first, then every
+     * source element the result lacks. A `number` the source carries more often
+     * than the result so far is pushed again, up to the source's count (#B436):
+     * the comparison is by COUNT, so a number already present at another index
+     * is never duplicated and merging the same source twice is a no-op.
      *
      * @inner
      * @private
@@ -2638,10 +2663,18 @@ function Merge() {
                         if (typeof (newTarget[a]) == 'undefined')
                             newTarget[a] = {};
 
-
-                        for (let k in options[a]) {
-                            if (!newTarget[a].hasOwnProperty(k)) {
-                                newTarget[a][k] = options[a][k]
+                        // #B437 — the hole test above ran on the DEDUPED rebuild; after
+                        // the rebind `newTarget = target` the same index can hold a
+                        // primitive or null on the real target (a target carrying
+                        // duplicate primitives is SHORTER once deduped), and writing
+                        // keys into a string / null threw a TypeError that killed the
+                        // whole merge. An occupied slot is not a hole: skip it, as the
+                        // chain below already does for an object at an occupied index.
+                        if (newTarget[a] !== null && typeof(newTarget[a]) == 'object') {
+                            for (let k in options[a]) {
+                                if (!newTarget[a].hasOwnProperty(k)) {
+                                    newTarget[a][k] = options[a][k]
+                                }
                             }
                         }
 
@@ -2655,7 +2688,17 @@ function Merge() {
                             // ok but not if @ same position
                             //&& options[a] !== newTarget[a]
                         ) {
-                            if (options[a] !== newTarget[a]) {
+                            // #B436 — top up by COUNT, never by index. The source may carry a
+                            // repeated number the target has fewer copies of (a = [25];
+                            // b = [25,25] must give [25,25]), but the old test compared POSITIONS,
+                            // so a number already present at a different index was pushed again
+                            // ([9,1] + [1] gave [9,1,1]) and the merge was not idempotent — the
+                            // second pass a nested level used to take doubled every number.
+                            // was: if (options[a] !== newTarget[a]) { newTarget.push(options[a]); continue }
+                            var _seenInSource = 0, _seenInTarget = 0, _o = 0;
+                            for (; _o <= a; ++_o) { if (options[_o] === options[a]) ++_seenInSource; }
+                            for (_o = 0; _o < newTarget.length; ++_o) { if (newTarget[_o] === options[a]) ++_seenInTarget; }
+                            if (_seenInSource > _seenInTarget) {
                                 newTarget.push(options[a]);
                                 continue
                             }

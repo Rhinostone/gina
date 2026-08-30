@@ -8,6 +8,77 @@
 var fs              = require('fs');
 var EventEmitter    = require('events').EventEmitter;
 var lib             = require('gina').lib;
+
+// #B440 — per-call identity for emit-style entity methods (2026-08-30).
+//
+// Both dispatch paths below (the util.promisify fast-path and Option B) queue one
+// resolver per in-flight call and, before #B440, paired each `<shortName>#<method>`
+// emit to the OLDEST queued resolver. Arrival order carries no call identity: a call
+// that never emits (a throw inside an un-awaited async callback is the canonical
+// shape — swallowed, only `unhandledRejection` sees it) left its resolver at the
+// head forever, and from then on every caller of that method received the NEXT
+// caller's record while the last one hung. Every wrapped call now runs inside a
+// per-process AsyncLocalStorage store `{ e, r }` (trigger name + this call's
+// resolver), so an emit fired from ANY async continuation of the call — callback,
+// promise, timer, I/O — is paired to the call that made it. Arrival order remains
+// only as the fallback for a completion that reaches the entity outside every
+// call's async context (e.g. a native driver invoking callbacks from a loop started
+// at boot), and that fallback is logged at debug level.
+
+/**
+ * Per-call identity store, one per process and shared by every entity generation
+ * (dev-mode hot-reload re-requires this module; a store created per generation
+ * would lose the calls still in flight across the reload).
+ *
+ * @private
+ * @constant
+ * @type {AsyncLocalStorage}
+ */
+var _callALS = (function () {
+    if (typeof process.gina == 'undefined') process.gina = {};
+    if (!process.gina._entityCallALS) process.gina._entityCallALS = new (require('async_hooks').AsyncLocalStorage)();
+    return process.gina._entityCallALS;
+})();
+
+/**
+ * Dequeues the resolver an emit belongs to (#B440).
+ *
+ * - The active store names THIS trigger: splice that call's own resolver out of the
+ *   queue — or, when that call has already settled (bounded wait, Promise path),
+ *   DROP the late completion: it is never handed to whoever is at the head.
+ * - No active store, or a store for another trigger: arrival order (`shift()`), the
+ *   pre-#B440 pairing, logged at debug so a consumer can see the fallback happen in
+ *   their own logs.
+ *
+ * @private
+ * @param {Array<function>} q - the trigger's FIFO of pending resolvers
+ * @param {string} e - trigger name (`<shortName>#<method>`)
+ * @returns {function|null} the resolver to deliver to, or `null` when the emit is dropped
+ */
+var _dequeueByIdentity = function (q, e) {
+    var st = _callALS.getStore();
+    if (st && st.e === e) {
+        var idx = q ? q.indexOf(st.r) : -1;
+        return idx > -1 ? q.splice(idx, 1)[0] : null;
+    }
+    if (q && q.length) { console.debug('[ MODEL ][ ENTITY ] DISPATCH:NO_CONTEXT ' + e + ' (completion reached the entity outside the call\'s async context; pairing by arrival order)'); }
+    return q ? q.shift() : null;
+};
+
+/**
+ * Removes a settled call's resolver from its trigger's queue, so a completion that
+ * arrives after the call settled cannot be paired with it (#B440).
+ *
+ * @private
+ * @param {EntitySuper} entity - the entity carrying the `_callbacks` queues
+ * @param {string} e - trigger name
+ * @param {function} r - the resolver to forget
+ * @returns {void}
+ */
+var _forget = function (entity, e, r) {
+    var q = entity._callbacks[e]; if (!Array.isArray(q)) return;
+    var i = q.indexOf(r); if (i > -1) q.splice(i, 1);
+};
 var console         = lib.logger;
 var helpers         = lib.helpers;
 var inherits        = lib.inherits;
@@ -146,6 +217,18 @@ function EntitySuper(conn, caller, injected) {
         entity._listeners = events;
         entity._triggers = triggers;
         entity._callbacks = {};
+        // #B440 — opt-in bound on a call that never signals completion:
+        // settings.json > model.emitTimeout (ms). Absent or 0: no bound — a genuinely
+        // dead call waits forever, exactly as before, because a fixed default would
+        // fail legitimately slow bulk operations. Read once per entity, at wrap time.
+        if (typeof(entity._emitTimeout) == 'undefined') {
+            entity._emitTimeout = 0;
+            try {
+                var _st = self.getConfig(self.bundle, 'settings');
+                var _et = (_st && _st.model) ? Number(_st.model.emitTimeout) : 0;
+                if (_et > 0) { entity._emitTimeout = Math.min(Math.floor(_et), 2147483647); }
+            } catch (_cfgErr) {}
+        }
         entity._maxListeners += i; // default max listeners is 10
         entity.setMaxListeners(entity._maxListeners || 50);
         //console.debug('['+self.name+'] setting max listeners to: ' + (entity.maxListeners || eCount) );
@@ -239,16 +322,41 @@ function EntitySuper(conn, caller, injected) {
                                         // callers now each receive a result in arrival order, and none
                                         // can be orphaned.
                                         //
-                                        // Residual, identical to Option B: when the underlying
-                                        // operations complete OUT OF call order, arrival-order pairing
-                                        // swaps results. A method that RETURNS a Promise (resolved via
-                                        // `_innerResult.then()` below) carries true per-call identity
-                                        // and is the documented way to avoid it.
+                                        // #B440 (2026-08-30) — the residual this left (OUT-OF-order
+                                        // completion swapping results, and one LOST emit permanently
+                                        // desynchronising the queue) is closed: each call runs inside
+                                        // its own `_callALS` store and the dispatcher pairs an emit to
+                                        // the call it came from (`_dequeueByIdentity`); arrival order
+                                        // is only the fallback for a completion reaching the entity
+                                        // outside every call's async context. A method that RETURNS a
+                                        // Promise is chained on here too (`_fpInner.then()` below),
+                                        // exactly as Option B always did with `_innerResult`.
                                         var _fpShortName = events[i].shortName;
                                         if ( !Array.isArray(entity._callbacks[_fpShortName]) ) {
                                             entity._callbacks[_fpShortName] = [];
                                         }
-                                        entity._callbacks[_fpShortName].push(cb);
+                                        // #B440 — one guarded deliverer per call: settles at most once,
+                                        // forgets itself, clears the bound, and runs the caller's callback
+                                        // inside the store that was active when the call was made — so an
+                                        // entity method that calls another entity's method with a direct
+                                        // callback and emits its own completion from inside it still
+                                        // pairs by identity (measured: without this, that chain fell back
+                                        // to arrival order).
+                                        var _fpDone = false, _fpOuter = _callALS.getStore();
+                                        var _fpDeliver = function () {
+                                            if (_fpDone) return; _fpDone = true;
+                                            _forget(entity, _fpShortName, _fpDeliver);
+                                            if (_fpTimer) clearTimeout(_fpTimer);
+                                            var _dSelf = this, _dArgs = arguments;
+                                            if (_fpOuter) { _callALS.run(_fpOuter, function () { cb.apply(_dSelf, _dArgs); }); } else { cb.apply(this, arguments); }
+                                        };
+                                        var _fpTimer = null;
+                                        if (entity._emitTimeout > 0) {
+                                            _fpTimer = setTimeout(function () { var _msg = '[ MODEL ][ ENTITY ] ' + _fpShortName + ': no completion signal within ' + entity._emitTimeout + ' ms — the method neither emitted nor returned a settled Promise (#B440)'; console.warn(_msg); _fpDeliver(new Error(_msg)); }, entity._emitTimeout);
+                                            _fpTimer.unref();
+                                        }
+                                        promise._b440 = { e: _fpShortName, r: _fpDeliver };
+                                        entity._callbacks[_fpShortName].push(_fpDeliver);
 
                                         // The custom emit routes an ARRAY slot straight to native emit
                                         // (its third guard skips setListener when `!Array.isArray`), so
@@ -265,7 +373,8 @@ function EntitySuper(conn, caller, injected) {
                                             var _onFpQueueEmit = function onFpQueueEmit() {
                                                 var _q = entity._callbacks[_fpShortName];
                                                 if ( !_q || _q.length === 0 ) { return; }
-                                                var _fn = _q.shift();
+                                                var _fn = _dequeueByIdentity(_q, _fpShortName);
+                                                if (!_fn) { return; }
                                                 console.debug('[ MODEL ][ ENTITY ] DISPATCH:CALLBACK_FLUSH ' + _fpShortName);
                                                 _fn.apply(this, arguments);
                                                 if ( !entity._callbacks[_fpShortName] || entity._callbacks[_fpShortName].length === 0 ) {
@@ -289,7 +398,13 @@ function EntitySuper(conn, caller, injected) {
                             }
 
                             promise.apply(null, arguments);
-                            cached.apply(promise, arguments);
+                            // #B440 — run the call inside its own identity store, and chain on a
+                            // returned Promise as Option B does (the fast-path used to discard it).
+                            var _fpArgs = arguments;
+                            var _fpInner = promise._b440 ? _callALS.run(promise._b440, function () { return cached.apply(promise, _fpArgs); }) : cached.apply(promise, arguments);
+                            if (_fpInner && typeof(_fpInner.then) === 'function' && promise._b440) {
+                                _fpInner.then(function (data) { promise._b440.r(null, data); }, function (err) { promise._b440.r(err); });
+                            }
                             return promise;
                         } //else is normal case
 
@@ -371,12 +486,19 @@ function EntitySuper(conn, caller, injected) {
                             // listener may both call _resolver; the _resolved flag ensures only
                             // the first call wins.
                             var _resolved = false;
+                            var _obTimer = null;
                             var _resolver = function(err, data) {
                                 if (_resolved) return;
                                 _resolved = true;
+                                _forget(entity, e, _resolver);   // #B440
+                                if (_obTimer) clearTimeout(_obTimer);
                                 if (err) _reject(err);
                                 else     _resolve(data);
                             };
+                            if (entity._emitTimeout > 0) {   // #B440 — the opt-in bound
+                                _obTimer = setTimeout(function () { var _msg = '[ MODEL ][ ENTITY ] ' + e + ': no completion signal within ' + entity._emitTimeout + ' ms — the method neither emitted nor returned a settled Promise (#B440)'; console.warn(_msg); _resolver(new Error(_msg)); }, entity._emitTimeout);
+                                _obTimer.unref();
+                            }
 
                             // #M2 — FIFO queue: push this invocation's resolver instead of
                             // overwriting the single _callbacks slot.  removeAllListeners is
@@ -387,13 +509,15 @@ function EntitySuper(conn, caller, injected) {
                             entity._callbacks[e].push(_resolver);
 
                             // Register a single persistent dispatch listener only when none is
-                            // active.  It dequeues the oldest resolver on each emit so concurrent
-                            // callers each receive their own result in arrival order.
+                            // active.  It pairs each emit to the call it came from (#B440,
+                            // `_dequeueByIdentity`), falling back to the oldest resolver only for
+                            // a completion that carries no call context.
                             if (entity.listenerCount(e) === 0) {
                                 var _onQueueEmit = function onQueueEmit() {
                                     var _q = entity._callbacks[e];
                                     if (!_q || _q.length === 0) return;
-                                    var _fn = _q.shift();
+                                    var _fn = _dequeueByIdentity(_q, e);
+                                    if (!_fn) { return; }
                                     _fn.apply(null, arguments);
                                     if (!_q || _q.length === 0) {
                                         delete entity._callbacks[e];
@@ -404,7 +528,10 @@ function EntitySuper(conn, caller, injected) {
                             }
                         }
 
-                        var _innerResult = cached.apply(this[m], arguments);
+                        // #B440 — run the call inside its own identity store (only when a
+                        // resolver exists, i.e. the trigger is registered for this method).
+                        var _obArgs = arguments, _obThis = this[m];
+                        var _innerResult = (typeof _resolver === 'function') ? _callALS.run({ e: e, r: _resolver }, function () { return cached.apply(_obThis, _obArgs); }) : cached.apply(this[m], arguments);
 
                         // If the underlying method returns a Promise (connector Option B
                         // with _mainCallback=null, or async custom entity methods), chain
