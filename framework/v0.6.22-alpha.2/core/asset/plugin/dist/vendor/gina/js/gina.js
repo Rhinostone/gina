@@ -2179,6 +2179,23 @@ define("requireLib", function(){});
  */
 function Merge() {
 
+    /**
+     * #B446 — keys that must never be written through by a merge. `__proto__` is an
+     * accessor on Object.prototype, so assigning it walks through to the prototype;
+     * `constructor`/`prototype` reach it in two hops. JSON.parse produces an OWN
+     * `__proto__` key, so an own-property check alone does NOT stop this — the key
+     * name has to be rejected as well. Request bodies reach merge directly
+     * (core/server.js:6657 merges JSON.parse output as the SOURCE), so this is a
+     * request-path guard, not a defensive nicety.
+     *
+     * @param {string} k - candidate key
+     * @returns {boolean} true when the key must be skipped
+     * @private
+     */
+    var isUnsafeMergeKey = function(k) {
+        return k === '__proto__' || k === 'constructor' || k === 'prototype';
+    };
+
     var newTarget           = []
         , originalValueshasBeenCached = false
         //, keyComparison     = 'id' // use for collections merging [{ id: 'val1' }, { id: 'val2' }, {id: 'val3' }, ...]
@@ -2283,6 +2300,9 @@ function Merge() {
                     } else {
                         // Merge the base object
                         for (var name in options) {
+                            // #B446 — own-only + reject prototype-reaching key names.
+                            if ( !Object.prototype.hasOwnProperty.call(options, name) || isUnsafeMergeKey(name) ) { continue }
+
                             if (!target) {
                                 target = { name: null }
                             }
@@ -2344,6 +2364,9 @@ function Merge() {
                                         clone = {};
                                         // copy props
                                         for (var prop in copy) {
+                                            // #B446
+                                            if ( !Object.prototype.hasOwnProperty.call(copy, prop) || isUnsafeMergeKey(prop) ) { continue }
+
                                             clone[prop] = copy[prop]
                                         }
                                     }
@@ -2355,6 +2378,9 @@ function Merge() {
                                 if ( !override ) {
                                     // add those in copy not in clone (target)
                                     for (var prop in copy) {
+                                        // #B446
+                                        if ( !Object.prototype.hasOwnProperty.call(copy, prop) || isUnsafeMergeKey(prop) ) { continue }
+
                                         if (typeof(clone[ prop ]) == 'undefined') {
                                             if ( Array.isArray(copy[ prop ]) && Array.isArray(clone[ prop ]) ) {
                                                 clone[ prop ] = mergeArray(copy[ prop ], clone[ prop ], override);
@@ -2384,6 +2410,9 @@ function Merge() {
                                 } else {
 
                                     for (var prop in copy) {
+                                        // #B446
+                                        if ( !Object.prototype.hasOwnProperty.call(copy, prop) || isUnsafeMergeKey(prop) ) { continue }
+
                                         if ( typeof(copy[ prop ]) != 'undefined' ) {
                                             //clone[prop] = copy[prop]
                                             if ( Array.isArray(copy[ prop ]) && Array.isArray(clone[ prop ]) ) {
@@ -2694,6 +2723,9 @@ function Merge() {
                         // chain below already does for an object at an occupied index.
                         if (newTarget[a] !== null && typeof(newTarget[a]) == 'object') {
                             for (let k in options[a]) {
+                                // #B446
+                                if ( !Object.prototype.hasOwnProperty.call(options[a], k) || isUnsafeMergeKey(k) ) { continue }
+
                                 if (!newTarget[a].hasOwnProperty(k)) {
                                     newTarget[a][k] = options[a][k]
                                 }
@@ -11268,6 +11300,25 @@ function DataHelper(){
 
     var parseLocalObj = function(obj, key, k, value) {
 
+        // #B446 — a bracket-notation field name is client-supplied and every segment is
+        // used as an assignment target below (`obj[ key[k] ] = ...`). `__proto__` is an
+        // accessor on Object.prototype, so assigning through it mutates the prototype for
+        // the whole process; `constructor`/`prototype` reach it in two hops. Measured
+        // before the fix: `__proto__[polluted]=x`, `constructor[prototype][polluted]=x`
+        // and the percent-encoded `%5F%5Fproto%5F%5F[polluted]=x` each polluted
+        // Object.prototype while the parsed body still read `{}` — i.e. silently.
+        // Drop the path rather than throwing: these names are never legitimate, and a
+        // throw on the request-parse path would turn one bad field into a 500.
+        // Kept INLINE (not a closure helper) because test/core/validator-send-formdata-
+        // nesting.test.js extracts this function's source text and evals it standalone to
+        // pin client/server parity — a helper call would be a ReferenceError there, and
+        // the client-side twin in the validator plugin is inline for the same reason.
+        for (var _s = 0, _sLen = key.length; _s < _sLen; ++_s) {
+            if ( key[_s] === '__proto__' || key[_s] === 'constructor' || key[_s] === 'prototype' ) {
+                return obj;
+            }
+        }
+
         for (let i=0,len=key.length; i<len; i++) {
             // by default
             let _key = key[k];
@@ -13133,6 +13184,17 @@ function ValidatorPlugin(rules, data, formId, culture) {
      * nestBracketNotationKey({}, ['item','0','id'], 0, 'x'); // { item: [ { id: 'x' } ] }
      */
     var nestBracketNotationKey = function(obj, key, k, value) {
+
+        // #B446 — client-side twin of the server guard in helpers/data. Field names come
+        // from the form / FormData, so a segment named `__proto__`, `constructor` or
+        // `prototype` would assign through to Object.prototype for the whole page. Drop
+        // the path rather than throwing: these names are never legitimate field names, and
+        // a throw here would break submission of the entire form.
+        for (let _s = 0, _sLen = key.length; _s < _sLen; ++_s) {
+            if ( key[_s] === '__proto__' || key[_s] === 'constructor' || key[_s] === 'prototype' ) {
+                return obj;
+            }
+        }
 
         for (let i = 0, len = key.length; i < len; i++) {
             // by default

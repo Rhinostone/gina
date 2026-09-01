@@ -1781,6 +1781,17 @@ function ValidatorPlugin(rules, data, formId, culture) {
      */
     var nestBracketNotationKey = function(obj, key, k, value) {
 
+        // #B446 — client-side twin of the server guard in helpers/data. Field names come
+        // from the form / FormData, so a segment named `__proto__`, `constructor` or
+        // `prototype` would assign through to Object.prototype for the whole page. Drop
+        // the path rather than throwing: these names are never legitimate field names, and
+        // a throw here would break submission of the entire form.
+        for (let _s = 0, _sLen = key.length; _s < _sLen; ++_s) {
+            if ( key[_s] === '__proto__' || key[_s] === 'constructor' || key[_s] === 'prototype' ) {
+                return obj;
+            }
+        }
+
         for (let i = 0, len = key.length; i < len; i++) {
             // by default
             let _key = key[k];
