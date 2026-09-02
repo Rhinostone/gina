@@ -103,12 +103,23 @@ describe('#B446 — source 2: merge with an own __proto__ key', function () {
         assert.deepStrictEqual(merge([25], [25, 25]), [25, 25]);
     });
 
-    it('12 — merge does not copy INHERITED enumerable source properties', function () {
+    // #B446 follow-up: the first cut of this fix ALSO skipped inherited enumerable
+    // source properties. That broke the model registry (see merge-entity-prototype
+    // .test.js) and was reverted. Key rejection is the whole guard — this arm pins
+    // that reverting it did NOT reopen the hole: an own __proto__ is still refused
+    // even though the prototype chain is walked again.
+    it('12 — inherited enumerables ARE copied, and that does not reopen the hole', function () {
         function Src() { this.own = 1; }
-        Src.prototype.inherited = 'nope';
+        Src.prototype.inherited = 'yes';
         const out = merge({}, new Src());
         assert.strictEqual(out.own, 1);
-        assert.ok(!Object.prototype.hasOwnProperty.call(out, 'inherited'));
+        assert.strictEqual(out.inherited, 'yes', 'inherited enumerables must survive (entity contract)');
+
+        // same source shape, but carrying the attack key on its prototype
+        function Evil() { this.own = 1; }
+        Evil.prototype.__proto__ = { polluted: 'OWNED' };
+        merge({}, new Evil());
+        assert.strictEqual({}.polluted, undefined, 'walking the chain must not pollute');
     });
 });
 

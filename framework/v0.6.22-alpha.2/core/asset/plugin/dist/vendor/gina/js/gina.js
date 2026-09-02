@@ -2188,6 +2188,14 @@ function Merge() {
      * (core/server.js:6657 merges JSON.parse output as the SOURCE), so this is a
      * request-path guard, not a defensive nicety.
      *
+     * Key rejection is the WHOLE guard, deliberately. The first cut of #B446 also
+     * skipped inherited enumerable source properties, which broke every entity in
+     * the model registry: lib/model.js setModel round-trips entity instances
+     * through merge, and all six SQL connectors attach their .sql-derived query
+     * methods to the PROTOTYPE, so an own-only copy silently dropped them
+     * (`db.xEntity.getOneById is not a function`). merge therefore copies the
+     * chain, as it always has; only these three key names are refused.
+     *
      * @param {string} k - candidate key
      * @returns {boolean} true when the key must be skipped
      * @private
@@ -2300,8 +2308,8 @@ function Merge() {
                     } else {
                         // Merge the base object
                         for (var name in options) {
-                            // #B446 — own-only + reject prototype-reaching key names.
-                            if ( !Object.prototype.hasOwnProperty.call(options, name) || isUnsafeMergeKey(name) ) { continue }
+                            // #B446 — reject prototype-reaching key names.
+                            if ( isUnsafeMergeKey(name) ) { continue }
 
                             if (!target) {
                                 target = { name: null }
@@ -2365,7 +2373,7 @@ function Merge() {
                                         // copy props
                                         for (var prop in copy) {
                                             // #B446
-                                            if ( !Object.prototype.hasOwnProperty.call(copy, prop) || isUnsafeMergeKey(prop) ) { continue }
+                                            if ( isUnsafeMergeKey(prop) ) { continue }
 
                                             clone[prop] = copy[prop]
                                         }
@@ -2379,7 +2387,7 @@ function Merge() {
                                     // add those in copy not in clone (target)
                                     for (var prop in copy) {
                                         // #B446
-                                        if ( !Object.prototype.hasOwnProperty.call(copy, prop) || isUnsafeMergeKey(prop) ) { continue }
+                                        if ( isUnsafeMergeKey(prop) ) { continue }
 
                                         if (typeof(clone[ prop ]) == 'undefined') {
                                             if ( Array.isArray(copy[ prop ]) && Array.isArray(clone[ prop ]) ) {
@@ -2411,7 +2419,7 @@ function Merge() {
 
                                     for (var prop in copy) {
                                         // #B446
-                                        if ( !Object.prototype.hasOwnProperty.call(copy, prop) || isUnsafeMergeKey(prop) ) { continue }
+                                        if ( isUnsafeMergeKey(prop) ) { continue }
 
                                         if ( typeof(copy[ prop ]) != 'undefined' ) {
                                             //clone[prop] = copy[prop]
@@ -2724,7 +2732,7 @@ function Merge() {
                         if (newTarget[a] !== null && typeof(newTarget[a]) == 'object') {
                             for (let k in options[a]) {
                                 // #B446
-                                if ( !Object.prototype.hasOwnProperty.call(options[a], k) || isUnsafeMergeKey(k) ) { continue }
+                                if ( isUnsafeMergeKey(k) ) { continue }
 
                                 if (!newTarget[a].hasOwnProperty(k)) {
                                     newTarget[a][k] = options[a][k]
