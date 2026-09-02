@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>gina #B447 hform-channel e2e harness</title>
+    <!-- Empty data-URI icon: suppress the favicon.ico request for a clean console. -->
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="/css/vendor/gina/gina.min.css">
+
+    <!--
+        RUNTIME harness for #B447's `error.<id>.hform` channel.
+
+        WHY A SEPARATE FIXTURE. The transport-error spec's other arms run against
+        /autocomplete, which is SHARED with the autocomplete-caret specs. Declaring
+        `data-gina-form-event-on-submit-error` there would flip hFormIsRequired true
+        and route that form through listenToXhrEvents — changing the scene those
+        specs were written against. So the hform channel gets its own page.
+
+        WHAT MAKES THIS SCENE DIFFERENT. `hFormIsRequired` is computed at bind time
+        from the PRESENCE of data-gina-form-event-on-submit-success / -error
+        (validator/src/main.js:2143). Only when it is true does the validator emit
+        the `error.<id>.hform` companion alongside `error.<id>`. The declared
+        callback below is what a real consumer writes, and it is the channel that
+        attribute actually registers — so this page is the only place the emit is
+        observable end-to-end rather than by code-reading.
+
+        Load order matches a real gina render: the onload defines onGinaLoaded +
+        __ginaWebroot, THEN the gina bundle boots.
+    -->
+    <script src="/js/gina.onload.hform.js"></script>
+    <script src="/js/gina.min.js"></script>
+    <script>
+        // Minimal page: the framework's own `ginaloaded` listener loses the
+        // attach race, so invoke onGinaLoaded manually to flip
+        // isFrameworkLoaded (the loader's guard makes a duplicate call a
+        // no-op). core.js then scans forms and publishes gina.validator.
+        (function () {
+            var tries = 0;
+            function kick() {
+                try {
+                    if (
+                        window.gina
+                        && window.gina.config
+                        && typeof window.onGinaLoaded === 'function'
+                        && !window.gina.isFrameworkLoaded
+                    ) {
+                        window.onGinaLoaded(window.gina);
+                    }
+                } catch (e) {
+                    if (window.console && console.error) {
+                        console.error('[harness] onGinaLoaded threw', e && e.stack || e);
+                    }
+                }
+                if ((!window.gina || !window.gina.isFrameworkLoaded) && tries++ < 100) {
+                    setTimeout(kick, 50);
+                }
+            }
+            kick();
+        }());
+
+        // The DECLARED handler. Recording it here (rather than only listening for
+        // the DOM event in the spec) is the point: this is the exact registration
+        // path a consumer uses, so a regression that stopped invoking declared
+        // callbacks would fail here even if the raw event still dispatched.
+        window.__hformCalls = [];
+        window.onHformSubmitError = function (event, data) {
+            var d = (data && typeof data === 'object') ? data
+                  : (event && event.detail) ? event.detail
+                  : null;
+            window.__hformCalls.push({
+                status         : d && d.status,
+                transportError : !!(d && d.transportError)
+            });
+        };
+    </script>
+    <style>
+        body { margin: 0; padding: 1rem; font-family: system-ui, sans-serif; }
+    </style>
+</head>
+<body>
+    <h1>gina #B447 hform-channel harness</h1>
+
+    <!--
+        The submit-error attribute is what flips hFormIsRequired true; without it
+        the `.hform` emit is skipped and this whole page proves nothing. The rule
+        on `ref` mirrors the autocomplete fixture so an empty field cannot pass
+        validation and silently skip the XHR.
+    -->
+    <form id="hformform" data-gina-form-rule="hformform"
+          data-gina-form-event-on-submit-error="onHformSubmitError"
+          action="/hform-sink" method="post">
+        <label>Reference <input id="hform-input" type="text" name="ref"></label>
+        <button id="hformform-submit" type="submit">Submit</button>
+    </form>
+</body>
+</html>

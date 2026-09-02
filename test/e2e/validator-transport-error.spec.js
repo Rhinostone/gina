@@ -106,13 +106,99 @@ test.describe('#B447 validator — transport-layer submit failure must reach the
         expect(errs[0].status, 'status must be 408').toBe(408);
         expect(errs[0].transportError,
             'transportError distinguishes this from a genuine timeout').toBe(true);
-        // NOT asserted here: the `error.<id>.hform` channel — the one
-        // `data-gina-form-event-on-submit-error` registers via listenToXhrEvents.
-        // It is gated on hFormIsRequired, i.e. on the form DECLARING that
-        // attribute, and this fixture is shared with the autocomplete specs so
-        // adding it would change their scene (it flips listenToXhrEvents on).
-        // The emit itself is unconditional in the same arm as error.<id>, so it
-        // rides the same code path. DEFERRED, priority: medium — a dedicated
-        // fixture declaring the attribute, tracked on #B447.
+        // The `error.<id>.hform` channel is NOT asserted on THIS fixture — it is
+        // shared with the autocomplete specs, and declaring
+        // `data-gina-form-event-on-submit-error` here would flip hFormIsRequired
+        // and change their scene. It is asserted in describe-block 03 below,
+        // against its own /hform fixture.
+    });
+});
+
+/**
+ * #B447 — the `error.<id>.hform` channel.
+ *
+ * WHY THIS EXISTS. A consumer session reviewing the fix made a fair point: the
+ * `.hform` emit is unconditional in the same arm as `error.<id>`, so the code path
+ * is shared — but "shared path" is not a pin. Nothing went red if a refactor
+ * dropped the second emit, and `.hform` is the channel
+ * `data-gina-form-event-on-submit-error` actually registers, i.e. the one a real
+ * consumer's declared handler receives. So it gets its own assertion, on its own
+ * fixture (declaring the attribute on the shared /autocomplete page would flip
+ * hFormIsRequired and change the autocomplete-caret specs' scene).
+ *
+ * Arm 01 is the POSITIVE CONTROL and must pass on both sides of the fix.
+ */
+test.describe('#B447 validator — the hform channel reaches a DECLARED handler', () => {
+
+    // ⚠️ MEASURED TRAP, do not "fix" this back to a document listener.
+    // An earlier revision of these arms asserted `error.<id>.hform` on a
+    // document-level addEventListener. That assertion CANNOT PASS by
+    // construction: utils/events.js `on()` rewrites 'error.hform' to
+    // 'error.<id>.hform' (so listener and emit DO match), but `addListener`
+    // wraps every handler in `cancelEvent(e)` — which stops propagation before
+    // the event reaches `document`. The base `error.<id>` bubbles only because
+    // nothing registered a gina listener for it in this fixture. So a
+    // document-level probe reports the hform channel as dead whether it works
+    // or not — an assertion that cannot succeed is as useless as a control that
+    // cannot fail. The DECLARED handler is both the real consumer contract and
+    // the only honest observation point.
+
+    async function gotoHform(page) {
+        await page.goto(BASE + '/hform');
+        await page.waitForFunction(
+            () => window.gina && window.gina.isFrameworkLoaded === true
+                && window.gina.validator && window.gina.validator.$forms
+                && window.gina.validator.$forms['hformform'],
+            null,
+            { timeout: 15000 }
+        );
+        const bound = await page.evaluate(
+            () => !!(window.gina.validator.$forms['hformform']));
+        expect(bound, 'hformform must be bound before submitting').toBe(true);
+    }
+
+    async function submitAndCollect(page) {
+        // Empty fails isRequired and blocks the submit client-side, so the XHR
+        // would never fire and both arms would read "nothing" for the wrong reason.
+        await page.fill('#hform-input', 'ABC123');
+        await page.waitForTimeout(400);
+        await page.click('#hformform-submit');
+        await page.waitForTimeout(2500);
+        return page.evaluate(() => window.__hformCalls);
+    }
+
+    test('01 - POSITIVE CONTROL: a 500 reaches the DECLARED handler', async ({ page }) => {
+        await page.route('**/hform-sink', (route) => route.fulfill({
+            status: 500,
+            contentType: 'application/json; charset=utf-8',
+            body: JSON.stringify({ status: 500, message: 'boom' })
+        }));
+        await gotoHform(page);
+        const declared = await submitAndCollect(page);
+        console.log('[#B447/hform 500] declared:', JSON.stringify(declared));
+        // Without this, arm 02 proving "the handler ran" would not distinguish a
+        // working hform channel from a fixture that registers handlers for anything.
+        expect(declared.length,
+            'the declared data-gina-form-event-on-submit-error handler must run on a 500 — '
+            + 'if this is 0 the fixture is broken and arm 02 proves nothing'
+        ).toBeGreaterThan(0);
+        expect(declared[declared.length - 1].status, 'status must be 500').toBe(500);
+        expect(declared[declared.length - 1].transportError,
+            'a genuine HTTP error must NOT be flagged as a transport failure').toBe(false);
+    });
+
+    test('02 - a TRANSPORT failure reaches the DECLARED handler (RED pre-fix)', async ({ page }) => {
+        await page.route('**/hform-sink', (route) => route.abort('connectionrefused'));
+        await gotoHform(page);
+        const declared = await submitAndCollect(page);
+        console.log('[#B447/hform transport] declared:', JSON.stringify(declared));
+        // RED PRE-FIX: zero — the transport arm emitted nothing, so the declared
+        // handler was never invoked. This is the exact gap a consumer reported.
+        expect(declared.length,
+            'a transport failure must reach the declared submit-error handler'
+        ).toBeGreaterThan(0);
+        expect(declared[declared.length - 1].status, 'status must be 408').toBe(408);
+        expect(declared[declared.length - 1].transportError,
+            'transportError distinguishes this from a genuine timeout').toBe(true);
     });
 });

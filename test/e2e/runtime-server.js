@@ -185,6 +185,13 @@ const UPLOAD_FORMS_JSON = JSON.stringify({ rules: { uploadform: { title: { isReq
 // handleAutoComplete's keydown interception on a REAL-Safari UA.
 const AC_FORMS_JSON = JSON.stringify({ rules: { acform: { ref: { isRequired: true } } } });
 
+// #B447 — a non-empty forms whisper for the hform-channel fixture. Same reason as
+// AC_FORMS_JSON: core.js only scans + binds forms when gina.forms.rules is non-empty.
+// The isRequired rule matters for a second reason here — an empty field fails
+// validation and blocks the submit CLIENT-SIDE, so without a filled field the XHR
+// never fires and the arm would read "no hform event" for the wrong reason.
+const HFORM_FORMS_JSON = JSON.stringify({ rules: { hformform: { ref: { isRequired: true } } } });
+
 // #SPA1 Tier 1 — the routing table gina/nav matches clicks against. Shape mirrors the
 // served map: `param` must be present (getCompiled skips paramless routes), `bundle`
 // must equal the `page.environment.bundle` whisper ('e2e'), and only `negotiate: true`
@@ -330,6 +337,19 @@ const server = http.createServer(function (req, res) {
                 fs.readFileSync(path.join(FIXTURES, 'validator-autocomplete.html')));
         }
         if (url === '/ac-sink') {
+            return send(res, 200, 'application/json; charset=utf-8', '{}');
+        }
+        // #B447 — the hform-channel fixture. Deliberately a SEPARATE page from
+        // /autocomplete: declaring data-gina-form-event-on-submit-error there would
+        // flip hFormIsRequired on a scene shared with the autocomplete-caret specs.
+        if (url === '/js/gina.onload.hform.js') {
+            return send(res, 200, 'application/javascript; charset=utf-8', renderOnload(HFORM_FORMS_JSON));
+        }
+        if (url === '/hform' || url === '/hform.html') {
+            return send(res, 200, 'text/html; charset=utf-8',
+                fs.readFileSync(path.join(FIXTURES, 'validator-transport-error-hform.html')));
+        }
+        if (url === '/hform-sink') {
             return send(res, 200, 'application/json; charset=utf-8', '{}');
         }
         if (url === '/upload' || url === '/upload.html') {
