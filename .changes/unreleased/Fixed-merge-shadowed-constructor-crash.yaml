@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'A JSON body carrying a nested object whose own `constructor` key holds a primitive, null, array or plain object no longer crashes the merge: the plain-object check read `.prototype` off the shadowed value eagerly and threw `Cannot convert undefined or null to object` — request-reachable through PUT bodies and pre-existing (measured identical on 0.6.21). The check now computes lazily with the read guarded, a 24-shape differential sweep pins identical answers on every previously non-crashing input, the guarded key is still dropped per the 0.6.22 disclosure and sibling fields survive (#B450)'
+time: 2026-09-02T09:37:41+01:00

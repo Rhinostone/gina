@@ -2190,9 +2190,12 @@ function Merge() {
      *
      * Key rejection is the WHOLE guard, deliberately. The first cut of #B446 also
      * skipped inherited enumerable source properties, which broke every entity in
-     * the model registry: lib/model.js setModel round-trips entity instances
-     * through merge, and all six SQL connectors attach their .sql-derived query
-     * methods to the PROTOTYPE, so an own-only copy silently dropped them
+     * the model registry: the model layer round-trips entity instances through
+     * merge — the in-tree path is the relations assembly (core/model/entity.js),
+     * and the registry's setModel (lib/model.js), while it has no in-tree caller,
+     * is published through the modelUtil context and stays consumer-reachable —
+     * and all six SQL connectors attach their .sql-derived query methods to the
+     * PROTOTYPE, so an own-only copy silently dropped them
      * (`db.xEntity.getOneById is not a function`). merge therefore copies the
      * chain, as it always has; only these three key names are refused.
      *
@@ -2833,8 +2836,22 @@ function Merge() {
 
         var hasOwn              = {}.hasOwnProperty;
         var hasOwnConstructor   = hasOwn.call(obj, 'constructor');
-        // added test for node > v6
-        var hasMethodPrototyped = ( typeof(obj.constructor) != 'undefined' ) ? hasOwn.call(obj.constructor.prototype, 'isPrototypeOf') : false;
+        // #B450 — compute lazily, restoring the original short-circuit. An OWN
+        // `constructor` key (the shape JSON.parse yields for
+        // `{"constructor": <primitive|null|{}|[]>}`) shadows
+        // Object.prototype.constructor, so the eager read
+        // `obj.constructor.prototype` was undefined (or threw outright for null)
+        // and `hasOwn.call(undefined, ...)` crashed the whole merge —
+        // request-reachable, since PUT bodies reach merge as the source. When the
+        // object HAS an own constructor the rejection branch below cannot fire,
+        // so the value is never needed; when it lacks one, guard the `.prototype`
+        // read. A 24-shape differential sweep pins identical answers on every
+        // input the old form did not crash on (test/lib/merge-b450.test.js).
+        // was: var hasMethodPrototyped = ( typeof(obj.constructor) != 'undefined' ) ? hasOwn.call(obj.constructor.prototype, 'isPrototypeOf') : false;
+        var hasMethodPrototyped = false;
+        if ( !hasOwnConstructor && typeof(obj.constructor) != 'undefined' ) {
+            hasMethodPrototyped = ( obj.constructor.prototype ) ? hasOwn.call(obj.constructor.prototype, 'isPrototypeOf') : false;
+        }
 
 
         if (
