@@ -123,8 +123,18 @@ describe('03 - source pin: the guard sits inside the index-merge branch', functi
 // Derived from the EMITTED artifact, never guessed: Closure folds the rebind,
 // the hole fill and the guard into one comma-expression condition gating the
 // key loop. Identifier-agnostic (backreferences bind the same target/index
-// locals) and wrap-agnostic (`\s*` at every token boundary). Validated against
-// the pre-fix artifact: positive 0 -> 1, the retired shape 1 -> 0.
+// locals) and wrap-agnostic (`\s*` at every token boundary).
+//
+// #B446 moved this shape: its own-only + unsafe-key guard was inserted INSIDE
+// the key loop, between the for-in and newTarget[a].hasOwnProperty(k), which the
+// previous pin required to be adjacent. The #B437 guard itself is untouched. The
+// positive now requires BOTH guards in one match, so it pins the #B446 request-
+// path guard as well as the #B437 occupied-slot guard:
+//   w[r]!==null&&typeof w[r]=='object')for(y in C[r])
+//     Object.prototype.hasOwnProperty.call(C[r],y)&&!l(y)&&
+//     (w[r].hasOwnProperty(y)||(w[r][y]=C[r][y]))
+// Validated in both directions: 1 on the post-#B446 artifact (two independent
+// builds), 0 on the pre-#B446 artifact -- a control that can fail.
 describe('04 - dist pins: the browser bundle carries the guard', function () {
     it('the unminified bundle carries the guard verbatim, exactly once', function () {
         var js = fs.readFileSync(DIST_JS, 'utf8');
@@ -133,9 +143,9 @@ describe('04 - dist pins: the browser bundle carries the guard', function () {
 
     it('the minified bundle gates the key loop on the occupied-slot guard (positive), and the un-guarded fill is gone (negative)', function () {
         var min = fs.readFileSync(DIST_MIN, 'utf8');
-        var pos = min.match(/(\w+)\[(\w+)\]\s*!==\s*null\s*&&\s*typeof\s+\1\[\2\]\s*==\s*'object'\s*\)\s*for\s*\(\s*(\w+)\s+in\s+(\w+)\[\2\]\s*\)\s*\1\[\2\]\.hasOwnProperty\(\3\)/g) || [];
+        var pos = min.match(/(\w+)\[(\w+)\]\s*!==\s*null\s*&&\s*typeof\s+\1\[\2\]\s*==\s*'object'\s*\)\s*for\s*\(\s*(\w+)\s+in\s+(\w+)\[\2\]\s*\)\s*Object\.prototype\.hasOwnProperty\.call\(\4\[\2\]\s*,\s*\3\s*\)\s*&&\s*!\s*(\w+)\(\3\)\s*&&\s*\(\s*\1\[\2\]\.hasOwnProperty\(\3\)/g) || [];
         var neg = min.match(/for\s*\(\s*(\w+)\s+in\s+(\w+)\s*=\s*(\w+)\s*,\s*typeof\s+\2\[(\w+)\]\s*==\s*'undefined'\s*&&\s*\(\s*\2\[\4\]\s*=\s*\{\s*\}\s*\)\s*,\s*(\w+)\[\4\]\s*\)\s*\2\[\4\]\.hasOwnProperty\(\1\)/g) || [];
-        assert.equal(pos.length, 1, 'guarded index-merge sites in gina.min.js: ' + pos.length);
+        assert.equal(pos.length, 1, 'doubly-guarded index-merge sites in gina.min.js: ' + pos.length);
         assert.equal(neg.length, 0, 'un-guarded index-merge sites still in gina.min.js: ' + neg.length);
         // anti-vacuity: the branch itself is still in the bundle
         assert.ok((min.match(/\.hasOwnProperty\(/g) || []).length > 0, 'the index-merge region vanished from the bundle');
