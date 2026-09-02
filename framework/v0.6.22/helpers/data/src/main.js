@@ -283,6 +283,25 @@ function DataHelper(){
 
     var parseLocalObj = function(obj, key, k, value) {
 
+        // #B446 — a bracket-notation field name is client-supplied and every segment is
+        // used as an assignment target below (`obj[ key[k] ] = ...`). `__proto__` is an
+        // accessor on Object.prototype, so assigning through it mutates the prototype for
+        // the whole process; `constructor`/`prototype` reach it in two hops. Measured
+        // before the fix: `__proto__[polluted]=x`, `constructor[prototype][polluted]=x`
+        // and the percent-encoded `%5F%5Fproto%5F%5F[polluted]=x` each polluted
+        // Object.prototype while the parsed body still read `{}` — i.e. silently.
+        // Drop the path rather than throwing: these names are never legitimate, and a
+        // throw on the request-parse path would turn one bad field into a 500.
+        // Kept INLINE (not a closure helper) because test/core/validator-send-formdata-
+        // nesting.test.js extracts this function's source text and evals it standalone to
+        // pin client/server parity — a helper call would be a ReferenceError there, and
+        // the client-side twin in the validator plugin is inline for the same reason.
+        for (var _s = 0, _sLen = key.length; _s < _sLen; ++_s) {
+            if ( key[_s] === '__proto__' || key[_s] === 'constructor' || key[_s] === 'prototype' ) {
+                return obj;
+            }
+        }
+
         for (let i=0,len=key.length; i<len; i++) {
             // by default
             let _key = key[k];

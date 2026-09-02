@@ -30,6 +30,31 @@
  */
 function Merge() {
 
+    /**
+     * #B446 — keys that must never be written through by a merge. `__proto__` is an
+     * accessor on Object.prototype, so assigning it walks through to the prototype;
+     * `constructor`/`prototype` reach it in two hops. JSON.parse produces an OWN
+     * `__proto__` key, so an own-property check alone does NOT stop this — the key
+     * name has to be rejected as well. Request bodies reach merge directly
+     * (core/server.js:6657 merges JSON.parse output as the SOURCE), so this is a
+     * request-path guard, not a defensive nicety.
+     *
+     * Key rejection is the WHOLE guard, deliberately. The first cut of #B446 also
+     * skipped inherited enumerable source properties, which broke every entity in
+     * the model registry: lib/model.js setModel round-trips entity instances
+     * through merge, and all six SQL connectors attach their .sql-derived query
+     * methods to the PROTOTYPE, so an own-only copy silently dropped them
+     * (`db.xEntity.getOneById is not a function`). merge therefore copies the
+     * chain, as it always has; only these three key names are refused.
+     *
+     * @param {string} k - candidate key
+     * @returns {boolean} true when the key must be skipped
+     * @private
+     */
+    var isUnsafeMergeKey = function(k) {
+        return k === '__proto__' || k === 'constructor' || k === 'prototype';
+    };
+
     var newTarget           = []
         , originalValueshasBeenCached = false
         //, keyComparison     = 'id' // use for collections merging [{ id: 'val1' }, { id: 'val2' }, {id: 'val3' }, ...]
@@ -134,6 +159,9 @@ function Merge() {
                     } else {
                         // Merge the base object
                         for (var name in options) {
+                            // #B446 — reject prototype-reaching key names.
+                            if ( isUnsafeMergeKey(name) ) { continue }
+
                             if (!target) {
                                 target = { name: null }
                             }
@@ -195,6 +223,9 @@ function Merge() {
                                         clone = {};
                                         // copy props
                                         for (var prop in copy) {
+                                            // #B446
+                                            if ( isUnsafeMergeKey(prop) ) { continue }
+
                                             clone[prop] = copy[prop]
                                         }
                                     }
@@ -206,6 +237,9 @@ function Merge() {
                                 if ( !override ) {
                                     // add those in copy not in clone (target)
                                     for (var prop in copy) {
+                                        // #B446
+                                        if ( isUnsafeMergeKey(prop) ) { continue }
+
                                         if (typeof(clone[ prop ]) == 'undefined') {
                                             if ( Array.isArray(copy[ prop ]) && Array.isArray(clone[ prop ]) ) {
                                                 clone[ prop ] = mergeArray(copy[ prop ], clone[ prop ], override);
@@ -235,6 +269,9 @@ function Merge() {
                                 } else {
 
                                     for (var prop in copy) {
+                                        // #B446
+                                        if ( isUnsafeMergeKey(prop) ) { continue }
+
                                         if ( typeof(copy[ prop ]) != 'undefined' ) {
                                             //clone[prop] = copy[prop]
                                             if ( Array.isArray(copy[ prop ]) && Array.isArray(clone[ prop ]) ) {
@@ -545,6 +582,9 @@ function Merge() {
                         // chain below already does for an object at an occupied index.
                         if (newTarget[a] !== null && typeof(newTarget[a]) == 'object') {
                             for (let k in options[a]) {
+                                // #B446
+                                if ( isUnsafeMergeKey(k) ) { continue }
+
                                 if (!newTarget[a].hasOwnProperty(k)) {
                                     newTarget[a][k] = options[a][k]
                                 }
