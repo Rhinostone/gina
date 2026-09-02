@@ -12,15 +12,14 @@ var merge           = lib.merge;
 var modelUtil       = new lib.Model();
 
 
-
 /**
- * Connector for couchbase module v4
+ * Connector for couchbase module v3
  *
  * Options :
- *  - keepAlive (default: true)
+ *  - keepAlive
  *      if set to `true`, will ping based on `pingInterval`
  *      if set to `false`, will not ping the database server
- *  - pingInterval (default: 2m)
+ *  - pingInterval
  *      `30s` will set the ping interval to 30 seconds
  *      `1m` will set the ping interval to 1 minute
  *      `1h` will set the ping interval to 1 hour
@@ -39,15 +38,12 @@ function Connector(dbString) {
                 scope: '_default', // by default
                 collection: '_default', // by default
                 keepAlive: true,
-                pingInterval: "2m",
-                // https://docs.couchbase.com/sdk-api/couchbase-node-client/interfaces/TimeoutConfig.html
-                // timeouts:  {
-                //     kvTimeout: 10000, // milliseconds
-                // }
+                pingInterval : "2m",
+                configProfile: "wan"
             }
         }
         , sdk = {
-            version: 4
+            version: 3
         }
     ;
 
@@ -58,22 +54,12 @@ function Connector(dbString) {
      *
      * @return {string} stringifyiedArray
      */
+    // replaced: string += in loop + regex typeof — use Array.map() + join (#P27)
     var arrayToValues = function(arr) {
-        var val = '[';
-        for (let i=0, len=arr.length; i<len; i++) {
-            if ( /string/i.test( typeof(arr[i]) )) {
-                val += '"'+ arr[i] + '"'+',';
-                continue;
-            }
-            val += arr[i] +','
-        }
-
-        if ( typeof(arr.length) && arr.length > 0 ) {
-            val = val.substring(0, val.length-1);
-        }
-        val += ']';
-
-        return val;
+        var parts = arr.map(function(item) {
+            return typeof(item) === 'string' ? '"' + item + '"' : '' + item;
+        });
+        return '[' + parts.join(',') + ']';
     };
 
     /**
@@ -84,23 +70,23 @@ function Connector(dbString) {
      * */
     this.connect = async function(dbString, cb) {
         // Attention: the connection is lost 5 minutes once the bucket is opened.
-        var conn = null, defaultCollection = null;
+        var conn        = null;
 
         var onError = function (err, next) {
             delete self.instance.reconnecting;
             self.instance.reconnected = self.instance.connected = false;
             console.debug('[CONNECTOR][' + local.bundle +'] Scope is: '+ process.env.NODE_SCOPE );
             console.debug('[CONNECTOR][' + local.bundle +'] Env is: '+ process.env.NODE_ENV );
-            console.error('[CONNECTOR][' + local.bundle +'] Couchbase could not be reached !!\n'+ ( err.stack || err.message || err ) );
+            console.error('[ CONNECTOR ][ ' + local.bundle +' ] couchbase could not be reached !!\n'+ ( err.stack || err.message || err ) );
 
             // CB-LOW-5 fix: exponential backoff replaces hardcoded 5s retry.
             // Delay sequence: 5s → 10s → 20s → 40s → 60s (cap). Counter reset in onConnect().
             self._reconnectAttempts = (self._reconnectAttempts || 0) + 1;
             var _backoffDelay = Math.min(5000 * Math.pow(2, self._reconnectAttempts - 1), 60000);
             if (self._reconnectAttempts >= 10) {
-                console.error('[CONNECTOR][' + local.bundle +'][' + dbString.database +'] Reconnect attempt ' + self._reconnectAttempts + ' — max backoff reached (' + (_backoffDelay/1000) + 's). Couchbase may be unavailable.');
+                console.error('[ CONNECTOR ][ ' + local.bundle +' ][ ' + dbString.database +' ] reconnect attempt ' + self._reconnectAttempts + ' — max backoff reached (' + (_backoffDelay/1000) + 's). Couchbase may be unavailable.');
             } else {
-                console.debug('[CONNECTOR][' + local.bundle +'][' + dbString.database +'] Reconnect attempt ' + self._reconnectAttempts + ' — retrying in ' + (_backoffDelay/1000) + 's...');
+                console.debug('[ CONNECTOR ][ ' + local.bundle +' ][ ' + dbString.database +' ] reconnect attempt ' + self._reconnectAttempts + ' — retrying in ' + (_backoffDelay/1000) + 's...');
             }
             self.instance.reconnecting = true;
 
@@ -116,8 +102,8 @@ function Connector(dbString) {
 
         // once
         var onConnect = function onConnect(cb){
-            console.debug('[CONNECTOR][' + local.bundle +'] Couchbase is alive !!');
-            console.debug('[CONNECTOR][' + local.bundle +'][' + dbString.connector +'] Now connected...');
+            console.debug('[ CONNECTOR ][ ' + local.bundle +' ] couchbase is alive !!');
+            console.debug('[ CONNECTOR ][ ' + local.bundle +' ][ ' + dbString.connector +' ] now connected...');
 
             // CB-LOW-5 fix: reset backoff counter on successful (re)connect.
             self._reconnectAttempts = 0;
@@ -125,22 +111,22 @@ function Connector(dbString) {
             var options = local.options;
 
             // updating context
-            var ctx = getContext()// jshint ignore:line
+            var ctx = getContext()
                 , bundle = ctx.bundle
                 , env = ctx.env
                 , conf = ctx['gina'].config.envConf[bundle][env]
                 , name = dbString.database
                 //Reload models.
-                , modelsPath = _(conf.modelsPath)// jshint ignore:line
+                , modelsPath = _(conf.modelsPath)
             ;
             // will send heartbeat every 4 minutes if keepAlive == `true`
             self.ping(options.pingInterval, cb, function onPing(cb){
 
-                local.bundle    = bundle;
-                local.env       = env;
+                local.bundle = bundle;
+                local.env = env;
 
                 if ( typeof(cb) != 'undefined' ) { // this portition is not working yet on Mac OS X
-                    console.debug('[CONNECTOR][' + local.bundle +']['+ env +'] Connected to couchbase !!');
+                    console.debug('[ CONNECTOR ][ ' + local.bundle +' ][ '+ env +' ] connected to couchbase !!');
 
 
                     // CB-PERF-3 fix: first setConnection call was redundant (identical args, outside the existsSync guard)
@@ -154,11 +140,11 @@ function Connector(dbString) {
                                 cb(err)
                             })
                     } else {
-                        cb(new Error('[CONNECTOR][' + local.bundle +']['+ env +'] '+ modelsPath+ ' not found') )
+                        cb(new Error('[ CONNECTOR ][ ' + local.bundle +' ][ '+ env +' ] '+ modelsPath+ ' not found') )
                     }
 
                 } else {
-                    console.debug('[CONNECTOR][' + local.bundle +']['+ env +'] Connection to bucket `'+ name +'` is being kept alive ...');
+                    console.debug('[ CONNECTOR ][ ' + local.bundle +' ][ '+ env +' ] connection to bucket `'+ name +'` is being kept alive ...');
                 }
             });
             // intercepting conn event thru gina
@@ -180,7 +166,11 @@ function Connector(dbString) {
                 }
 
                 if (
-                    err instanceof couchbase.Error && err.code == 16 && !self.reconnected
+                    // #B204 — no supported SDK (3.x/4.x) exports a bare `Error` class, so the
+                    // un-guarded instanceof threw TypeError and, being evaluated first, made
+                    // the message arm below unreachable too. Guarded: the arm is inert on
+                    // modern SDKs (their errors carry no numeric .code), never a throw.
+                    typeof(couchbase.Error) == 'function' && err instanceof couchbase.Error && err.code == 16 && !self.reconnected
                     //|| err instanceof couchbase.Error && err.code == 23 && !self.reconnecting
                     || /cannot perform operations on a shutdown bucket/.test(err.message ) && !self.reconnecting && !self.reconnected
                 ) {
@@ -188,9 +178,9 @@ function Connector(dbString) {
                     self._reconnectAttempts = (self._reconnectAttempts || 0) + 1;
                     var _backoffDelay = Math.min(5000 * Math.pow(2, self._reconnectAttempts - 1), 60000);
                     if (self._reconnectAttempts >= 10) {
-                        console.error('[CONNECTOR][' + local.bundle +'][' + dbString.database +'] Reconnect attempt ' + self._reconnectAttempts + ' — max backoff reached (' + (_backoffDelay/1000) + 's). Couchbase may be unavailable.');
+                        console.error('[ CONNECTOR ][ ' + local.bundle +' ][ ' + dbString.database +' ] reconnect attempt ' + self._reconnectAttempts + ' — max backoff reached (' + (_backoffDelay/1000) + 's). Couchbase may be unavailable.');
                     } else {
-                        console.debug('[CONNECTOR][' + local.bundle +'][' + dbString.database +'] Reconnect attempt ' + self._reconnectAttempts + ' — retrying in ' + (_backoffDelay/1000) + 's...');
+                        console.debug('[ CONNECTOR ][ ' + local.bundle +' ][ ' + dbString.database +' ] reconnect attempt ' + self._reconnectAttempts + ' — retrying in ' + (_backoffDelay/1000) + 's...');
                     }
                     self.reconnecting = true;
 
@@ -202,20 +192,20 @@ function Connector(dbString) {
                         }
                     }, _backoffDelay)
 
-                } else if (err instanceof couchbase.Error && err.code == 23 && !self.reconnecting) {
+                } else if (typeof(couchbase.Error) == 'function' && err instanceof couchbase.Error && err.code == 23 && !self.reconnecting) { // #B204 — guarded, same reason as above
                     self.instance.disconnect();
                     // express js patch
                     if (typeof(next) != 'undefined') {
                         next(err); // might just be a "false" error: `err` is replaced with cb() caller `data`
                     } else {
-                        console.error('[CONNECTOR][' + local.bundle +'][' + dbString.database +'] gina fatal error ('+ err.code +'): ' + (err.message||err) + '\nstack: '+ err.stack);
+                        console.error('[ CONNECTOR ][ ' + local.bundle +' ][ ' + dbString.database +' ] gina fatal error ('+ err.code +'): ' + (err.message||err) + '\nstack: '+ err.stack);
                         return;
                     }
                 } else {
 
                     if (err && err instanceof Error) {
 
-                        console.error('[CONNECTOR][' + local.bundle +'][' + dbString.database +'] gina fatal error ('+ err.code +'): ' + (err.message||err) + '\nstack: '+ err.stack);
+                        console.error('[ CONNECTOR ][ ' + local.bundle +' ][ ' + dbString.database +' ] gina fatal error ('+ err.code +'): ' + (err.message||err) + '\nstack: '+ err.stack);
 
                         if ( typeof(err) == 'object' ) {
                             // CB-QUAL-1 fix: stack trace removed — logged server-side only, never sent to client
@@ -233,7 +223,7 @@ function Connector(dbString) {
                         if (typeof(next) != 'undefined') {
                             next(err); // might just be a "false" error: `err` is replaced with cb() caller `data`
                         } else {
-                            console.error('[CONNECTOR][' + local.bundle +'][' + dbString.database +'] gina fatal error ('+ err.code +'): ' + (err.message||err) + '\nstack: '+ err.stack);
+                            console.error('[ CONNECTOR ][ ' + local.bundle +' ][ ' + dbString.database +' ] gina fatal error ('+ err.code +'): ' + (err.message||err) + '\nstack: '+ err.stack);
                             return;
                         }
                     }
@@ -250,13 +240,12 @@ function Connector(dbString) {
             //     self.emit('ready', false, self.instance);
             // }, 300);
             self.emit('ready', false, self.instance);
-
-        };
-
+        }
 
         dbString.bucketName = dbString.database;
 
         try {
+
             console.debug('[CONNECTOR][' + local.bundle +'][' + dbString.database +'] Trying to connect to bucket `'+ dbString.bucketName +'`');
             conn = await couchbase.connect(dbString.protocol + dbString.host, dbString, function onBucketOpened(bErr, conn) {
                 if (bErr) {
@@ -377,7 +366,7 @@ function Connector(dbString) {
             });
 
         } catch (err) {
-            console.error('[CONNECTOR][' + local.bundle +']['+ local.env +'] Couchbase could not connect to bucket `'+ dbString.database +'`\n'+ (err.stack || err.message || err) );
+            console.error('[ CONNECTOR ][ ' + local.bundle +' ] '+ local.env +' ] couchbase could not connect to bucket `'+ dbString.database +'`\n'+ (err.stack || err.message || err) );
             onError(err, cb)
         }
 
@@ -394,6 +383,7 @@ function Connector(dbString) {
      * @contructor
      * */
     var init = function(dbString) {
+
         try {
             local.bundle    = getConfig().bundle;// jshint ignore:line
             console.debug('[CONNECTOR][' + local.bundle +'][' + dbString.connector +'][' + dbString.database +'] Checking dbString.host: '+ dbString.host);
@@ -437,12 +427,12 @@ function Connector(dbString) {
         var options = local.options;
         if (options.keepAlive) {
             if ( self.pingId ) {
-                clearInterval(self.pingId)
+                clearInterval(self.pingId )
             }
 
             interval    = interval || options.pingInterval; // for a minute
-            var value = interval.match(/\d+/);
-            var unit  = null; // will be seconds by default
+            var value       = interval.match(/\d+/);
+            var unit        = null; // will be seconds by default
             try {
                 unit = interval.match(/[a-z]+/i)[0]
             } catch(err) {
@@ -473,12 +463,17 @@ function Connector(dbString) {
             self.pingId = setInterval(function onTimeout(){
 
                 if (!self.instance.connected) {
-                    console.debug('[CONNECTOR][' + local.bundle +'] Connecting to couchbase');
+                    console.debug('[ CONNECTOR ][ ' + local.bundle +' ] connecting to couchbase');
 
                     self.instance.reconnected = false;
                     self.instance.reconnecting = true;
-                    if ( typeof(cb) != 'undefined' ) {
-                        self.connect(dbString, cb)
+                    // CB-PERF-2 fix: `next` was not in scope inside ping() — typeof(next)
+                    // always evaluated to 'undefined', so reconnect from ping never passed
+                    // the callback and errors were silently dropped. Fixed to use `ncb`
+                    // (the no-connection callback param of ping(interval, cb, ncb)).
+                    // v4 already used cb correctly; this aligns v3 with v4.
+                    if ( typeof(ncb) != 'undefined' ) {
+                        self.connect(dbString, ncb)
                     } else {
                         self.connect(dbString)
                     }
@@ -488,11 +483,10 @@ function Connector(dbString) {
                 }
 
             }, interval);
-
             ncb(cb)
         } else {
             // CB-BUG-4 fix: keepAlive is false — ping is a no-op; do not recurse
-            // old: console.debug('[CONNECTOR][' + local.bundle +'] Sent ping to couchbase ...');
+            // old: console.debug('[ CONNECTOR ][ ' + local.bundle +' ] sent ping to couchbase ...');
             // old: self.ping(interval, cb, ncb);  ← unconditional recursion → stack overflow
             return;
         }
@@ -506,7 +500,6 @@ function Connector(dbString) {
         self.once('ready', cb);
         init(dbString)
     }
-}
-
+};
 util.inherits(Connector, EventEmitter);
 module.exports = Connector;

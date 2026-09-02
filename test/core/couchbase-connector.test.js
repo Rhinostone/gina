@@ -1152,3 +1152,344 @@ describe('13 - #B413: annotation type normalisation + bounded capture', function
         });
     });
 });
+
+// ─── 14 — #B460: bulkInsert's outer catch settles instead of returning undefined ─
+/**
+ * `bulkInsert`'s outer `try` wraps its OWN function body, so a synchronous throw
+ * in the prologue landed in a catch that only `console.error`d — the function
+ * then fell off the end and returned `undefined`. Both documented call shapes
+ * broke: `.onComplete(cb)` threw `TypeError: … reading 'onComplete'`, and the
+ * `await` form (the docblock's first @example) resolved with `undefined`, so a
+ * caller treating "did not throw" as success recorded an insert that never
+ * happened.
+ *
+ * The trigger is NOT only a cluster outage: the prologue carries two DELIBERATE
+ * argument validations (`rec` falsy; a record without `.values`) whose errors the
+ * author wrote to reach the caller. Those make the defect drivable with no
+ * cluster at all, which is what these tests exercise.
+ *
+ * Distinct from the query path, which does NOT share this shape: its promise is
+ * built inside `entities[entityName].prototype[name] = function(){…}`, an
+ * ATTACHED method, so its enclosing try has already exited by call time and a
+ * throw propagates to the caller normally. §14f pins that difference.
+ */
+describe('14 - #B460: bulkInsert settles its outer catch (shipped bytes)', function() {
+
+    var src;
+    before(function() { src = fs.readFileSync(CONNECTOR, 'utf8'); });
+
+    var BI_START = 'var bulkInsert = function(rec, options) {';
+    var BI_END   = '    /**\n     * getCluster';
+
+    /** Extract bulkInsert's real body, anchored on unique text (never line numbers). */
+    function bulkInsertBody() {
+        var a = src.indexOf(BI_START);
+        assert.ok(a > -1, 'bulkInsert definition must be found');
+        assert.equal(src.indexOf(BI_START, a + 1), -1, 'the anchor must be unique');
+        var b = src.indexOf(BI_END, a);
+        assert.ok(b > a, 'the getCluster terminator must follow bulkInsert');
+        var body = src.slice(a + BI_START.length, b);
+        return body.slice(0, body.lastIndexOf('}'));
+    }
+
+    /** Build a callable from the extracted bytes, stubbing every free identifier. */
+    function build(body, opts) {
+        opts = opts || {};
+        var queried = { n: 0 };
+        var stubs = {
+            merge          : function(o, q) { return Object.assign({}, o, q); },
+            envIsDev       : !!opts.dev,
+            paramRedact    : { captureValues: function() { return true; } },
+            infos          : { bundle: 'test' },
+            resolveCluster : function() {
+                return { query: function() { queried.n++; return { then: function() {} }; } };
+            },
+            console        : { debug: function() {}, error: function() {}, warn: function() {} }
+        };
+        var keys = Object.keys(stubs);
+        var fn = new Function(keys.concat(['rec', 'options']).join(','), body);
+        var ent = {
+            getConnection : function() { return {}; },
+            _scope : 'sc', _collection : 'co', database : 'db', name : 'Ent'
+        };
+        return {
+            call    : function(rec, options) {
+                return fn.apply(ent, keys.map(function(k) { return stubs[k]; }).concat([rec, options]));
+            },
+            queried : queried
+        };
+    }
+
+    it('§14a — the extraction really grabbed bulkInsert (anti-vacuity)', function() {
+        var body = bulkInsertBody();
+        assert.ok(body.length > 5000, 'body should be substantial, got ' + body.length);
+        assert.ok(body.indexOf('var _settle = function') > -1, 'must contain _settle');
+        assert.ok(body.indexOf('_promise.onComplete = function') > -1, 'must contain the shim');
+        assert.ok(body.indexOf('`rec` argument cannot be left') > -1, 'must contain the rec validation');
+        assert.ok(body.indexOf('RETURNING ') > -1, 'must contain the INSERT statement build');
+    });
+
+    it('§14b — the outer catch settles the promise and returns it', function() {
+        var body = bulkInsertBody();
+        // Comments are stripped so the fix's own explanatory text (which names the
+        // defect) cannot satisfy a pin about the CODE.
+        var code = body.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+        assert.ok(/\}\s*catch\s*\(\s*err\s*\)\s*\{[\s\S]{0,400}?_settle\s*\(\s*err\s*\)/.test(code),
+            'the outer catch must call _settle(err)');
+        assert.ok(/\}\s*catch\s*\(\s*err\s*\)\s*\{[\s\S]{0,400}?return\s+_promise/.test(code),
+            'the outer catch must return _promise');
+        // anti-vacuity: the strip must not have emptied the corpus
+        assert.ok(code.indexOf('_settle') > -1, 'control: _settle survives the comment strip');
+    });
+
+    it('§14c — the promise plumbing is built BEFORE the try (so the catch can use it)', function() {
+        var body = bulkInsertBody();
+        var tryAt   = body.indexOf('        try {');
+        var promAt  = body.indexOf('var _promise = new Promise');
+        var settleAt= body.indexOf('var _settle = function');
+        var shimAt  = body.indexOf('_promise.onComplete = function');
+        assert.ok(tryAt > -1 && promAt > -1 && settleAt > -1 && shimAt > -1, 'all four anchors must exist');
+        assert.ok(promAt   < tryAt, '_promise must be constructed before the try');
+        assert.ok(settleAt < tryAt, '_settle must be defined before the try');
+        assert.ok(shimAt   < tryAt, 'the .onComplete shim must be attached before the try');
+    });
+
+    it('§14d — POSITIVE CONTROL: a valid rec still returns a thenable and reaches the driver', function() {
+        var h = build(bulkInsertBody());
+        var out = h.call({ 'doc-1': { values: { a: 1 } } });
+        assert.ok(out && typeof out.then === 'function', 'valid rec must return a thenable');
+        assert.equal(typeof out.onComplete, 'function', 'and must carry the .onComplete shim');
+        assert.equal(h.queried.n, 1, 'and must reach resolveCluster(conn).query() exactly once');
+    });
+
+    it('§14e — a prologue throw is delivered to BOTH documented call shapes', async function() {
+        var cases = [
+            [ 'rec undefined',        undefined,      '`rec` argument cannot be left' ],
+            [ 'record без .values',   { d: {} },      '.values not found' ]
+        ];
+        for (var i = 0; i < cases.length; i++) {
+            var label = cases[i][0], rec = cases[i][1], needle = cases[i][2];
+            var h = build(bulkInsertBody());
+            var out = h.call(rec);
+
+            assert.notEqual(out, undefined, label + ': must not return undefined');
+            assert.equal(typeof out.onComplete, 'function', label + ': must carry .onComplete');
+            assert.equal(h.queried.n, 0, label + ': must not reach the driver');
+
+            // shape 1 — .onComplete(cb) receives the error
+            var got = await new Promise(function(resolve) {
+                out.onComplete(function(err) { resolve(err); });
+                setTimeout(function() { resolve(new Error('NOT DELIVERED')); }, 50);
+            });
+            assert.ok(got instanceof Error, label + ': .onComplete must receive an Error');
+            assert.ok(got.message.indexOf(needle) > -1,
+                label + ': .onComplete must receive the REAL validation error, got: ' + got.message);
+
+            // shape 2 — await rejects
+            var rejected = false;
+            try { await out; } catch (e) { rejected = true; }
+            assert.ok(rejected, label + ': the await form must reject, not resolve with undefined');
+        }
+    });
+
+    it('§14f — the QUERY path does not share the shape (its promise is in an attached method)', function() {
+        var attachAt = src.indexOf('entities[entityName].prototype[name] = function() {');
+        var qPromAt  = src.indexOf('var _promise = new Promise', attachAt);
+        assert.ok(attachAt > -1, 'the prototype attachment site must exist');
+        assert.ok(qPromAt > attachAt,
+            'the query-path promise must sit INSIDE the attached method — its enclosing try has ' +
+            'already exited by call time, so a throw reaches the caller and #B460 does not apply there');
+    });
+});
+
+// ─── 15 — #B461: a failed entity registration names itself ───────────────────
+/**
+ * `readSource()` guards ~770 lines of entity-class construction and `.sql`-derived
+ * method attachment (`inherits(...)`, the prototype stamping, the per-method
+ * attachment) under ONE try, whose catch was a bare `console.error(err.stack)`.
+ * None of readSource()'s three call sites captures a result or takes an error
+ * argument, so a throw there left the entity partially built — or absent — with
+ * nothing in the log naming WHICH entity or WHICH .sql file caused it. The first
+ * symptom is a missing method at request time, arbitrarily far from the cause.
+ *
+ * Scope note: this pins the DIAGNOSTIC only. Boot still continues past a failed
+ * registration — whether an unbuildable entity should be fatal is a separate,
+ * consumer-visible decision and is deliberately NOT made here.
+ *
+ * Distinct from #B460, which was a per-call return-contract defect in bulkInsert.
+ */
+describe('15 - #B461: entity registration failures are named (shipped bytes)', function() {
+
+    var src;
+    before(function() { src = fs.readFileSync(CONNECTOR, 'utf8'); });
+
+    /** Isolate readSource()'s OUTER catch body — the one closing the ~770-line try. */
+    function outerCatchBody() {
+        var rs = src.indexOf('var readSource = function (entities, entityName, source, altMethodName) {');
+        assert.ok(rs > -1, 'readSource must be found');
+        var marker = '\n            } catch (err) {\n';
+        var c = src.indexOf(marker, rs);
+        assert.ok(c > rs, 'readSource outer catch must be found');
+        var end = src.indexOf('\n            }\n', c + marker.length);
+        assert.ok(end > c, 'the catch must terminate');
+        return src.slice(c + marker.length, end);
+    }
+
+    it('§15a — the extraction really grabbed readSource\'s outer catch (anti-vacuity)', function() {
+        var body = outerCatchBody();
+        assert.ok(body.indexOf('console.error') > -1, 'the catch must log');
+        assert.ok(body.length < 2000, 'and must be a catch body, not half the file (' + body.length + ')');
+    });
+
+    it('§15b — the catch names the entity and the source file', function() {
+        // Comments stripped so the fix's own explanatory text cannot satisfy a pin
+        // about the CODE.
+        var code = outerCatchBody()
+            .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+        assert.ok(code.indexOf('entityName') > -1, 'must name the entity in the diagnostic');
+        assert.ok(code.indexOf('source')     > -1, 'must name the .sql source in the diagnostic');
+        assert.ok(code.indexOf('console.error') > -1,
+            'control: console.error survives the comment strip');
+    });
+
+    it('§15c — the original err.stack line is PRESERVED (observability not reduced)', function() {
+        var code = outerCatchBody()
+            .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+        assert.ok(/console\.error\(\s*err\.stack\s*\)/.test(code),
+            'the pre-existing err.stack log must still be emitted, not replaced');
+    });
+
+    it('§15d — executed: the emitted diagnostic carries entity, file and cause', function() {
+        var lines = [];
+        var fn = new Function('console', 'entityName', 'source', 'name', 'err', outerCatchBody());
+        fn({ error: function(m) { lines.push(String(m)); } },
+           'invoice', '/p/b/models/entities/invoice/findAll.sql', 'findAll',
+           Object.assign(new Error('boom from inherits'), { stack: 'STACK-MARKER' }));
+
+        var joined = lines.join('\n');
+        assert.ok(joined.indexOf('invoice')   > -1, 'must name the entity, got: ' + joined);
+        assert.ok(joined.indexOf('findAll.sql') > -1, 'must name the .sql source, got: ' + joined);
+        assert.ok(joined.indexOf('boom from inherits') > -1, 'must carry the cause message');
+        assert.ok(joined.indexOf('STACK-MARKER') > -1, 'must still emit the original stack');
+    });
+
+    it('§15e — CONTROL: a different catch in this file does NOT satisfy the pin', function() {
+        // The @options parse catch is a deliberately-scoped warn. If §15b's needles
+        // matched it too, they would be asserting nothing specific to readSource.
+        var i = src.indexOf('} catch (parseErr) {');
+        assert.ok(i > -1, 'the @options catch must exist (control anchor)');
+        var other = src.slice(i, i + 300);
+        assert.equal(other.indexOf('entityName'), -1,
+            'control: the @options catch must NOT mention entityName — otherwise §15b is vacuous');
+    });
+});
+
+// ─── 16 — #B204: the reconnect classifier must not throw when the SDK exports no `Error` ─
+/**
+ * `lib/connector.v4.js` / `lib/connector.v3.js` — the `gina.onError` reconnect
+ * classifier tests `err instanceof couchbase.Error`, but no supported couchnode
+ * (3.x/4.x) exports a bare `Error` class (verified on a real 4.1.3 `dist/errors.js`:
+ * `Error` undefined, `CouchbaseError` present among 82 error classes). The
+ * `instanceof` therefore throws `TypeError: Right-hand side of 'instanceof' is not
+ * an object` — and because the SDK-class arm is evaluated FIRST, the
+ * shutdown-bucket message arm (which needs no SDK class) was unreachable too, so
+ * the classifier could not classify anything by any route.
+ *
+ * Fix shape (#B204, deliberately NOT an activation): guard each `instanceof`
+ * operand on the class existing. Under every supported SDK the guarded arms stay
+ * false (modern errors carry no numeric `.code`), the message arm becomes
+ * evaluable as its author intended, and nothing that never ran begins running —
+ * the reconnect machinery's reachability on modern SDKs is unchanged in practice
+ * (the SDK-2 message string greps 0 in the 4.1.3 dist JS, `timeout` firing as
+ * control).
+ *
+ * Dispatch note pinned nowhere else: these listeners only ever fire under 4-arg
+ * (Express-engine) error invocation; isaac's dispatchers invoke middlewares
+ * 3-arg, so the arity shim sets `error = false` and the emit never happens.
+ */
+describe('16 - #B204: reconnect classifier is guarded (shipped bytes, both files)', function() {
+
+    var FILES = {
+        v4: path.join(FW, 'core/connectors/couchbase/lib/connector.v4.js'),
+        v3: path.join(FW, 'core/connectors/couchbase/lib/connector.v3.js')
+    };
+    var srcs = {};
+    before(function() {
+        for (var k in FILES) { srcs[k] = fs.readFileSync(FILES[k], 'utf8'); }
+    });
+
+    /** Extract the primary classifier condition (the code-16 `if`). */
+    function cond16(src) {
+        var i = src.indexOf('err instanceof couchbase.Error && err.code == 16');
+        // pre-fix the instanceof leads; post-fix a guard precedes it on the same
+        // expression — anchor on the stable inner text, then widen to the `if (`.
+        assert.ok(i > -1, 'code-16 arm must be found');
+        var open = src.lastIndexOf('if (', i);
+        var close = src.indexOf(') {', i);
+        assert.ok(open > -1 && close > open, 'the if(...) must bracket the arm');
+        return src.slice(open + 'if ('.length, close);
+    }
+
+    /** Extract the else-if (code-23) condition — skip the commented twin. */
+    function cond23(src) {
+        var i = src.indexOf('} else if (');
+        while (i > -1 && src.slice(i, src.indexOf(') {', i)).indexOf('err.code == 23') === -1) {
+            i = src.indexOf('} else if (', i + 1);
+        }
+        assert.ok(i > -1, 'code-23 else-if must be found');
+        return src.slice(i + '} else if ('.length, src.indexOf(') {', i));
+    }
+
+    function drive(condSrc, couchbase, err) {
+        var fn = new Function('couchbase', 'err', 'self', 'return (' + condSrc + ');');
+        return fn(couchbase, err, { reconnected: false, reconnecting: false });
+    }
+
+    it('§16a — extraction grabbed real conditions in BOTH files (anti-vacuity)', function() {
+        for (var k in srcs) {
+            var c16 = cond16(srcs[k]), c23 = cond23(srcs[k]);
+            assert.ok(c16.indexOf('instanceof') > -1, k + ': code-16 arm carries the instanceof');
+            assert.ok(c16.indexOf('shutdown bucket') > -1, k + ': message arm is in the same condition');
+            assert.ok(c23.indexOf('err.code == 23') > -1, k + ': code-23 arm found (not the comment)');
+        }
+    });
+
+    it('§16b — SOURCE PIN: all four live sites carry the class-existence guard', function() {
+        for (var k in srcs) {
+            var code = srcs[k].replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+            var m = code.match(/typeof\s*\(\s*couchbase\.Error\s*\)\s*==+\s*'function'\s*&&\s*err instanceof couchbase\.Error/g) || [];
+            assert.equal(m.length, 2, k + ': both live instanceof sites must be guarded, found ' + m.length);
+            // anti-vacuity for the strip
+            assert.ok(code.indexOf('instanceof couchbase.Error') > -1, k + ': control — the sites survive the strip');
+        }
+    });
+
+    it('§16c — executed: a no-`Error` SDK no longer throws, and the message arm is evaluable', function() {
+        var SDK = { CouchbaseError: class CouchbaseError extends Error {} }; // real 4.1.3 shape
+        for (var k in srcs) {
+            var c = cond16(srcs[k]);
+            assert.equal(drive(c, SDK, Object.assign(new Error('net'), { code: 16 })), false,
+                k + ': code-16 plain error classifies false (arm guarded, not matched)');
+            assert.equal(drive(c, SDK, new Error('cannot perform operations on a shutdown bucket')), true,
+                k + ': the message arm is reachable, as its author intended');
+        }
+    });
+
+    it('§16d — CONTROL: an SDK that DOES export `Error` keeps SDK-2 semantics (green pre- and post-fix)', function() {
+        var SDK = { Error: class CbError extends Error {} };
+        for (var k in srcs) {
+            assert.equal(drive(cond16(srcs[k]), SDK,
+                Object.assign(new SDK.Error('net'), { code: 16 })), true, k + ': code 16 still classifies');
+            assert.equal(drive(cond23(srcs[k]), SDK,
+                Object.assign(new SDK.Error('t/o'), { code: 23 })), true, k + ': code 23 still classifies');
+        }
+    });
+
+    it('§16e — executed: the code-23 else-if no longer throws on a no-`Error` SDK', function() {
+        var SDK = { CouchbaseError: class CouchbaseError extends Error {} };
+        for (var k in srcs) {
+            assert.equal(drive(cond23(srcs[k]), SDK, Object.assign(new Error('t/o'), { code: 23 })), false,
+                k + ': guarded arm evaluates false instead of throwing');
+        }
+    });
+});
