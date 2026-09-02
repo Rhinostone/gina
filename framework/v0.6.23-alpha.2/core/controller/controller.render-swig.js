@@ -12,6 +12,7 @@ const cache           = new lib.Cache();
 const renderCache     = new lib.RenderCache();
 var statusCodes       = requireJSON( _( getPath('gina').core + '/status.codes') );
 // Inspector secret redaction (dev-mode only — never touches the actual response body)
+var inlineScript      = require('./inline-script');
 var inspectorRedact   = require('lib/inspector-redact');
 // #INS10 follow-up — prod-window HTML egress (no-HTML, render-json-style emit).
 var emitInspectorWindowData = require('./inspector-window-emit');
@@ -1157,7 +1158,7 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                         var _cacheWeightBytes = Buffer.byteLength(htmlContent, 'utf8');
                         var _cacheServerMsFinal = _cacheRespEnd - local._timeline.requestStart;
                         var _cacheFlowPatch = (_cacheLateEntries.length > 0)
-                            ? 'if(u&&u.flow){var _e=u.flow.entries,_p=' + JSON.stringify(_cacheLateEntries) + ';for(var _i=0;_i<_p.length;_i++){_e.push(_p[_i])}}'
+                            ? 'if(u&&u.flow){var _e=u.flow.entries,_p=' + inlineScript.safeInlineJson(_cacheLateEntries) + ';for(var _i=0;_i<_p.length;_i++){_e.push(_p[_i])}}'
                             : '';
                         var _cachePatchScript = '<script' + _cspNonceAttr + '>(function(d){'
                             + 'var u=d&&d.user,g=d&&d.gina;'
@@ -1510,9 +1511,12 @@ module.exports = async function render(userData, displayInspector, errOptions, d
             });
 
             var __gdScript = '<script' + _cspNonceTplAttr + '>window.__ginaData = '
-                + JSON.stringify(__gdPayload)
-                    .replace(/<\/script>/gi, '<\\/script>')
-                    .replace(/<!--/g, '<\\!--')
+                // #B451 - the previous blocklist here matched only the literal
+                // '</' + 'script>' and '<!--'. It was bypassable: a trailing space
+                // or slash after the tag name also closes the block per the HTML5
+                // script-data-end-tag-name state, and both injected when measured.
+                // The helper escapes '<' itself, so no terminator spelling survives.
+                + inlineScript.safeInlineJson(__gdPayload)
                 + ';</script>\n';
 
             // Expose last snapshot for engine.io push and /_gina/agent SSE
@@ -1528,7 +1532,7 @@ module.exports = async function render(userData, displayInspector, errOptions, d
             var __logsScript = '<script' + _cspNonceTplAttr + '>'
                 + 'window.__ginaLogs = window.__ginaLogs || [];'
                 + '(function(w){'
-                + 'var _c=w.console,_l=w.__ginaLogs,_b="' + (__gdUser.environment && __gdUser.environment.bundle || '') + '";'
+                + 'var _c=w.console,_l=w.__ginaLogs,_b=' + inlineScript.safeInlineString(__gdUser.environment && __gdUser.environment.bundle || '') + ';'
                 + '["log","info","warn","error","debug"].forEach(function(lvl){'
                 + 'var orig=_c[lvl].bind(_c);'
                 + '_c[lvl]=function(){'
@@ -1980,7 +1984,7 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                         var _weightBytesFinal = Buffer.byteLength(htmlContent, 'utf8');
                         var _serverMsFinal    = _respEnd - local._timeline.requestStart;
                         var _flowPatch = (_lateEntries.length > 0)
-                            ? 'if(u&&u.flow){var _e=u.flow.entries,_p=' + JSON.stringify(_lateEntries) + ';for(var _i=0;_i<_p.length;_i++){_e.push(_p[_i])}}'
+                            ? 'if(u&&u.flow){var _e=u.flow.entries,_p=' + inlineScript.safeInlineJson(_lateEntries) + ';for(var _i=0;_i<_p.length;_i++){_e.push(_p[_i])}}'
                             : '';
                         var _patchScript = '<script' + _cspNonceAttr + '>(function(d){'
                             + 'var u=d&&d.user,g=d&&d.gina;'

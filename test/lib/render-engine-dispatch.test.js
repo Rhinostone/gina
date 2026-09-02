@@ -1540,9 +1540,19 @@ describe('05b - Inspector __gdPayload injection', function () {
         assert.match(RENDER_NJ_SRC, /replacement:\s*_redactConf\.replacement/);
     });
 
-    it('escapes </script> and <!-- in the serialised JSON', function () {
-        assert.match(RENDER_NJ_SRC, /\.replace\(\/<\\\/script>\/gi,\s*['"]<\\\\\/script>['"]\)/);
-        assert.match(RENDER_NJ_SRC, /\.replace\(\/<!--\/g,\s*['"]<\\\\!--['"]\)/);
+    it('escapes script terminators via the shared inline-script helper', function () {
+        // #B451 - this pin previously required the literal `</script>` + `<!--`
+        // blocklist. That blocklist was BYPASSABLE (`</script >`, `</script/>` also
+        // close the block per the HTML5 script-data-end-tag-name state, both measured
+        // as injecting), so it was replaced by core/controller/inline-script.js, which
+        // escapes `<` itself. Pinning the delegation, plus a negative arm so the
+        // vulnerable form cannot be reintroduced.
+        assert.match(RENDER_NJ_SRC, /require\(['"]\.\/inline-script['"]\)/);
+        assert.match(RENDER_NJ_SRC, /_safeJson\s*=\s*inlineScript\.safeInlineJson\(__gdPayload\)/);
+        assert.ok(
+            !(new RegExp("\\.replace\\(/<\\\\/" + "script>/gi")).test(RENDER_NJ_SRC),
+            'the bypassable </script> blocklist was reintroduced'
+        );
     });
 
     it('constructs window.__ginaData script with the escaped JSON', function () {

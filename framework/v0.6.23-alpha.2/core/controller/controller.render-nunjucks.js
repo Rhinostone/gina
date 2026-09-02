@@ -122,6 +122,7 @@
 
 var fs              = require('fs');
 var nodePath        = require('path');
+var inlineScript      = require('./inline-script');
 var inspectorRedact = require('lib/inspector-redact');
 // #INS10 follow-up — prod-window HTML egress (no-HTML, render-json-style emit).
 var emitInspectorWindowData = require('./inspector-window-emit');
@@ -450,16 +451,16 @@ function injectInspectorScripts(html, data, self, local, displayInspector) {
     // `</script>` and `<!--` must be escaped inside JSON-serialised script
     // content so the browser's HTML parser doesn't terminate the tag early
     // or start an HTML comment. Matches render-swig.js:1096-1097.
-    var _safeJson = JSON.stringify(__gdPayload)
-        .replace(/<\/script>/gi, '<\\/script>')
-        .replace(/<!--/g, '<\\!--');
+    // #B451 - see controller.render-swig.js: the blocklist this replaces was
+    // bypassable by a trailing space or slash after the script tag name.
+    var _safeJson = inlineScript.safeInlineJson(__gdPayload);
 
     var __gdScript   = '<script' + _cspNonceAttr + '>window.__ginaData = ' + _safeJson + ';</script>\n';
     var _bundleName  = (__gdUser.environment && __gdUser.environment.bundle) || '';
     var __logsScript = '<script' + _cspNonceAttr + '>'
         + 'window.__ginaLogs = window.__ginaLogs || [];'
         + '(function(w){'
-        + 'var _c=w.console,_l=w.__ginaLogs,_b=' + JSON.stringify(_bundleName) + ';'
+        + 'var _c=w.console,_l=w.__ginaLogs,_b=' + inlineScript.safeInlineString(_bundleName) + ';'
         + '["log","info","warn","error","debug"].forEach(function(lvl){'
         + 'var orig=_c[lvl].bind(_c);'
         + '_c[lvl]=function(){'
@@ -1437,7 +1438,7 @@ module.exports = async function renderNunjucks(userData, displayInspector, errOp
                 ? Date.now() - local._timeline.requestStart
                 : null;
             var _njFlowPatch = (_njLateEntries.length > 0)
-                ? 'if(u&&u.flow){var _e=u.flow.entries,_p=' + JSON.stringify(_njLateEntries) + ';for(var _i=0;_i<_p.length;_i++){_e.push(_p[_i])}}'
+                ? 'if(u&&u.flow){var _e=u.flow.entries,_p=' + inlineScript.safeInlineJson(_njLateEntries) + ';for(var _i=0;_i<_p.length;_i++){_e.push(_p[_i])}}'
                 : '';
             var _njPatchScript = '<script' + _cspNonceAttr + '>(function(d){'
                 + 'var u=d&&d.user,g=d&&d.gina;'
