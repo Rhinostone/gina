@@ -1301,3 +1301,85 @@ describe('14 - #B460: bulkInsert settles its outer catch (shipped bytes)', funct
             'already exited by call time, so a throw reaches the caller and #B460 does not apply there');
     });
 });
+
+// ─── 15 — #B461: a failed entity registration names itself ───────────────────
+/**
+ * `readSource()` guards ~770 lines of entity-class construction and `.sql`-derived
+ * method attachment (`inherits(...)`, the prototype stamping, the per-method
+ * attachment) under ONE try, whose catch was a bare `console.error(err.stack)`.
+ * None of readSource()'s three call sites captures a result or takes an error
+ * argument, so a throw there left the entity partially built — or absent — with
+ * nothing in the log naming WHICH entity or WHICH .sql file caused it. The first
+ * symptom is a missing method at request time, arbitrarily far from the cause.
+ *
+ * Scope note: this pins the DIAGNOSTIC only. Boot still continues past a failed
+ * registration — whether an unbuildable entity should be fatal is a separate,
+ * consumer-visible decision and is deliberately NOT made here.
+ *
+ * Distinct from #B460, which was a per-call return-contract defect in bulkInsert.
+ */
+describe('15 - #B461: entity registration failures are named (shipped bytes)', function() {
+
+    var src;
+    before(function() { src = fs.readFileSync(CONNECTOR, 'utf8'); });
+
+    /** Isolate readSource()'s OUTER catch body — the one closing the ~770-line try. */
+    function outerCatchBody() {
+        var rs = src.indexOf('var readSource = function (entities, entityName, source, altMethodName) {');
+        assert.ok(rs > -1, 'readSource must be found');
+        var marker = '\n            } catch (err) {\n';
+        var c = src.indexOf(marker, rs);
+        assert.ok(c > rs, 'readSource outer catch must be found');
+        var end = src.indexOf('\n            }\n', c + marker.length);
+        assert.ok(end > c, 'the catch must terminate');
+        return src.slice(c + marker.length, end);
+    }
+
+    it('§15a — the extraction really grabbed readSource\'s outer catch (anti-vacuity)', function() {
+        var body = outerCatchBody();
+        assert.ok(body.indexOf('console.error') > -1, 'the catch must log');
+        assert.ok(body.length < 2000, 'and must be a catch body, not half the file (' + body.length + ')');
+    });
+
+    it('§15b — the catch names the entity and the source file', function() {
+        // Comments stripped so the fix's own explanatory text cannot satisfy a pin
+        // about the CODE.
+        var code = outerCatchBody()
+            .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+        assert.ok(code.indexOf('entityName') > -1, 'must name the entity in the diagnostic');
+        assert.ok(code.indexOf('source')     > -1, 'must name the .sql source in the diagnostic');
+        assert.ok(code.indexOf('console.error') > -1,
+            'control: console.error survives the comment strip');
+    });
+
+    it('§15c — the original err.stack line is PRESERVED (observability not reduced)', function() {
+        var code = outerCatchBody()
+            .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+        assert.ok(/console\.error\(\s*err\.stack\s*\)/.test(code),
+            'the pre-existing err.stack log must still be emitted, not replaced');
+    });
+
+    it('§15d — executed: the emitted diagnostic carries entity, file and cause', function() {
+        var lines = [];
+        var fn = new Function('console', 'entityName', 'source', 'name', 'err', outerCatchBody());
+        fn({ error: function(m) { lines.push(String(m)); } },
+           'invoice', '/p/b/models/entities/invoice/findAll.sql', 'findAll',
+           Object.assign(new Error('boom from inherits'), { stack: 'STACK-MARKER' }));
+
+        var joined = lines.join('\n');
+        assert.ok(joined.indexOf('invoice')   > -1, 'must name the entity, got: ' + joined);
+        assert.ok(joined.indexOf('findAll.sql') > -1, 'must name the .sql source, got: ' + joined);
+        assert.ok(joined.indexOf('boom from inherits') > -1, 'must carry the cause message');
+        assert.ok(joined.indexOf('STACK-MARKER') > -1, 'must still emit the original stack');
+    });
+
+    it('§15e — CONTROL: a different catch in this file does NOT satisfy the pin', function() {
+        // The @options parse catch is a deliberately-scoped warn. If §15b's needles
+        // matched it too, they would be asserting nothing specific to readSource.
+        var i = src.indexOf('} catch (parseErr) {');
+        assert.ok(i > -1, 'the @options catch must exist (control anchor)');
+        var other = src.slice(i, i + 300);
+        assert.equal(other.indexOf('entityName'), -1,
+            'control: the @options catch must NOT mention entityName — otherwise §15b is vacuous');
+    });
+});

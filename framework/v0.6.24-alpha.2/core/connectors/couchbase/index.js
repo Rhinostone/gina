@@ -1364,6 +1364,25 @@ function Couchbase(conn, infos) {
                 }
 
             } catch (err) {
+                // #B461 — say WHICH entity failed to register, and from which file.
+                // This catch guards the whole entity-class construction and .sql method
+                // attachment above it (~770 lines: inherits(), the prototype stamping,
+                // the per-method attachment). None of readSource()'s three call sites
+                // captures a result or takes an error argument, so a throw here used to
+                // leave the entity partially built — or absent — with nothing but a bare
+                // stack in the log: the first symptom a consumer saw was a missing method
+                // at request time, arbitrarily far from the cause.
+                //
+                // Boot deliberately still CONTINUES. Whether an unbuildable entity should
+                // be fatal is a separate, consumer-visible decision (a project booting
+                // today through a swallowed error would start failing to boot), so this
+                // change is diagnostic only and does not alter control flow.
+                console.error('[couchbase] entity `' + entityName + '` failed to register from `'
+                    + source + '`'
+                    + ( name ? ' while attaching method `' + name + '`' : '' )
+                    + ' — it may be missing that method or be incompletely built, and the first '
+                    + 'symptom is usually a missing method at request time. Cause: '
+                    + ( err && err.message ? err.message : String(err) ));
                 console.error(err.stack);
             }
         }
