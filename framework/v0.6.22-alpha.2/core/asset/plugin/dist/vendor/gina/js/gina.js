@@ -14218,19 +14218,51 @@ function ValidatorPlugin(rules, data, formId, culture) {
                         }
 
 
-                    } /**else if ( xhr.readyState == 4 && xhr.status == 0 ) { // unknown error
-                        // Consider also the request timeout
-                        // Modern browser return readyState=4 and status=0 if too much time passes before the server response.
-                        result = { 'status': 408, 'message': 'XMLHttpRequest Exception: unkown error' };
+                    } else if ( xhr.readyState == 4 && xhr.status === 0 ) {
+                        // #B447 — TRANSPORT-layer failure: network down, connection
+                        // refused, DNS gone, the server process restarting. XHR settles
+                        // at readyState 4 with status 0, which fails BOTH `/^2/.test()`
+                        // and `status != 0` above. This arm existed but was commented
+                        // out and there was no trailing `else`, so neither `error.<id>`
+                        // nor `error.<id>.hform` was emitted — and `error.<id>.hform` is
+                        // exactly what `data-gina-form-event-on-submit-error` registers
+                        // (see listenToXhrEvents), so a consumer's declared submit-error
+                        // handler was silent for the failure it most needs to cover.
+                        // The `loadend` fail-safe still released the trigger, so the form
+                        // spun, re-enabled, and said nothing.
+                        //
+                        // Shape mirrors the sibling `xhr.ontimeout` handler below rather
+                        // than the old commented block: same 408 + `error` key (the
+                        // codebase convention for a client-side XHR failure, also used by
+                        // utils/events.js), same #B175
+                        // removeAttribute, same onUpload branch. 408 keeps range-checking
+                        // handlers (`status >= 400`) working; `transportError` is what
+                        // distinguishes this from a genuine timeout, which matters because
+                        // `ontimeout` emits a bare 408 for a different failure.
+                        //
+                        // The stash goes to eventData.ERROR, not .onerror: the three
+                        // sibling arms in this same readyState chain all write .error,
+                        // it is what the readers actually look at (utils/events.js and
+                        // the validate handler), and it is the key the pre-validation
+                        // cleanup deletes. The on* keys the ontimeout/onprogress
+                        // handlers use are written but never read.
+                        result = {
+                            'status'        : 408,
+                            'transportError': true,
+                            'error'         : 'Transport failure: the request did not reach the server'
+                        };
+
+                        $form.eventData.error = result;
+                        // #B175 — remove, never setAttribute(..., false)
+                        $form.target.removeAttribute('data-gina-form-loading');
+
                         XHRData = result;
                         // update toolbar
                         if ( gina && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar && XHRData ) {
                             try {
-                                // don't refresh for html datas
                                 if ( envIsDev && typeof(XHRData) != 'undefined' && /\/html/.test(contentType) ) {
                                     window.ginaToolbar.update("data-xhr", XHRData);
                                 }
-
                             } catch (err) {
                                 throw err
                             }
@@ -14238,16 +14270,16 @@ function ValidatorPlugin(rules, data, formId, culture) {
 
                         // intercept upload
                         if ( /^gina\-upload/i.test(id) ) {
-                            result.message = 'XMLHttpRequest Exception: trying to render an unknwon file.'
                             onUpload(gina, $target, 'error', id, result);
                         }
+
                         triggerEvent(gina, $target, 'error.' + id, result);
 
                         if (hFormIsRequired)
                             triggerEvent(gina, $target, 'error.' + id + '.hform', result);
 
                         return;
-                    }*/
+                    }
                 }
 
             };
