@@ -1049,6 +1049,19 @@ function ServerEngineClass(options) {
             if (!options.hidePoweredBy) {
                 headers['X-Powered-By'] = 'Gina/' + GINA_VERSION;
             }
+            // #OW1 — engine-agnostic security headers (OWASP A02), applied at the
+            // SAME writeHead sites this helper already backs. writeHead commits
+            // headers directly, bypassing setHeader, so the core/server.js twin
+            // cannot reach them — this is the isaac half of ONE shared emitter
+            // (lib/security-headers-emitter), not a drifting copy.
+            // Every call site of this helper is a /_gina/* endpoint (measured
+            // 29/29), and those are deliberately cross-origin — the metrics /
+            // health / SSE handlers emit `access-control-allow-origin: *` and the
+            // Inspector's cross-origin GET/SSE channels are a documented design —
+            // so the cross-origin-isolating headers (coop/corp) are exempted here
+            // unconditionally. Signature deliberately unchanged: no call site
+            // needs editing.
+            headers = lib.securityHeadersEmitter.applyToGinaEndpointHeaders(options.securityHeaders, headers);
             return headers;
         };
 

@@ -119,6 +119,49 @@ var _mintErrorRef = function(supplied) {
 // the logger's own failure modes — which also means it bypasses log redaction
 // (#B433): keep messages free of URLs and credentials. Format changes must
 // preserve `] [debug  ][gina:` — test/core/debug-log.test.js pins the contract.
+/**
+ * #OW2 — parse a byte-size setting (`"64MB"`, `"512KB"`, `"2048B"`) into bytes.
+ *
+ * Deliberately SEPARATE from the multipart `parseSize` helper inside the upload
+ * branch, which this arc does not touch: that helper sits on the upload path and
+ * carries its own source pins, and refactoring a working path as a side-effect of
+ * adding a body cap is the "while I'm here" shape that produced the #B446
+ * follow-up regression. The two agree by construction on every unit and are pinned
+ * against each other in `test/core/body-size-cap.test.js` so they cannot drift;
+ * unifying them belongs to a future upload/merge arc (#B457).
+ *
+ * Bare numbers are MB for back-compat with the multipart convention.
+ *
+ * @param {string|number} value - e.g. `"64MB"`, `"512KB"`, `2` (= 2MB)
+ * @returns {number} bytes, or NaN when unparseable
+ * @private
+ * @example
+ * parseByteSize('64MB');  // 67108864
+ * parseByteSize('512KB'); // 524288
+ * parseByteSize(2);       // 2097152
+ */
+var parseByteSize = function(value) {
+    if ( typeof(value) == 'number' ) { return value * 1024 * 1024; } // bare number = MB
+    if ( typeof(value) != 'string' ) { return NaN; }
+    var m = value.trim().match(/^([0-9]*\.?[0-9]+)\s*(b|kb|k|mb|m|gb|g)?$/i);
+    if ( !m ) { return NaN; }
+    var n = parseFloat(m[1]);
+    switch ( (m[2] || 'mb').toLowerCase() ) {
+        case 'b':
+            return n;
+        case 'k':
+        case 'kb':
+            return n * 1024;
+        case 'g':
+        case 'gb':
+            return n * 1024 * 1024 * 1024;
+        case 'm':
+        case 'mb':
+        default:
+            return n * 1024 * 1024;
+    }
+};
+
 var _isDebugLog = function() {
     return process.env.LOG_LEVEL === 'debug' || process.env.LOG_LEVEL === 'trace';
 };
@@ -4380,6 +4423,23 @@ function Server(options) {
                 response.setHeader('X-Powered-By', 'Gina/'+ GINA_VERSION );
             }
 
+            // #OW1 — engine-agnostic security headers (OWASP A02). Placed beside
+            // the hidePoweredBy gate because it needs the SAME coverage: routed
+            // responses, static-asset serves, static/traversal 404s and framework
+            // error pages, none of which traverse the express middleware chain —
+            // and on the default isaac engine NOTHING traverses it (measured: the
+            // only consumer of server._expressMiddlewares is the WS session
+            // binder, name-filtered, against an inert response). The isaac
+            // writeHead sites are covered by the twin call inside
+            // _setPoweredByHeader(). First-writer-wins inside the emitter, so an
+            // explicitly mounted #HDR plugin or an env.json
+            // `server.response.header` entry always wins.
+            lib.securityHeadersEmitter.applyToResponse(
+                self.conf[self.appName][self.env].server.securityHeaders,
+                request,
+                response
+            );
+
             // MS1 — echo the always-on correlation id on every response so a
             // caller / LB / APM can read it back (the read-side of X-Request-Id
             // propagation). Ungated (independent of log format) and guarded
@@ -6246,7 +6306,58 @@ function Server(options) {
                 } else {
 
 
+                    // #OW2 — bound the non-multipart body accumulation (OWASP A10).
+                    // The accumulator below is the ONLY unbounded growth on the request
+                    // path: multipart is capped by busboy + maxFieldsSize, but a plain
+                    // JSON/urlencoded body grew until the process died. Counting the RAW
+                    // chunk bytes (not the decoded string length) is what a cap has to
+                    // measure — a multi-byte UTF-8 body is larger on the wire than its
+                    // string length suggests.
+                    //
+                    // Two thresholds, deliberately:
+                    //  - `server.maxBodySize` ENFORCES (413 + destroy). Defaults to a
+                    //    permissive 64MB: the ceiling exists to stop unbounded growth,
+                    //    not to police payload shapes, and the framework's OWN
+                    //    inter-bundle `self.query()` hop posts through this same pipeline
+                    //    with no size contract — a tight enforced default would break
+                    //    gina with gina, in a shape that reads as a consumer bug.
+                    //  - `server.maxBodySizeWarn` only WARNS (default 2MB), so every
+                    //    consumer measures their real distribution from their own logs
+                    //    before a stricter ceiling is ever considered. Precedent: the
+                    //    #B238 warn-not-flip disclosure gate.
+                    // `0` / unset / unparseable disables either threshold (the
+                    // maxFieldsSize convention — an invalid cap must not reject
+                    // everything).
+                    var _bodySrv      = ( self.conf[self.appName][self.env].server || {} );
+                    var _maxBody      = parseByteSize(_bodySrv.maxBodySize);
+                    var _maxBodyWarn  = parseByteSize(_bodySrv.maxBodySizeWarn);
+                    var _bodyBytes    = 0;
+                    var _bodyWarned   = false;
+                    var _bodyRejected = false;
+
                     request.on('data', function(chunk){ // for this to work, don't forget the name attr for you form elements
+                        if ( _bodyRejected ) { return }
+
+                        _bodyBytes += chunk.length;
+
+                        if ( _maxBodyWarn > 0 && !_bodyWarned && _bodyBytes > _maxBodyWarn ) {
+                            _bodyWarned = true;
+                            // No URL, no body content — #B433 keeps log lines free of
+                            // request data; the method + byte count is the actionable part.
+                            console.warn('[ SERVER ] Request body exceeded server.maxBodySizeWarn ('
+                                + _bodySrv.maxBodySizeWarn + ') — '+ request.method +' body is over '
+                                + _maxBodyWarn +' bytes and still accumulating. Not rejected.');
+                        }
+
+                        if ( _maxBody > 0 && _bodyBytes > _maxBody ) {
+                            _bodyRejected = true;
+                            request.body  = '';
+                            throwError(response, 413, 'Request body exceeded maximum size [ '+ _bodySrv.maxBodySize +' ]', next);
+                            // Stop the peer streaming into a request nobody will read.
+                            try { request.destroy() } catch (destroyErr) {}
+                            return
+                        }
+
                         if ( typeof(request.body) == 'object') {
                             request.body = '';
                         }
@@ -6254,6 +6365,13 @@ function Server(options) {
                     });
 
                     request.on('end', function onEnd() {
+                        // #OW2 — a rejected body already answered 413 and destroyed the
+                        // stream; dispatching here would double-respond (and parse a body
+                        // we deliberately discarded). `destroy()` normally prevents 'end'
+                        // from firing at all, but that is a race against already-buffered
+                        // chunks, not a guarantee — the flag is the guarantee.
+                        if ( _bodyRejected ) { return }
+
                         // Preserve the exact unparsed body BEFORE processRequestData mutates
                         // request.body into the parsed object. Inbound webhooks that
                         // authenticate via an HMAC computed over the raw request bytes need
@@ -6277,7 +6395,17 @@ function Server(options) {
 
 
         // Timeout in milliseconds - e.g.: (1000x60)x2 => 2 min
-        self.instance.timeout = 0; // zero for unlimited
+        // #OW2 — configurable via `settings.json > server.timeout`; DEFAULT 0
+        // (unlimited) is deliberate and must stay the default: gina serves SSE
+        // (`text/event-stream`) and WebSockets, and a finite whole-request clock
+        // kills both. The slow-body case a finite value would cover is already
+        // closed by `server.maxBodySize` (the accumulator hits its ceiling
+        // regardless of drip rate); connection-level bounds come from
+        // keepAliveTimeout / headersTimeout and node's own defaults.
+        // An unparseable value falls back to 0 rather than to something arbitrary.
+        var _srvTimeoutCfg = self.conf[self.appName][self.env].server.timeout;
+        var _srvTimeout    = ( typeof(_srvTimeoutCfg) == 'undefined' ) ? 0 : parseTimeout(_srvTimeoutCfg);
+        self.instance.timeout = ( typeof(_srvTimeout) == 'number' && _srvTimeout >= 0 ) ? _srvTimeout : 0;
         // Port by default would be 3100
         // '::' as the binding address (ipv4 & ipv6)
         // To check: netstat -tuln

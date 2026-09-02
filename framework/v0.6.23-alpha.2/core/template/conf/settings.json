@@ -1,6 +1,34 @@
 {
   "server": {
     "engine": "isaac",
+    // #OW2 (OWASP A10) — bound the NON-MULTIPART request body. Multipart uploads
+    // are capped separately by busboy + `upload.maxFieldsSize`; a plain JSON or
+    // urlencoded body previously accumulated with no ceiling at all, so a single
+    // large request was an unbounded-memory exposure.
+    //
+    // `maxBodySize` ENFORCES: a body exceeding it is answered 413 and the stream
+    // is destroyed. The 64MB default is deliberately permissive — the ceiling
+    // exists to stop unbounded growth, not to police payload shapes, and gina's
+    // OWN inter-bundle `self.query()` hop posts through this same pipeline with
+    // no size contract, so a tight enforced default would break gina with gina.
+    //
+    // `maxBodySizeWarn` only LOGS (no rejection), so you can measure your real
+    // body-size distribution from your own logs before choosing a stricter
+    // ceiling. Accepts B/KB/MB/GB (case-insensitive); a BARE NUMBER means MB.
+    // `0` (or an unparseable value) disables that threshold — an invalid cap
+    // must never reject everything.
+    "maxBodySize": "64MB",
+    "maxBodySizeWarn": "2MB",
+    // #OW2 — whole-request socket timeout, in ms or with a unit suffix ("5m").
+    // DEFAULT 0 = unlimited, and that default is deliberate, not an oversight:
+    // gina serves Server-Sent Events (`text/event-stream`) and WebSockets, both
+    // of which are long-lived by design and would be killed by a finite
+    // whole-request clock. The slow-body attack this would otherwise mitigate is
+    // already closed by `maxBodySize` above (the accumulator hits its ceiling
+    // regardless of how slowly the peer drips), and connection-level bounds come
+    // from `keepAliveTimeout` / `headersTimeout` below plus node's own defaults.
+    // Set a finite value only if you serve no streaming endpoints.
+    "timeout": 0,
     // #HDR8 Phase 2 — framework-wide X-Powered-By suppression, BOTH engines. When
     // `true`, the framework skips its X-Powered-By emission everywhere it
     // originates: the engine-agnostic per-request `setHeader` in
@@ -12,8 +40,41 @@
     // writeHead emit site (plus the routing.json asset `setHeader` site).
     // gina.plugins.HidePoweredBy() remains available as a middleware-shaped
     // remover for routed responses.
-    // Default `false` preserves shipped behaviour; opt-in by setting to `true`.
-    "hidePoweredBy": false,
+    // #OW1 (OWASP A02) — DEFAULT FLIPPED TO `true` in 0.6.23. The framework no
+    // longer discloses its name and exact version on every response by default;
+    // a version banner is free reconnaissance and buys the operator nothing.
+    // Set `false` to restore the pre-0.6.23 emission.
+    // NOTE: with the render/output cache enabled and `server.cache.name` unset,
+    // `true` raises the documented #B238 boot warn — the cache still names the
+    // framework on the wire via `Cache-Status`; set any token to close that too.
+    "hidePoweredBy": true,
+    // #OW1 (OWASP A02) — framework-level, ENGINE-AGNOSTIC security headers, new
+    // in 0.6.23. This is deliberately NOT the top-level `securityHeaders` block
+    // below: that one configures the #HDR1-14 PLUGINS when a bundle mounts them.
+    // This one is emitted by the framework itself, because the plugins are
+    // express middleware and the DEFAULT `isaac` engine never runs the express
+    // chain for HTTP responses — a mounted orchestrator emits nothing there.
+    //
+    // Precedence is FIRST-WRITER-WINS: any header already set by a mounted
+    // plugin, by `env.json > server.response.header`, or by an upstream proxy is
+    // left untouched. Set `"enabled": false` to restore pre-0.6.23 behaviour.
+    //
+    // ON by default (cannot break a working application):
+    //   x-content-type-options: nosniff · x-download-options: noopen
+    //   x-permitted-cross-domain-policies: none · x-xss-protection: 0
+    //   referrer-policy: strict-origin-when-cross-origin
+    //   x-dns-prefetch-control: off · origin-agent-cluster: ?1
+    //
+    // OPT-IN (each breaks a legitimate deployment shape — set to `true`):
+    //   "xFrameOptions" — SAMEORIGIN; breaks embedding your app cross-origin.
+    //   "coop"          — severs `window.opener`; breaks OAuth/payment popups.
+    //   "corp"          — blocks cross-origin loading of your assets.
+    //   "hsts"          — 180-day https commitment; emitted over http too.
+    // `coop`/`corp` are never applied to `/_gina/*`, which is deliberately
+    // cross-origin (metrics/health/SSE emit `access-control-allow-origin: *`).
+    "securityHeaders": {
+      "enabled": true
+    },
     // #H11 — opt-in Alt-Svc HTTP/3-advertisement header. When `true`, every
     // routed (user-facing) response carries `Alt-Svc: h3=":443"; ma=86400`,
     // advertising HTTP/3 (QUIC) availability so QUIC-capable clients upgrade

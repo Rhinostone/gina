@@ -902,6 +902,15 @@ declare namespace gina {
         routingIntrospect: any;
         /** `${secret:KEY}` config placeholder resolver. */
         secrets: any;
+        /**
+         * Engine-agnostic security-header emission (#OW1, OWASP A02) —
+         * `settings.json > server.securityHeaders`. Exists at the framework
+         * layer because the `#HDR1-14` plugins are express middleware and the
+         * default `isaac` engine never runs the express chain for HTTP
+         * responses. First-writer-wins, so a mounted plugin or an `env.json`
+         * `server.response.header` entry always beats the framework default.
+         */
+        securityHeadersEmitter: any;
         /** Pluggable object storage — adapter x strategy behind an opaque key (`settings.json > storage`). */
         storage: any;
         swigResolver: any;

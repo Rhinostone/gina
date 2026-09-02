@@ -146,6 +146,15 @@ function Lib() {
         // security-bearing, which keeps it out of the hot-reload path entirely
         // (the lib/authn precedent).
         maintenance     : require('./maintenance'),
+        // #OW1 — engine-agnostic security-header emission (OWASP A02). The
+        // #HDR1-14 plugins are express middleware, and the DEFAULT engine
+        // (isaac) never runs the express chain for HTTP responses, so a mounted
+        // orchestrator emits nothing there; this is the framework-side twin, in
+        // the same shape as the #HDR8 hidePoweredBy gate.
+        // PLAIN require (NOT _require) for the same reason as admin/maintenance
+        // above: a stateless pure-function leaf with no state to hot-reload, and
+        // security-bearing, which keeps it out of the hot-reload path entirely.
+        securityHeadersEmitter : require('./security-headers-emitter'),
         // #AI6 — Async-job primitive. Holds an in-memory job registry, a
         // concurrency-limited worker, and a self-contained unref'd setInterval
         // sweep timer at module scope. Like State / logger below, it MUST use a
