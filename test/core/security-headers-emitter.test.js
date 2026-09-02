@@ -175,6 +175,28 @@ describe('04 - values match each #HDR plugin constant (no retyped drift)', funct
         assert.strictEqual(res._h['cross-origin-opener-policy'],     pluginConst('coop', '_DEFAULT_VALUE'));
         assert.strictEqual(res._h['cross-origin-resource-policy'],   pluginConst('corp', '_DEFAULT_VALUE'));
     });
+
+    it('04.3 - hsts (Tier B) emits the Hsts plugin default composition, and stays off by default', function () {
+        // Regression lock for the fourth documented opt-in key: the module
+        // docblock, the settings template and the release notes all promise
+        // `"hsts": true`, but the first #OW1 cut shipped no HEADERS row for it,
+        // so the key was silently inert (probed: nothing emitted while the
+        // xFrameOptions control fired). The value is DERIVED from the plugin's
+        // own exported builder + defaults — never retyped here.
+        const Hsts = require(path.join(FWV, 'core/plugins/lib/security-headers', 'hsts', 'src', 'main.js'));
+        const expected = Hsts._buildHeaderValue(Hsts._resolveOptions({}, {}));
+
+        const off = makeRes();
+        emitter.applyToResponse({ enabled: true }, { url: '/p' }, off);
+        assert.strictEqual(typeof off._h['strict-transport-security'], 'undefined',
+            'hsts must stay OPT-IN — a 180-day https commitment is never a default');
+
+        const on = makeRes();
+        emitter.applyToResponse({ enabled: true, hsts: true }, { url: '/p' }, on);
+        assert.strictEqual(on._h['strict-transport-security'], expected);
+        assert.strictEqual(expected, 'max-age=' + Hsts._DEFAULT_MAX_AGE,
+            'derived expectation sanity: plugin default is max-age only');
+    });
 });
 
 describe('05 - /_gina/* is exempt from the cross-origin-isolating headers', function () {

@@ -71,6 +71,11 @@ var HEADERS = [
 
     // ── Tier B — opt-in: each can break a legitimate deployment ─────────────
     { key: 'xFrameOptions',                header: 'x-frame-options',                   value: 'SAMEORIGIN',                       onByDefault: false, ginaExempt: false },
+    // hsts value = the Hsts plugin's own default composition (max-age only —
+    // DEFAULT_MAX_AGE, no includeSubDomains/preload, which stay plugin/proxy
+    // territory; first-writer-wins defers to either). Parity is asserted in
+    // the tests against the plugin's exported builder, never retyped.
+    { key: 'hsts',                         header: 'strict-transport-security',         value: 'max-age=15552000',                 onByDefault: false, ginaExempt: false },
     { key: 'coop',                         header: 'cross-origin-opener-policy',        value: 'same-origin',                      onByDefault: false, ginaExempt: true  },
     // ginaExempt — see applyTo*: never applied to /_gina/*, which is
     // deliberately cross-origin.
