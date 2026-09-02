@@ -279,6 +279,53 @@
           "description": "HTTP server engine. Defaults to \"isaac\" (built-in HTTP/2 server). \"express\" uses the project's own express install (the framework deliberately ships no express dependency) — supported range >= 4 < 6, Express 4 and 5 both verified (#B211); an out-of-range major logs a warning at boot.",
           "enum": ["isaac", "express"]
         },
+        "maxBodySize": {
+          "type": ["string", "number"],
+          "description": "Enforced ceiling for NON-multipart request bodies (multipart uploads are capped separately by the upload.* settings). A body exceeding it is answered 413 and the stream is destroyed. Accepts B/KB/MB/GB (case-insensitive); a bare number means MB; 0 (or an unparseable value) disables enforcement. Default \"64MB\" — deliberately permissive: the ceiling exists to stop unbounded growth, not to police payload shapes, and gina's own inter-bundle self.query() hop posts through the same pipeline. New in 0.6.23 (OWASP A10).",
+          "default": "64MB"
+        },
+        "maxBodySizeWarn": {
+          "type": ["string", "number"],
+          "description": "Warn-only companion to maxBodySize: a non-multipart body exceeding it is logged (once per request) but NOT rejected, so the real body-size distribution can be measured before choosing a stricter enforced ceiling. Same unit rules as maxBodySize; 0 disables the warning. Default \"2MB\". New in 0.6.23 (OWASP A10).",
+          "default": "2MB"
+        },
+        "timeout": {
+          "type": ["number", "string"],
+          "description": "Whole-request socket timeout, in ms or with a unit suffix (e.g. \"5m\"). Default 0 = unlimited, DELIBERATELY: Server-Sent Events and WebSocket connections are long-lived by design and a finite whole-request clock would kill them, while the slow-body case is already closed by maxBodySize. Set a finite value only if the bundle serves no streaming endpoints. New in 0.6.23.",
+          "default": 0
+        },
+        "securityHeaders": {
+          "type": "object",
+          "description": "Framework-level, engine-agnostic security-header emission (new in 0.6.23, OWASP A02). Deliberately NOT the top-level securityHeaders block, which configures the #HDR plugins when a bundle mounts them — the plugins are Express middleware and the default isaac engine never runs the Express chain for HTTP responses, so this block is what actually emits by default. Precedence is first-writer-wins: a header already set by a mounted plugin, an env.json server.response.header entry or an upstream proxy is left untouched. Seven headers are on by default (x-content-type-options, x-download-options, x-permitted-cross-domain-policies, x-xss-protection, referrer-policy, x-dns-prefetch-control, origin-agent-cluster); each can be turned off with \"<key>\": false. coop/corp are never applied to /_gina/* (deliberately cross-origin).",
+          "additionalProperties": true,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Master switch. false restores the pre-0.6.23 behaviour (no framework-emitted security headers). Default true.",
+              "default": true
+            },
+            "xFrameOptions": {
+              "type": "boolean",
+              "description": "Opt-in: emit x-frame-options: SAMEORIGIN. Off by default because it breaks deliberate cross-origin embedding of the app.",
+              "default": false
+            },
+            "coop": {
+              "type": "boolean",
+              "description": "Opt-in: emit cross-origin-opener-policy: same-origin. Off by default because it severs window.opener and breaks OAuth/payment popup flows. Never applied to /_gina/*.",
+              "default": false
+            },
+            "corp": {
+              "type": "boolean",
+              "description": "Opt-in: emit cross-origin-resource-policy: same-origin. Off by default because it blocks cross-origin loading of the bundle's assets — including gina's own deliberately cross-origin /_gina/* endpoints, which stay exempt regardless.",
+              "default": false
+            },
+            "hsts": {
+              "type": "boolean",
+              "description": "Opt-in: emit strict-transport-security: max-age=15552000 (the Hsts plugin's default, 180 days). Off by default because it commits every https visitor's browser for the full period, and per the documented spec deviation it is emitted over plain HTTP too. Mount the Hsts plugin or use env.json for a custom composition — first-writer-wins defers to either.",
+              "default": false
+            }
+          }
+        },
         "protocol": {
           "type": "string",
           "description": "HTTP protocol version.",

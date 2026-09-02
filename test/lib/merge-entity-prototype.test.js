@@ -5,8 +5,12 @@
  * consumer before release. That cut skipped inherited enumerable source properties as
  * extra hardening. It broke every entity in the model registry:
  *
- *   - lib/model.js setModel round-trips entity instances through merge():
- *         self.models[bundle][name] = merge(self.models[bundle][name], obj)
+ *   - the model layer round-trips entity instances through merge(). The in-tree
+ *     path is the relations assembly (core/model/entity.js):
+ *         _relations[entity.name] = merge(_relations[entity.name], entity)
+ *     lib/model.js setModel has the same shape but no in-tree caller (measured
+ *     2026-09-02, merge-contract audit); it is published through the modelUtil
+ *     context, so it stays consumer-reachable and equally contract-bound.
  *   - all six SQL connectors attach their `.sql`-derived query methods to the
  *     PROTOTYPE:  entities[entityName].prototype[name] = function () { ... }
  *     (couchbase, postgresql, duckdb, mongodb, scylladb, mysql)

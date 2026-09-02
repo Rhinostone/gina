@@ -1406,13 +1406,19 @@ describe('09 - #HDR8 Phase 2 X-Powered-By framework gate source structure', func
             'expected 2 reads of options.hidePoweredBy (1 in helper, 1 in inline gate); found ' + (matches ? matches.length : 0));
     });
 
-    it('settings.json template declares server.hidePoweredBy as boolean false (default)', function() {
+    it('settings.json template declares server.hidePoweredBy as boolean true (default since 0.6.23, #OW1)', function() {
+        // Realigned for #OW1 (OWASP A02): the shipped default flipped false -> true
+        // in 0.6.23, so the framework no longer discloses its name and exact
+        // version on every response. The GATE mechanism this file pins is
+        // unchanged — the helper and the inline gate still both read
+        // `options.hidePoweredBy` (pinned by the sibling arm above); only the
+        // shipped default moved. `false` still restores the old behaviour.
         var settingsSrc = fs.readFileSync(
             path.join(require('../fw'), 'core/template/conf/settings.json'),
             'utf8'
         );
-        assert.ok(settingsSrc.indexOf('"hidePoweredBy": false') > -1,
-            'settings.json template must declare `"hidePoweredBy": false` as the default');
+        assert.ok(settingsSrc.indexOf('"hidePoweredBy": true') > -1,
+            'settings.json template must declare `"hidePoweredBy": true` as the default (#OW1)');
     });
 
     it('settings.json hidePoweredBy key sits inside the top-level server.* block', function() {

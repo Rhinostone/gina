@@ -1540,9 +1540,19 @@ describe('05b - Inspector __gdPayload injection', function () {
         assert.match(RENDER_NJ_SRC, /replacement:\s*_redactConf\.replacement/);
     });
 
-    it('escapes </script> and <!-- in the serialised JSON', function () {
-        assert.match(RENDER_NJ_SRC, /\.replace\(\/<\\\/script>\/gi,\s*['"]<\\\\\/script>['"]\)/);
-        assert.match(RENDER_NJ_SRC, /\.replace\(\/<!--\/g,\s*['"]<\\\\!--['"]\)/);
+    it('escapes script terminators via the shared inline-script helper', function () {
+        // #B451 - this pin previously required the literal `</script>` + `<!--`
+        // blocklist. That blocklist was BYPASSABLE (`</script >`, `</script/>` also
+        // close the block per the HTML5 script-data-end-tag-name state, both measured
+        // as injecting), so it was replaced by core/controller/inline-script.js, which
+        // escapes `<` itself. Pinning the delegation, plus a negative arm so the
+        // vulnerable form cannot be reintroduced.
+        assert.match(RENDER_NJ_SRC, /require\(['"]\.\/inline-script['"]\)/);
+        assert.match(RENDER_NJ_SRC, /_safeJson\s*=\s*inlineScript\.safeInlineJson\(__gdPayload\)/);
+        assert.ok(
+            !(new RegExp("\\.replace\\(/<\\\\/" + "script>/gi")).test(RENDER_NJ_SRC),
+            'the bypassable </script> blocklist was reintroduced'
+        );
     });
 
     it('constructs window.__ginaData script with the escaped JSON', function () {
@@ -2704,19 +2714,24 @@ describe('05f - #NJ4 Early Hints 103 engine-agnostic (data-feed via setResources
     // (d) getNodeRes gates h2Links writes on HTTP/2 + production
     // -----------------------------------------------------------------------
 
+    // Structural anchor, not a char-distance window: the old `idx + N` slices
+    // broke twice (widened 3000 -> 3400 for #B66 S2b, then broken again by the
+    // #OW3 SRI insertions) — any comment or clause added near the top of
+    // getNodeRes shifted the gate past the window. Slicing to the function's
+    // real end (`var isValidURL`, the next helper) is insertion-proof.
     it('getNodeRes gates h2Links writes on /http\\/2/ protocol', function () {
         var idx  = CONTROLLER_SRC.indexOf('var getNodeRes = function');
-        assert.ok(idx > 0);
-        var body = CONTROLLER_SRC.slice(idx, idx + 3000);
+        var end  = CONTROLLER_SRC.indexOf('var isValidURL');
+        assert.ok(idx > 0 && end > idx, 'getNodeRes region not found');
+        var body = CONTROLLER_SRC.slice(idx, end);
         assert.match(body, /\/http\\\/2\/\.test\(\s*local\.options\.conf\.server\.protocol\s*\)/);
     });
 
     it('getNodeRes gates h2Links writes on !self.isCacheless() (production only)', function () {
         var idx  = CONTROLLER_SRC.indexOf('var getNodeRes = function');
-        // window widened 3000 -> 3400: #B66 S2b added a ~230-char comment + the
-        // per-request host-fallback line near the top of getNodeRes, pushing the
-        // isCacheless gate to offset ~3077 (still inside the function).
-        var body = CONTROLLER_SRC.slice(idx, idx + 3400);
+        var end  = CONTROLLER_SRC.indexOf('var isValidURL');
+        assert.ok(idx > 0 && end > idx, 'getNodeRes region not found');
+        var body = CONTROLLER_SRC.slice(idx, end);
         assert.match(body, /!self\.isCacheless\(\)/);
     });
 

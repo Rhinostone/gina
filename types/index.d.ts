@@ -902,6 +902,22 @@ declare namespace gina {
         routingIntrospect: any;
         /** `${secret:KEY}` config placeholder resolver. */
         secrets: any;
+        /**
+         * Engine-agnostic security-header emission (#OW1, OWASP A02) —
+         * `settings.json > server.securityHeaders`. Exists at the framework
+         * layer because the `#HDR1-14` plugins are express middleware and the
+         * default `isaac` engine never runs the express chain for HTTP
+         * responses. First-writer-wins, so a mounted plugin or an `env.json`
+         * `server.response.header` entry always beats the framework default.
+         */
+        securityHeadersEmitter: any;
+        /**
+         * Subresource Integrity attribute computation (#OW3, OWASP A08) —
+         * opt-in per bundle via `templates.json > "_common" > "sriEnabled"`.
+         * Fail-open: any asset that cannot be honestly hashed gets no
+         * `integrity` attribute rather than a guessed one.
+         */
+        sri: any;
         /** Pluggable object storage — adapter x strategy behind an opaque key (`settings.json > storage`). */
         storage: any;
         swigResolver: any;
