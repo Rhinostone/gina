@@ -62,29 +62,24 @@ open https://localhost:3100
 
 > **npm 12+** blocks install scripts by default, and gina's post-install bootstraps `~/.gina` and the framework dependencies. Install with `npm install -g gina@latest --allow-scripts=gina`, or allow it once for all global installs with `npm config set allow-scripts=gina --location=user`. (Not needed on npm ≤ 11.)
 
-## What's in 0.6.21
+## What's in 0.6.22
 
 > **Restart your bundles AND rebuild them.** This release changes the browser
-> bundle: all three fixes below ship in `gina.min.js`. A restart alone updates
-> the server half only — each bundle bakes its own copy of the client assets,
-> so a restart without `gina bundle:build` leaves the browser running the old
-> code.
+> bundle: both fixes below ship in `gina.min.js`. A restart alone updates the
+> server half only — each bundle bakes its own copy of the client assets, so a
+> restart without `gina bundle:build` leaves the browser running the old code.
 
-> **No settings reset.** `0.6.21` is a patch — the `shortVersion` stays `0.6`, so
+> **No settings reset.** `0.6.22` is a patch — the `shortVersion` stays `0.6`, so
 > your `~/.gina/0.6/settings.json` is untouched. (`0.6.0` was the reset.)
 
-**Three availability and correctness fixes, two of them reported from the
-field.** An outbound request that failed could hang its caller forever or take
-the bundle down; `merge()` threw on a null array element; and on Safari, every
-modifier chord — paste, select-all, copy, cut, undo — was dead in validated
-fields that suppress autocomplete. **One change may require action** —
-`options.timeout` on an outbound request was accepted but inert, and now
-actually aborts the request; details in the
-[migration guide](https://gina.io/docs/migration).
+**A prototype-pollution fix on the request path, and a form submit that failed
+silently when the network did.** The first is a security fix reachable from any
+request that carries field names — upgrade it ahead of the second. The second is
+a client-side fix reported from the field: a submit that failed at the transport
+layer told the visitor nothing.
 
-- **Fixed — an outbound `route.request()` now settles its callback on every outcome (#B442).** The request object returned by `http(s).get` was discarded, so nothing could attach an `error` listener to it, and a failed outbound call took one of two paths — neither reaching your callback. When the failure code was one the process-level handler tolerates (`ECONNREFUSED`, `ECONNRESET`, `EPIPE`) the process survived and the callback was simply never invoked: no error, no log line, and in anything serialized (a worker at concurrency 1, a queue processor) a permanent stall with nothing to diagnose it by. When the code was not one of those (`ETIMEDOUT`, `EHOSTUNREACH`, `ENETUNREACH` — a peer that stops answering, a route that goes away) the unhandled `error` became an `uncaughtException` and the bundle was terminated. A response stream dying mid-body behaved like the first case for a different reason: the error was recorded and delivery waited on an `end` event a broken stream never emits. All exit paths now run through a single-settle latch, so the callback is invoked **exactly once** on every outcome and can never be invoked twice. **Action if you already set `options.timeout`:** it previously did nothing — it reached `http(s).get`, but Node only *emits* a `timeout` event and never destroys the socket, and the request object was unreachable. It is now honoured: on expiry the request is destroyed and the callback settles with an `Error` carrying `code === 'ETIMEDOUT'`. Re-check the value against your slowest legitimate response before upgrading, or remove the option to keep the previous unbounded behaviour. A request sent without a callback now warns on a dial failure instead of throwing.
-- **Fixed — `merge()` no longer throws on a null array element (#B443).** An id-keyed array carrying a `null` raised `TypeError: Cannot read properties of null` from deep inside the merge — on either operand, at any index. `typeof null` is `'object'`, so a null element passed every type test and the next property access dereferenced it; seven distinct shapes threw, across the collection entry guards, the id-roster loops, the override walk and the per-element tests. Since every configuration overlay travels through this code, any such shape was a whole-merge kill. A null element is now treated as an element with no key: it matches nothing, blocks nothing and contributes nothing. Shapes that previously worked are unchanged — the regression suite pins them byte-identical. This closes the read side of the family whose write side shipped in `0.6.20`.
-- **Fixed — Safari: modifier chords work again in validated fields with a suppressed autocomplete (#B444).** On Safari, a live-checked field carrying `autocomplete="off"` (or `"false"`) could not be pasted into — and select-all, copy, cut and undo were equally dead. Nothing was inserted, **no `paste` or `beforeinput` event was dispatched anywhere on the page**, and typing kept working, so nothing pointed at the framework. The form-level keydown proxy was cancelling the native keydown before the Safari typing interception could decide anything, and `preventDefault` on a native keydown suppresses the browser's editing command itself. The proxy now defers that decision to the interception, which deliberately lets modifier chords run natively. Typing interception, caret integrity and autofill suppression on those fields are unchanged; Chromium-family browsers were never affected.
+- **Security — prototype pollution on the request path (#B446).** Client-supplied bracket-notation field names reached an unguarded property assignment in the data helper's key-path nesting: `__proto__[x]=y`, `constructor[prototype][x]=y` and their percent-encoded forms all wrote to `Object.prototype`, and did so silently — the parsed body came back empty, so nothing in the request looked wrong. Separately, `merge()` copied an **own** `__proto__` key — the shape `JSON.parse` produces — through its `for...in` loops. The sources were reachable from query strings, urlencoded and JSON request bodies, `request.query.inheritedData`, and multipart text-field names. A polluted prototype could then influence code that reads a property it expects to be absent: outbound request options (host, port, auth, and the TLS certificate check), and the safe-method and exemption checks. Both key paths are now rejected, and `merge()` no longer copies inherited enumerable source properties. **No action needed beyond the upgrade** — the rejected key names have never had a legitimate meaning as form fields. The affected modules also ship in the browser bundle, so a rebuild is part of picking this up, not just a restart.
+- **Fixed — a form submit that fails at the transport layer now reports it (#B447).** When the network was down, the connection was refused, or the server was restarting, the request settled with no HTTP status and neither `error.<formId>` nor `error.<formId>.hform` was dispatched — so a handler declared with `data-gina-form-event-on-submit-error` never ran, while the form released its submit trigger and told the visitor nothing. The failure was indistinguishable from a form that had simply done nothing. Such a failure now dispatches both events with `status: 408` and `transportError: true` — the 408 keeps handlers that match on `status >= 400` working unchanged, and `transportError` is what separates it from a genuine request timeout. **What to check:** if you branch on `result.status`, a transport failure will now enter your error branch where previously it entered nothing at all.
 
 ## Documentation
 
