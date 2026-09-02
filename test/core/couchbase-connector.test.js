@@ -1383,3 +1383,113 @@ describe('15 - #B461: entity registration failures are named (shipped bytes)', f
             'control: the @options catch must NOT mention entityName — otherwise §15b is vacuous');
     });
 });
+
+// ─── 16 — #B204: the reconnect classifier must not throw when the SDK exports no `Error` ─
+/**
+ * `lib/connector.v4.js` / `lib/connector.v3.js` — the `gina.onError` reconnect
+ * classifier tests `err instanceof couchbase.Error`, but no supported couchnode
+ * (3.x/4.x) exports a bare `Error` class (verified on a real 4.1.3 `dist/errors.js`:
+ * `Error` undefined, `CouchbaseError` present among 82 error classes). The
+ * `instanceof` therefore throws `TypeError: Right-hand side of 'instanceof' is not
+ * an object` — and because the SDK-class arm is evaluated FIRST, the
+ * shutdown-bucket message arm (which needs no SDK class) was unreachable too, so
+ * the classifier could not classify anything by any route.
+ *
+ * Fix shape (#B204, deliberately NOT an activation): guard each `instanceof`
+ * operand on the class existing. Under every supported SDK the guarded arms stay
+ * false (modern errors carry no numeric `.code`), the message arm becomes
+ * evaluable as its author intended, and nothing that never ran begins running —
+ * the reconnect machinery's reachability on modern SDKs is unchanged in practice
+ * (the SDK-2 message string greps 0 in the 4.1.3 dist JS, `timeout` firing as
+ * control).
+ *
+ * Dispatch note pinned nowhere else: these listeners only ever fire under 4-arg
+ * (Express-engine) error invocation; isaac's dispatchers invoke middlewares
+ * 3-arg, so the arity shim sets `error = false` and the emit never happens.
+ */
+describe('16 - #B204: reconnect classifier is guarded (shipped bytes, both files)', function() {
+
+    var FILES = {
+        v4: path.join(FW, 'core/connectors/couchbase/lib/connector.v4.js'),
+        v3: path.join(FW, 'core/connectors/couchbase/lib/connector.v3.js')
+    };
+    var srcs = {};
+    before(function() {
+        for (var k in FILES) { srcs[k] = fs.readFileSync(FILES[k], 'utf8'); }
+    });
+
+    /** Extract the primary classifier condition (the code-16 `if`). */
+    function cond16(src) {
+        var i = src.indexOf('err instanceof couchbase.Error && err.code == 16');
+        // pre-fix the instanceof leads; post-fix a guard precedes it on the same
+        // expression — anchor on the stable inner text, then widen to the `if (`.
+        assert.ok(i > -1, 'code-16 arm must be found');
+        var open = src.lastIndexOf('if (', i);
+        var close = src.indexOf(') {', i);
+        assert.ok(open > -1 && close > open, 'the if(...) must bracket the arm');
+        return src.slice(open + 'if ('.length, close);
+    }
+
+    /** Extract the else-if (code-23) condition — skip the commented twin. */
+    function cond23(src) {
+        var i = src.indexOf('} else if (');
+        while (i > -1 && src.slice(i, src.indexOf(') {', i)).indexOf('err.code == 23') === -1) {
+            i = src.indexOf('} else if (', i + 1);
+        }
+        assert.ok(i > -1, 'code-23 else-if must be found');
+        return src.slice(i + '} else if ('.length, src.indexOf(') {', i));
+    }
+
+    function drive(condSrc, couchbase, err) {
+        var fn = new Function('couchbase', 'err', 'self', 'return (' + condSrc + ');');
+        return fn(couchbase, err, { reconnected: false, reconnecting: false });
+    }
+
+    it('§16a — extraction grabbed real conditions in BOTH files (anti-vacuity)', function() {
+        for (var k in srcs) {
+            var c16 = cond16(srcs[k]), c23 = cond23(srcs[k]);
+            assert.ok(c16.indexOf('instanceof') > -1, k + ': code-16 arm carries the instanceof');
+            assert.ok(c16.indexOf('shutdown bucket') > -1, k + ': message arm is in the same condition');
+            assert.ok(c23.indexOf('err.code == 23') > -1, k + ': code-23 arm found (not the comment)');
+        }
+    });
+
+    it('§16b — SOURCE PIN: all four live sites carry the class-existence guard', function() {
+        for (var k in srcs) {
+            var code = srcs[k].replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+            var m = code.match(/typeof\s*\(\s*couchbase\.Error\s*\)\s*==+\s*'function'\s*&&\s*err instanceof couchbase\.Error/g) || [];
+            assert.equal(m.length, 2, k + ': both live instanceof sites must be guarded, found ' + m.length);
+            // anti-vacuity for the strip
+            assert.ok(code.indexOf('instanceof couchbase.Error') > -1, k + ': control — the sites survive the strip');
+        }
+    });
+
+    it('§16c — executed: a no-`Error` SDK no longer throws, and the message arm is evaluable', function() {
+        var SDK = { CouchbaseError: class CouchbaseError extends Error {} }; // real 4.1.3 shape
+        for (var k in srcs) {
+            var c = cond16(srcs[k]);
+            assert.equal(drive(c, SDK, Object.assign(new Error('net'), { code: 16 })), false,
+                k + ': code-16 plain error classifies false (arm guarded, not matched)');
+            assert.equal(drive(c, SDK, new Error('cannot perform operations on a shutdown bucket')), true,
+                k + ': the message arm is reachable, as its author intended');
+        }
+    });
+
+    it('§16d — CONTROL: an SDK that DOES export `Error` keeps SDK-2 semantics (green pre- and post-fix)', function() {
+        var SDK = { Error: class CbError extends Error {} };
+        for (var k in srcs) {
+            assert.equal(drive(cond16(srcs[k]), SDK,
+                Object.assign(new SDK.Error('net'), { code: 16 })), true, k + ': code 16 still classifies');
+            assert.equal(drive(cond23(srcs[k]), SDK,
+                Object.assign(new SDK.Error('t/o'), { code: 23 })), true, k + ': code 23 still classifies');
+        }
+    });
+
+    it('§16e — executed: the code-23 else-if no longer throws on a no-`Error` SDK', function() {
+        var SDK = { CouchbaseError: class CouchbaseError extends Error {} };
+        for (var k in srcs) {
+            assert.equal(drive(cond23(srcs[k]), SDK, Object.assign(new Error('t/o'), { code: 23 })), false,
+                k + ': guarded arm evaluates false instead of throwing');
+        }
+    });
+});

@@ -180,7 +180,11 @@ function Connector(dbString) {
                 }
 
                 if (
-                    err instanceof couchbase.Error && err.code == 16 && !self.reconnected
+                    // #B204 — no supported SDK (3.x/4.x) exports a bare `Error` class, so the
+                    // un-guarded instanceof threw TypeError and, being evaluated first, made
+                    // the message arm below unreachable too. Guarded: the arm is inert on
+                    // modern SDKs (their errors carry no numeric .code), never a throw.
+                    typeof(couchbase.Error) == 'function' && err instanceof couchbase.Error && err.code == 16 && !self.reconnected
                     //|| err instanceof couchbase.Error && err.code == 23 && !self.reconnecting
                     || /cannot perform operations on a shutdown bucket/.test(err.message ) && !self.reconnecting && !self.reconnected
                 ) {
@@ -202,7 +206,7 @@ function Connector(dbString) {
                         }
                     }, _backoffDelay)
 
-                } else if (err instanceof couchbase.Error && err.code == 23 && !self.reconnecting) {
+                } else if (typeof(couchbase.Error) == 'function' && err instanceof couchbase.Error && err.code == 23 && !self.reconnecting) { // #B204 — guarded, same reason as above
                     self.instance.disconnect();
                     // express js patch
                     if (typeof(next) != 'undefined') {
