@@ -1152,3 +1152,152 @@ describe('13 - #B413: annotation type normalisation + bounded capture', function
         });
     });
 });
+
+// ─── 14 — #B460: bulkInsert's outer catch settles instead of returning undefined ─
+/**
+ * `bulkInsert`'s outer `try` wraps its OWN function body, so a synchronous throw
+ * in the prologue landed in a catch that only `console.error`d — the function
+ * then fell off the end and returned `undefined`. Both documented call shapes
+ * broke: `.onComplete(cb)` threw `TypeError: … reading 'onComplete'`, and the
+ * `await` form (the docblock's first @example) resolved with `undefined`, so a
+ * caller treating "did not throw" as success recorded an insert that never
+ * happened.
+ *
+ * The trigger is NOT only a cluster outage: the prologue carries two DELIBERATE
+ * argument validations (`rec` falsy; a record without `.values`) whose errors the
+ * author wrote to reach the caller. Those make the defect drivable with no
+ * cluster at all, which is what these tests exercise.
+ *
+ * Distinct from the query path, which does NOT share this shape: its promise is
+ * built inside `entities[entityName].prototype[name] = function(){…}`, an
+ * ATTACHED method, so its enclosing try has already exited by call time and a
+ * throw propagates to the caller normally. §14f pins that difference.
+ */
+describe('14 - #B460: bulkInsert settles its outer catch (shipped bytes)', function() {
+
+    var src;
+    before(function() { src = fs.readFileSync(CONNECTOR, 'utf8'); });
+
+    var BI_START = 'var bulkInsert = function(rec, options) {';
+    var BI_END   = '    /**\n     * getCluster';
+
+    /** Extract bulkInsert's real body, anchored on unique text (never line numbers). */
+    function bulkInsertBody() {
+        var a = src.indexOf(BI_START);
+        assert.ok(a > -1, 'bulkInsert definition must be found');
+        assert.equal(src.indexOf(BI_START, a + 1), -1, 'the anchor must be unique');
+        var b = src.indexOf(BI_END, a);
+        assert.ok(b > a, 'the getCluster terminator must follow bulkInsert');
+        var body = src.slice(a + BI_START.length, b);
+        return body.slice(0, body.lastIndexOf('}'));
+    }
+
+    /** Build a callable from the extracted bytes, stubbing every free identifier. */
+    function build(body, opts) {
+        opts = opts || {};
+        var queried = { n: 0 };
+        var stubs = {
+            merge          : function(o, q) { return Object.assign({}, o, q); },
+            envIsDev       : !!opts.dev,
+            paramRedact    : { captureValues: function() { return true; } },
+            infos          : { bundle: 'test' },
+            resolveCluster : function() {
+                return { query: function() { queried.n++; return { then: function() {} }; } };
+            },
+            console        : { debug: function() {}, error: function() {}, warn: function() {} }
+        };
+        var keys = Object.keys(stubs);
+        var fn = new Function(keys.concat(['rec', 'options']).join(','), body);
+        var ent = {
+            getConnection : function() { return {}; },
+            _scope : 'sc', _collection : 'co', database : 'db', name : 'Ent'
+        };
+        return {
+            call    : function(rec, options) {
+                return fn.apply(ent, keys.map(function(k) { return stubs[k]; }).concat([rec, options]));
+            },
+            queried : queried
+        };
+    }
+
+    it('§14a — the extraction really grabbed bulkInsert (anti-vacuity)', function() {
+        var body = bulkInsertBody();
+        assert.ok(body.length > 5000, 'body should be substantial, got ' + body.length);
+        assert.ok(body.indexOf('var _settle = function') > -1, 'must contain _settle');
+        assert.ok(body.indexOf('_promise.onComplete = function') > -1, 'must contain the shim');
+        assert.ok(body.indexOf('`rec` argument cannot be left') > -1, 'must contain the rec validation');
+        assert.ok(body.indexOf('RETURNING ') > -1, 'must contain the INSERT statement build');
+    });
+
+    it('§14b — the outer catch settles the promise and returns it', function() {
+        var body = bulkInsertBody();
+        // Comments are stripped so the fix's own explanatory text (which names the
+        // defect) cannot satisfy a pin about the CODE.
+        var code = body.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+        assert.ok(/\}\s*catch\s*\(\s*err\s*\)\s*\{[\s\S]{0,400}?_settle\s*\(\s*err\s*\)/.test(code),
+            'the outer catch must call _settle(err)');
+        assert.ok(/\}\s*catch\s*\(\s*err\s*\)\s*\{[\s\S]{0,400}?return\s+_promise/.test(code),
+            'the outer catch must return _promise');
+        // anti-vacuity: the strip must not have emptied the corpus
+        assert.ok(code.indexOf('_settle') > -1, 'control: _settle survives the comment strip');
+    });
+
+    it('§14c — the promise plumbing is built BEFORE the try (so the catch can use it)', function() {
+        var body = bulkInsertBody();
+        var tryAt   = body.indexOf('        try {');
+        var promAt  = body.indexOf('var _promise = new Promise');
+        var settleAt= body.indexOf('var _settle = function');
+        var shimAt  = body.indexOf('_promise.onComplete = function');
+        assert.ok(tryAt > -1 && promAt > -1 && settleAt > -1 && shimAt > -1, 'all four anchors must exist');
+        assert.ok(promAt   < tryAt, '_promise must be constructed before the try');
+        assert.ok(settleAt < tryAt, '_settle must be defined before the try');
+        assert.ok(shimAt   < tryAt, 'the .onComplete shim must be attached before the try');
+    });
+
+    it('§14d — POSITIVE CONTROL: a valid rec still returns a thenable and reaches the driver', function() {
+        var h = build(bulkInsertBody());
+        var out = h.call({ 'doc-1': { values: { a: 1 } } });
+        assert.ok(out && typeof out.then === 'function', 'valid rec must return a thenable');
+        assert.equal(typeof out.onComplete, 'function', 'and must carry the .onComplete shim');
+        assert.equal(h.queried.n, 1, 'and must reach resolveCluster(conn).query() exactly once');
+    });
+
+    it('§14e — a prologue throw is delivered to BOTH documented call shapes', async function() {
+        var cases = [
+            [ 'rec undefined',        undefined,      '`rec` argument cannot be left' ],
+            [ 'record без .values',   { d: {} },      '.values not found' ]
+        ];
+        for (var i = 0; i < cases.length; i++) {
+            var label = cases[i][0], rec = cases[i][1], needle = cases[i][2];
+            var h = build(bulkInsertBody());
+            var out = h.call(rec);
+
+            assert.notEqual(out, undefined, label + ': must not return undefined');
+            assert.equal(typeof out.onComplete, 'function', label + ': must carry .onComplete');
+            assert.equal(h.queried.n, 0, label + ': must not reach the driver');
+
+            // shape 1 — .onComplete(cb) receives the error
+            var got = await new Promise(function(resolve) {
+                out.onComplete(function(err) { resolve(err); });
+                setTimeout(function() { resolve(new Error('NOT DELIVERED')); }, 50);
+            });
+            assert.ok(got instanceof Error, label + ': .onComplete must receive an Error');
+            assert.ok(got.message.indexOf(needle) > -1,
+                label + ': .onComplete must receive the REAL validation error, got: ' + got.message);
+
+            // shape 2 — await rejects
+            var rejected = false;
+            try { await out; } catch (e) { rejected = true; }
+            assert.ok(rejected, label + ': the await form must reject, not resolve with undefined');
+        }
+    });
+
+    it('§14f — the QUERY path does not share the shape (its promise is in an attached method)', function() {
+        var attachAt = src.indexOf('entities[entityName].prototype[name] = function() {');
+        var qPromAt  = src.indexOf('var _promise = new Promise', attachAt);
+        assert.ok(attachAt > -1, 'the prototype attachment site must exist');
+        assert.ok(qPromAt > attachAt,
+            'the query-path promise must sit INSIDE the attached method — its enclosing try has ' +
+            'already exited by call time, so a throw reaches the caller and #B460 does not apply there');
+    });
+});

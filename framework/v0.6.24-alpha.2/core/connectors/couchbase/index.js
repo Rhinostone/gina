@@ -1406,6 +1406,57 @@ function Couchbase(conn, infos) {
      */
     var bulkInsert = function(rec, options) {
 
+        // #B460 — the promise, its one-shot resolver and the .onComplete shim are
+        // built BEFORE the try, not inside it. The try below wraps this function's OWN
+        // body, so a synchronous throw in the prologue (a failed getConnection(), or
+        // either of the two deliberate `rec` validations) lands in the outer catch. When
+        // the plumbing lived inside the try, that catch ran with _promise/_settle/the
+        // shim still hoisted-but-unassigned, so the function fell off the end and
+        // returned `undefined`: `.onComplete(cb)` threw on undefined and the documented
+        // `await` form resolved with undefined, hiding the error from the caller
+        // entirely. Built here, they exist unconditionally and the catch can settle.
+        // #B429 — bulkInsert settles per call, exactly once, like the query path.
+        // The Promise below used to be created AFTER the dispatch and woken by
+        // `self.once(trigger)` on the shared entity singleton, so two concurrent
+        // bulkInsert calls on one entity both received whichever finished first
+        // (measured). The resolver is hoisted here so the handlers can settle THIS
+        // call directly; the trigger is still emitted, purely for observability.
+        var _resolve, _reject, _internalData, _internalMeta;
+        var _promise = new Promise(function(resolve, reject) {
+            _resolve = resolve;
+            _reject  = reject;
+        });
+        var _settled = false;
+        /**
+         * Settle THIS bulkInsert call's promise, at most once.
+         *
+         * @inner
+         * @param {Error|boolean} err - the error, or `false` on success.
+         * @param {Array} data - the RETURNING rows.
+         * @param {object} [meta] - the driver's result metadata.
+         * @returns {void}
+         */
+        var _settle = function(err, data, meta) {
+            if (_settled) {
+                return;
+            }
+            _settled = true;
+            if (err) {
+                _reject(err);
+            } else {
+                _internalData = data;
+                _internalMeta = meta;
+                _resolve(data);
+            }
+        };
+        _promise.onComplete = function(cb) {
+            _promise.then(
+                function()    { cb(null, _internalData, _internalMeta); },
+                function(err) { cb(err); }
+            );
+            return _promise;
+        };
+
         try {
             var conn        = this.getConnection();
             // retrieve & return the collection
@@ -1503,40 +1554,8 @@ function Couchbase(conn, infos) {
 
             var self = this;
 
-            // #B429 — bulkInsert settles per call, exactly once, like the query path.
-            // The Promise below used to be created AFTER the dispatch and woken by
-            // `self.once(trigger)` on the shared entity singleton, so two concurrent
-            // bulkInsert calls on one entity both received whichever finished first
-            // (measured). The resolver is hoisted here so the handlers can settle THIS
-            // call directly; the trigger is still emitted, purely for observability.
-            var _resolve, _reject, _internalData, _internalMeta;
-            var _promise = new Promise(function(resolve, reject) {
-                _resolve = resolve;
-                _reject  = reject;
-            });
-            var _settled = false;
-            /**
-             * Settle THIS bulkInsert call's promise, at most once.
-             *
-             * @inner
-             * @param {Error|boolean} err - the error, or `false` on success.
-             * @param {Array} data - the RETURNING rows.
-             * @param {object} [meta] - the driver's result metadata.
-             * @returns {void}
-             */
-            var _settle = function(err, data, meta) {
-                if (_settled) {
-                    return;
-                }
-                _settled = true;
-                if (err) {
-                    _reject(err);
-                } else {
-                    _internalData = data;
-                    _internalMeta = meta;
-                    _resolve(data);
-                }
-            };
+            // #B460 — the resolver/_settle pair moved ABOVE the try (see the top of this
+            // function); the #B429 per-call settlement contract they implement is unchanged.
 
             var err = false;
             // cluster resolved via the shared dual-shape helper (was a bare
@@ -1666,13 +1685,8 @@ function Couchbase(conn, infos) {
             // therefore only half-true as written: bulkInsert did adopt Option B's
             // Promise + .onComplete() shape, but kept the shared `once` as the thing that
             // settled it — which is exactly the defect the query path carried.
-            _promise.onComplete = function(cb) {
-                _promise.then(
-                    function()    { cb(null, _internalData, _internalMeta); },
-                    function(err) { cb(err); }
-                );
-                return _promise;
-            };
+            // #B460 — the .onComplete shim is attached above the try now, so a prologue
+            // throw still returns a promise that carries it. Contract unchanged.
 
             if (envIsDev) {
                 _promise.then(
@@ -1685,6 +1699,13 @@ function Couchbase(conn, infos) {
 
         } catch (err) {
             console.error(err.stack);
+            // #B460 — settle THIS call's promise instead of falling off the end. _settle's
+            // `_settled` latch makes this a no-op when the dispatch already settled, so a
+            // late throw cannot double-settle. Returning _promise keeps both documented
+            // shapes working on the failure path: .onComplete(cb) delivers (err), and the
+            // `await` form rejects rather than resolving with undefined.
+            _settle(err);
+            return _promise;
         }
     }
 
