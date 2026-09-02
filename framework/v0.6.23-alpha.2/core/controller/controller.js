@@ -1444,15 +1444,22 @@ function SuperController(options) {
     }
 
     /**
-     * Get node resources
+     * Get node resources — builds the `<link>` (css) / `<script>` (js) tag
+     * string for the view's declared assets.
      *
-     * @param {string} type
-     * @param {string} resStr
+     * #OW3 — when the bundle opted in via templates.json `"sriEnabled": true`,
+     * every same-origin asset that resolves to a readable file on disk gets an
+     * `integrity="sha384-..." crossorigin="anonymous"` attribute pair
+     * (computed by lib/sri, fail-open), and its HTTP/2 preload hint is
+     * suppressed (the hint carries no integrity metadata, so a hinted fetch
+     * could not be matched to the integrity-checked consumer).
+     *
+     * @param {string} type - `'css'` or `'js'`
      * @param {array} resArr
      * @param {boolean} useWebroot
      * @param {string} webrootStr - Webroot string prefix for startsWith check (#P1)
      *
-     * @returns {object} content
+     * @returns {string} tag string to inject into the layout
      *
      * @private
      * */
@@ -1488,6 +1495,13 @@ function SuperController(options) {
             hostname = local.options.conf.hostname
         }
 
+        // #OW3 — opt-in Subresource Integrity (templates.json `"sriEnabled": true`).
+        // Attribute computation is fully delegated to lib/sri, which is
+        // fail-open by design: an asset that cannot be honestly hashed
+        // (external URL, unresolvable path, unreadable file) simply gets no
+        // integrity attribute and loads exactly as before.
+        var sriEnabled = (local.options.template.sriEnabled) ? true : false;
+
 
         if (
             isProxyHost
@@ -1514,10 +1528,18 @@ function SuperController(options) {
                     if (useWebroot && !obj.url.startsWith(webrootStr) ) {
                         obj.url = local.options.conf.server.webroot + obj.url.substring(1);
                     }
+                    // #OW3 — SRI attribute pair for same-origin disk-resolvable
+                    // assets when the bundle opted in; '' otherwise (fail-open).
+                    var sriAttributes = (sriEnabled) ? lib.sri.getIntegrityAttributes(obj.url, local.options.conf, local.options.conf.server.webroot) : '';
                     // HTTP2 Push via Link
                     if (
                         /http\/2/.test(local.options.conf.server.protocol)
                         && !self.isCacheless()
+                        // #OW3 — no preload hint for an SRI'd asset: the hint
+                        // carries no integrity metadata, so a hinted fetch may
+                        // not match the integrity-checked consumer and would
+                        // then be a wasted double-fetch.
+                        && !sriAttributes
                     ) {
                         local.options.template.h2Links += '<'+ obj.url +'>; as=style; rel=preload,'
                     }
@@ -1528,9 +1550,9 @@ function SuperController(options) {
                     // }
 
                     if (obj.media) {
-                        str += '\n\t\t<link href="'+ obj.url +'" media="'+ obj.media +'" rel="'+ obj.rel +'" type="'+ obj.type +'">';
+                        str += '\n\t\t<link href="'+ obj.url +'" media="'+ obj.media +'" rel="'+ obj.rel +'" type="'+ obj.type +'"'+ sriAttributes +'>';
                     } else {
-                        str += '\n\t\t<link href="'+ obj.url +'" rel="'+ obj.rel +'" type="'+ obj.type +'">';
+                        str += '\n\t\t<link href="'+ obj.url +'" rel="'+ obj.rel +'" type="'+ obj.type +'"'+ sriAttributes +'>';
                     }
                 }
                 break;
@@ -1543,10 +1565,18 @@ function SuperController(options) {
                     if (useWebroot && !obj.url.startsWith(webrootStr) ) {
                         obj.url = local.options.conf.server.webroot + obj.url.substring(1);
                     }
+                    // #OW3 — SRI attribute pair for same-origin disk-resolvable
+                    // assets when the bundle opted in; '' otherwise (fail-open).
+                    var sriAttributes = (sriEnabled) ? lib.sri.getIntegrityAttributes(obj.url, local.options.conf, local.options.conf.server.webroot) : '';
                     // HTTP2 Push via Link
                     if (
                         /http\/2/.test(local.options.conf.server.protocol)
                         && !self.isCacheless()
+                        // #OW3 — no preload hint for an SRI'd asset: the hint
+                        // carries no integrity metadata, so a hinted fetch may
+                        // not match the integrity-checked consumer and would
+                        // then be a wasted double-fetch.
+                        && !sriAttributes
                     ) {
                         local.options.template.h2Links += '<'+ obj.url +'>; as=script; rel=preload,'
                     }
@@ -1564,11 +1594,11 @@ function SuperController(options) {
                     if (
                         obj.isExternalPlugin
                     ) {
-                        local.options.template.externalPlugins.splice(1, 0, '\n\t\t<script'+ deferMode +' type="'+ obj.type +'" src="'+ obj.url +'"></script>');
+                        local.options.template.externalPlugins.splice(1, 0, '\n\t\t<script'+ deferMode +' type="'+ obj.type +'" src="'+ obj.url +'"'+ sriAttributes +'></script>');
                     }
                     else {
                         // normal case
-                        str += '\n\t\t<script'+ deferMode +' type="'+ obj.type +'" src="'+ obj.url +'"></script>';
+                        str += '\n\t\t<script'+ deferMode +' type="'+ obj.type +'" src="'+ obj.url +'"'+ sriAttributes +'></script>';
                     }
                 }
                 break;

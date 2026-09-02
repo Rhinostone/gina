@@ -26,6 +26,7 @@
       }
     ],
     "javascriptsDeferEnabled": true, // will place scripts in defer mode in the head by default. If false, will place in the footer
+    "sriEnabled": false, // opt-in Subresource Integrity: adds integrity= + crossorigin= to same-origin <script>/<link> tags whose files resolve on disk; external URLs and unresolvable paths are skipped (fail-open)
     "javascripts": [
       {
         "name"      : "gina",

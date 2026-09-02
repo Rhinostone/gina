@@ -17,6 +17,9 @@
             }
         ],
         "javascriptsDeferEnabled": true,
+        // opt-in Subresource Integrity: adds integrity= + crossorigin= to same-origin
+        // <script>/<link> tags whose files resolve on disk (fail-open otherwise)
+        //"sriEnabled": true,
         "javascripts": [
             // "/js/vendor/jquery/jquery-3.1.0.min.js",
             // "/js/vendor/modernizr-2.8.3.min.js",

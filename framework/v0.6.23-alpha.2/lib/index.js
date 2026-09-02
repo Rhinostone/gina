@@ -155,6 +155,14 @@ function Lib() {
         // above: a stateless pure-function leaf with no state to hot-reload, and
         // security-bearing, which keeps it out of the hot-reload path entirely.
         securityHeadersEmitter : require('./security-headers-emitter'),
+        // #OW3 — Subresource Integrity attribute computation (OWASP A08),
+        // consumed by the controller's resource builder when a bundle opts in
+        // via templates.json `"sriEnabled": true`. PLAIN require (NOT _require):
+        // security-bearing like the emitter/authn precedent above, and it holds
+        // a module-scope stat-validated hash cache that a per-request re-require
+        // would pointlessly discard (the cache can never go stale — every
+        // lookup re-stats the file — so surviving reloads costs nothing).
+        sri             : require('./sri'),
         // #AI6 — Async-job primitive. Holds an in-memory job registry, a
         // concurrency-limited worker, and a self-contained unref'd setInterval
         // sweep timer at module scope. Like State / logger below, it MUST use a

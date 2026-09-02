@@ -911,6 +911,13 @@ declare namespace gina {
          * `server.response.header` entry always beats the framework default.
          */
         securityHeadersEmitter: any;
+        /**
+         * Subresource Integrity attribute computation (#OW3, OWASP A08) —
+         * opt-in per bundle via `templates.json > "_common" > "sriEnabled"`.
+         * Fail-open: any asset that cannot be honestly hashed gets no
+         * `integrity` attribute rather than a guessed one.
+         */
+        sri: any;
         /** Pluggable object storage — adapter x strategy behind an opaque key (`settings.json > storage`). */
         storage: any;
         swigResolver: any;
