@@ -27,9 +27,10 @@ var path   = require('path');
 
 var FRAMEWORK = path.resolve(require('../fw'));
 
-// The nine non-plugin files of the #B433 census: 46 live `console.<level>(… request.url …)`
-// sites — server.js 15 · server.isaac.js 12 · controller.js 4 · the six render delegates 15
-// (+ the csrf plugin's 1, covered by section 03) — counted on a comment-free AST walk.
+// The ten non-plugin files of the #B433 census: live `console.<level>(… request.url …)`
+// sites across server.js · server.isaac.js · controller.js · the seven render delegates
+// (+ the csrf plugin's 1, covered by section 03). `render-xml.js` joined with #FIN2;
+// `render-stream.js` is deliberately absent — it logs no request URL.
 var CENSUS = [
     'core/server.js',
     'core/server.isaac.js',
@@ -39,7 +40,8 @@ var CENSUS = [
     'core/controller/controller.render-swig-async.js',
     'core/controller/controller.render-nunjucks.js',
     'core/controller/controller.render-nunjucks-async.js',
-    'core/controller/controller.render-v1.js'
+    'core/controller/controller.render-v1.js',
+    'core/controller/controller.render-xml.js'
 ];
 var PLUGIN  = 'core/plugins/lib/csrf/src/main.js';
 var ROUTING = 'lib/routing/src/main.js';

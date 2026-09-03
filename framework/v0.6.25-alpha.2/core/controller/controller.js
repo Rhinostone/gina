@@ -2029,6 +2029,67 @@ function SuperController(options) {
 
 
     /**
+     * Send a pre-serialised XML document (#FIN2).
+     *
+     * The outbound counterpart to #FIN1's verbatim inbound handling: gina does
+     * not build XML any more than it parses it. Serialise with the library of
+     * your choice and hand over a string — the delegate owns the wire concerns
+     * (content-type, charset, HEAD suppression, the HTTP/2 vs HTTP/1.1 split).
+     *
+     * The status code comes from `response.statusCode`, not from the payload:
+     * an XML string has no envelope for `renderJSON`'s `{ status }` convention,
+     * so set it upstream or answer errors with `self.throwError()`.
+     *
+     * Delegates to `controller.render-xml.js` (cache-busted in dev mode).
+     *
+     * @param {string} xmlContent    - The serialised document. Coerced via `toString()`
+     *                                 when not a string; null/undefined sends an empty body.
+     * @param {string} [contentType] - Response Content-Type. Default `application/xml`
+     *                                 (RFC 7303 §4.1 recommends it over `text/xml`).
+     *                                 Pass the suffix family explicitly when needed:
+     *                                 `application/soap+xml`, `application/atom+xml`, …
+     * @returns {void}
+     *
+     * @example
+     * // routing.json: { "url": "/iso20022/pain001", "method": "POST", ... }
+     * Controller.prototype.acknowledge = function(req, res, next) {
+     *     var self = this;
+     *     var ack  = myXmlBuilder.build({ msgId: req.body });
+     *     self.renderXML(ack);
+     * };
+     *
+     * @example
+     * // An Atom feed, with the content type the format expects
+     * Controller.prototype.feed = function(req, res, next) {
+     *     this.renderXML(myFeedBuilder.toXml(), 'application/atom+xml');
+     * };
+     */
+    this.renderXML = function(xmlContent, contentType) {
+        // #FI — controller action ended, rendering begins
+        if (_isDev && local._timeline && local._timeline._actionStart) {
+            var _xmlRenderStart = Date.now();
+            local._timeline.entries.push({
+                label: 'controller-action', cat: 'controller',
+                startMs: local._timeline._actionStart, endMs: _xmlRenderStart,
+                durationMs: _xmlRenderStart - local._timeline._actionStart,
+                detail: (local.options.control || null)
+            });
+            local._timeline._renderStart = _xmlRenderStart;
+        }
+
+        if ( this.isCacheless() ) {
+            delete require.cache[require.resolve( _(__dirname + '/controller.render-xml', true))];
+        }
+
+        return require( _(__dirname + '/controller.render-xml', true) )(xmlContent, contentType, {
+            self        : self,
+            local       : local,
+            headersSent : headersSent
+        });
+    }
+
+
+    /**
      * Send a plain-text response.
      * Coerces `content` to string if necessary and sets `content-type: text/plain`.
      *

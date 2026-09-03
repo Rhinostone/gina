@@ -297,6 +297,15 @@ declare namespace gina {
          */
         renderStream(asyncIterable: AsyncIterable<any>, contentType?: string): void;
 
+        /**
+         * Send a pre-serialised XML document.
+         * The status comes from `response.statusCode`, not from the payload.
+         * @param xmlContent - The serialised document; coerced when not a string
+         * @param contentType - Defaults to `application/xml`; pass the suffix
+         *                      family explicitly (`application/soap+xml`, …)
+         */
+        renderXML(xmlContent: string | any, contentType?: string): void;
+
         /** Send a plain-text response */
         renderTEXT(content: string | any): void;
 
