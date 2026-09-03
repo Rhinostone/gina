@@ -1,4 +1,4 @@
-define('gina', [ 'require', 'lib/merge', 'lib/uuid', 'lib/routing', 'utils/events', 'helpers/prototypes', 'helpers/dateFormat' ], function (require) {
+define('gina', [ 'require', 'lib/merge', 'lib/uuid', 'lib/routing', 'lib/money', 'utils/events', 'helpers/prototypes', 'helpers/dateFormat' ], function (require) {
 
     /**
      * Imports & definitions
@@ -7,6 +7,7 @@ define('gina', [ 'require', 'lib/merge', 'lib/uuid', 'lib/routing', 'utils/event
     var merge           = require('lib/merge');
     var uuid            = require('lib/uuid');
     var routing         = require('lib/routing');
+    var money           = require('lib/money'); // #FIN5 — exposed as gina.money below
     var dateFormat      = require('helpers/dateFormat')();
     var prototypes      = require('helpers/prototypes')({ dateFormat: dateFormat });
     if (!window.process ) {
@@ -100,7 +101,13 @@ define('gina', [ 'require', 'lib/merge', 'lib/uuid', 'lib/routing', 'utils/event
             'registeredEvents'  : {},
             'events'            : {},
 
-            'setOptions'        : setOptions
+            'setOptions'        : setOptions,
+            // #FIN5 — exact-money primitive (ISO 4217 minor-unit BigInt
+            // arithmetic), the same module the server registers as lib.money:
+            // gina.money.parse('19.99','EUR') / add / subtract / multiply /
+            // compare / format / toMinor / fromMinor / exponent. Display
+            // formatting stays with Intl.NumberFormat.
+            'money'             : money
         };
 
         // iframe case
