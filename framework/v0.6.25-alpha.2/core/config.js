@@ -3112,6 +3112,17 @@ function Config(opt, contextResetNeeded) {
             conf[bundle][env].server.rateLimit = merge(conf[bundle][env].server.rateLimit, conf[bundle][env].content.settings.server.rateLimit);
         }
 
+        // #FIN6 — fold settings.json's `server.idempotency` block (Idempotency-Key
+        // dedup policy) into `server.idempotency`, same fill semantics as the
+        // #MS6 fold above: env.json's keys WIN, settings.json fills what
+        // env.json lacks.
+        if ( conf[bundle][env].content.settings && conf[bundle][env].content.settings.server && conf[bundle][env].content.settings.server.idempotency ) {
+            if ( typeof(conf[bundle][env].server.idempotency) == 'undefined' ) {
+                conf[bundle][env].server.idempotency = {};
+            }
+            conf[bundle][env].server.idempotency = merge(conf[bundle][env].server.idempotency, conf[bundle][env].content.settings.server.idempotency);
+        }
+
         conf[bundle][env].hostname = scheme + '://' + conf[bundle][env].host + ':' + conf[bundle][env].server.port;
 
         // if ( /^true$/i.test( getContext('isProxyHost') ) ) {

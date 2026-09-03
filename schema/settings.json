@@ -455,6 +455,49 @@
             }
           }
         },
+        "idempotency": {
+          "type": "object",
+          "description": "Idempotency-Key request deduplication at the router band (#FIN6), per the IETF draft (draft-ietf-httpapi-idempotency-key-header). Opt-in TWICE: dormant unless `enabled` is strictly true, AND a route participates only when routing.json declares top-level `idempotency: true` (or `{ \"required\": true }`, which answers 400 when the header is missing). Runs AFTER route authorization and the rate-limit gate, BEFORE DTO validation -- 401 -> 429 -> 409/422/replay -> 422. The first request bearing an Idempotency-Key reserves the operation (kv `setnx` + the in-flight TTL, crash-safe by expiry) and executes; its rendered JSON response is recorded (status, content-type/location headers, body, payload fingerprint) under the retention TTL, and a retry with the same key + payload is answered with the RECORDED response plus `Idempotency-Replayed: true`. A duplicate while the original is in flight gets 409 + Retry-After; the same key with a DIFFERENT payload gets 422. Requests with NO resolvable principal (no session user, no machine caller) are SKIPPED -- a stored response must never cross principals. Responses >= 500, bodies over `maxBodySize`, and any response that never passes through renderJSON (a template render, a redirect, an error egress) RELEASE the reservation so retries re-execute. Deduplication SCOPE follows the kv namespace's backend: in-memory dedups per process (a retry on another replica re-executes -- the resolver warns); replica-safe dedup needs a redis- or sqlite-backed namespace. Outage policy is the namespace's own `failMode`: `open` proceeds without dedup, `closed` answers 503 + Retry-After. Folded from settings.json into the runtime server block (env.json keys win); resolved once at engine start, so changes need a bundle restart. Structurally invalid values on an enabled block refuse the boot.",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false,
+              "description": "Arm the dedup gate. Must be strictly true; any other value (including the string \"true\") leaves it dormant."
+            },
+            "namespace": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The kv namespace holding reservations and recorded response envelopes. Must be DECLARED under `kv.namespaces` -- an undeclared name refuses the boot. Give it its OWN namespace: its `failMode` is then unambiguously the dedup outage policy."
+            },
+            "keyField": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The `session.user` property that identifies a signed-in caller (machine callers key on their registered name automatically) -- the same convention as `server.rateLimit.keyField`."
+            },
+            "ttl": {
+              "type": ["string", "number"],
+              "default": "24h",
+              "description": "Retention of a recorded response envelope (duration string or ms). A retry inside this window replays the recorded response; after expiry the operation re-executes. Publish this policy to your API consumers, per the draft."
+            },
+            "inflightTtl": {
+              "type": ["string", "number"],
+              "default": "2m",
+              "description": "Lifetime of the in-flight reservation. A crashed process's reservation self-releases after this window, letting a retry re-execute. Size it above your slowest opted-in request."
+            },
+            "maxBodySize": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 262144,
+              "description": "Largest response body (bytes) stored for replay. A larger response releases the reservation instead -- the retry re-executes."
+            },
+            "retryAfter": {
+              "type": ["string", "number"],
+              "default": "5s",
+              "description": "The Retry-After value answered on 409 (in-flight duplicate) and 503 (store outage on a failMode `closed` namespace)."
+            }
+          }
+        },
         "rateLimit": {
           "type": "object",
           "description": "Identified-caller quota enforcement at the router band (#MS6). Opt-in: dormant unless `enabled` is strictly true. Runs AFTER route authorization (the principal resolver) and BEFORE DTO validation, so the order is 401 -> 429 -> 422; a request with NO resolvable principal (no session user, no machine caller) is SKIPPED, never bucketed -- anonymous flood control belongs to the edge proxy and the HTTP/2 rapid-reset guard, not here. Fixed-window counters live in the kv namespace this block names, so choosing the namespace's backend chooses the quota's SCOPE: in-memory counts per process; replica-shared quotas need a redis- or sqlite-backed namespace (the resolver warns about a memory backend, and about a redis entry missing `enableOfflineQueue: false` + `commandTimeout` -- with ioredis defaults an outage QUEUES gated requests instead of degrading). Outage policy is the namespace's own `failMode`: `open` allows without headers, `closed` answers 503 + Retry-After. Denials answer 429 + Retry-After plus the draft-ietf-httpapi-ratelimit-headers-11 structured fields (`RateLimit`, `RateLimit-Policy`); allowed limited requests carry them too (without `t`). Per-route overrides ride routing.json's top-level `rateLimit` key (`false` = exempt; `{limit, window}` REPLACES the default for that route in its own bucket). Folded from settings.json into the runtime server block (env.json keys win); resolved once at engine start, so changes need a bundle restart. Structurally invalid values on an enabled block refuse the boot.",

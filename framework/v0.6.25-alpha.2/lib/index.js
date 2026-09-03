@@ -228,6 +228,9 @@ function Lib() {
         // per-request require() (#B32-residual), and its policy/state live on the
         // engine instance + in the kv store, so hot-reload would gain nothing.
         rateLimit       : require('./rate-limit'),
+        // #FIN6 — Idempotency-Key dedup gate. PLAIN require, like rate-limit:
+        // router-bound, stateless (state lives in the kv namespace).
+        idempotency     : require('./idempotency'),
         // #COMPLY3 — authentication hardening primitives (password hashing +
         // verification, password policy, lockout, TOTP). require() — NOT _require —
         // for the authzGate reason above: a security primitive stays out of the

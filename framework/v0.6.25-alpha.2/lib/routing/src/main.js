@@ -246,6 +246,15 @@ function Routing() {
                 params.rateLimit = routeObject.rateLimit;
             }
 
+            // #FIN6 — propagate the per-route idempotency opt-in to
+            // req.routing.idempotency (top-level, NOT req.routing.param.* — the
+            // #CSRF2 trap). typeof-guarded so `false` survives the copy;
+            // assigned only when declared, so a routing.json that never
+            // mentions `idempotency` produces a byte-identical params object.
+            if ( typeof(routeObject.idempotency) != 'undefined' ) {
+                params.idempotency = routeObject.idempotency;
+            }
+
             // isRoute
             return self.compareUrls(params, routeObject.url, req);
         }

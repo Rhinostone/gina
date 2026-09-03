@@ -2297,6 +2297,22 @@ function Server(options) {
                 });
             }
 
+            // #FIN6 — Idempotency-Key dedup policy, resolved ONCE from the
+            // post-fold `server.idempotency` and stamped where the router reads
+            // it (the same instance-scalars family as the rate-limit stamp
+            // above). Fail-closed on an enabled block; verifies the named kv
+            // namespace is DECLARED.
+            if ( typeof(instance._idempotency) == 'undefined' ) {
+                var _idemContent = self.conf[self.appName][self.env].content;
+                instance._idempotency = lib.idempotency.resolveConf(self.conf[self.appName][self.env].server, {
+                    kv         : lib.kv,
+                    kvSettings : _idemContent && _idemContent.settings && _idemContent.settings.kv,
+                    connectors : _idemContent && _idemContent.connectors,
+                    routing    : _idemContent && _idemContent.routing,
+                    warn       : function(idemWarnMsg) { console.warn('[idempotency] ' + idemWarnMsg); }
+                });
+            }
+
             // #B115 — publish the engine so the form-validator's server-side `query`
             // rule can hand its hand-built controller the LIVE instance (one engine
             // per process). Without this, queryFromBackend mints a second `_cached`
@@ -7804,6 +7820,10 @@ function Server(options) {
                     // NOT `||`: `false` is a MEANINGFUL value (exempt) that `|| null`
                     // would erase into the default policy.
                     rateLimit           : ( typeof(routing[name].rateLimit) != 'undefined' ) ? routing[name].rateLimit : null,
+                    // #FIN6 — per-route idempotency opt-in. typeof-guarded for
+                    // symmetry with the rate-limit line above (`false` is a
+                    // meaningful explicit value).
+                    idempotency         : ( typeof(routing[name].idempotency) != 'undefined' ) ? routing[name].idempotency : null,
                     // #I18N1 slice 3 — per-route culture-prefix opt-in.
                     // When true, the i18n negotiator reads
                     // req.routing.param.culture as the highest-priority

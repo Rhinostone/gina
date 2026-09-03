@@ -425,6 +425,15 @@ module.exports = function renderJSON(jsonObj, deps) {
 
         var data = JSON.stringify(jsonObj);
 
+        // #FIN6 — record the response envelope for an idempotency-reserved
+        // request (stamped by the router-band gate; absent on every other
+        // request). Fire-and-forget: the send below never waits on the store
+        // and record() owns its own rejection. Sits at the single stringify
+        // choke point so every body-write branch sees the recorded body.
+        if ( request._idemCapture ) {
+            lib.idempotency.record(request, response, data);
+        }
+
         // HEAD: send all response headers (including content-length reflecting what the body
         // would have been) but suppress the body itself. The controller action runs in full
         // so headers such as content-type, cache-control, and etag are set correctly.

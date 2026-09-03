@@ -23,6 +23,7 @@ var fs                  = require('fs')
     // #MS6 — the identified-caller quota gate (plain-required in lib/index.js,
     // so this gen-0 binding IS the live module).
     , rateLimit         = lib.rateLimit
+    , idempotency       = lib.idempotency
     , SuperController   = require('./controller')
     , Config            = require('./config')
 ;
@@ -1053,14 +1054,37 @@ function Router(env, scope) {
                                 // last-resort belt (an unowned rejection in the dispatch spine
                                 // is a hung request with no visible log line).
                                 _rlGate.then(function onRateLimitVerdict(proceed) {
-                                    if (proceed) { _dispatchControllerAction(); }
+                                    if (proceed) { _idemThenDispatch(); }
                                 }).catch(function onRateLimitError(rlErr) {
                                     serverInstance.throwError(response, 500, (rlErr && rlErr.stack) || String(rlErr));
                                 });
                                 return;
                             }
                         }
-                        _dispatchControllerAction();
+                        // #FIN6 — Idempotency-Key dedup, strictly after the
+                        // rate-limit verdict (a throttled caller must never touch
+                        // the reservation store) and before the band (DTO -> hooks
+                        // -> action). Hoisted declaration: the rate-limit allow
+                        // path above calls it before this line is reached textually.
+                        function _idemThenDispatch() {
+                            var _idemConf = serverInstance._idempotency;
+                            if ( _idemConf && _idemConf.enabled === true ) {
+                                var _idemGate = idempotency.gate(request, response, controller, _idemConf);
+                                if ( _idemGate ) {
+                                    // Owned terminals — the rate-limit spine discipline:
+                                    // allow -> the band, answered (replay/409/422/400/503)
+                                    // -> inside the gate; the catch is the last-resort belt.
+                                    _idemGate.then(function onIdempotencyVerdict(proceed) {
+                                        if (proceed) { _dispatchControllerAction(); }
+                                    }).catch(function onIdempotencyError(idemErr) {
+                                        serverInstance.throwError(response, 500, (idemErr && idemErr.stack) || String(idemErr));
+                                    });
+                                    return;
+                                }
+                            }
+                            _dispatchControllerAction();
+                        }
+                        _idemThenDispatch();
 
                     });
             } else {
@@ -1132,14 +1156,31 @@ function Router(env, scope) {
                     var _rlGate = rateLimit.gate(request, response, controller, _rlConf);
                     if ( _rlGate ) {
                         _rlGate.then(function onRateLimitVerdict(proceed) {
-                            if (proceed) { _dispatchControllerAction(); }
+                            if (proceed) { _idemThenDispatch(); }
                         }).catch(function onRateLimitError(rlErr) {
                             serverInstance.throwError(response, 500, (rlErr && rlErr.stack) || String(rlErr));
                         });
                         return;
                     }
                 }
-                _dispatchControllerAction();
+                // #FIN6 — Idempotency-Key dedup, strictly after the rate-limit
+                // verdict and before the band (see the with-middleware site above).
+                function _idemThenDispatch() {
+                    var _idemConf = serverInstance._idempotency;
+                    if ( _idemConf && _idemConf.enabled === true ) {
+                        var _idemGate = idempotency.gate(request, response, controller, _idemConf);
+                        if ( _idemGate ) {
+                            _idemGate.then(function onIdempotencyVerdict(proceed) {
+                                if (proceed) { _dispatchControllerAction(); }
+                            }).catch(function onIdempotencyError(idemErr) {
+                                serverInstance.throwError(response, 500, (idemErr && idemErr.stack) || String(idemErr));
+                            });
+                            return;
+                        }
+                    }
+                    _dispatchControllerAction();
+                }
+                _idemThenDispatch();
             }
 
             // controller = null;
