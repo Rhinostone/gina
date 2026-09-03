@@ -4335,7 +4335,9 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
         port                : 80,
         // POST|GET|PUT|DELETE|HEAD
         method              : 'GET',
-        // {} use `"username:password"` for basic authentification
+        // `"username:password"` — minted into an `Authorization: Basic` header
+        // before dispatch on BOTH transports (#B465); a caller-supplied
+        // authorization header wins.
         auth                : undefined,
         keepAlive           : true,
         // Simultanous active conns
@@ -4484,7 +4486,10 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
      * An `async` callback's rejected promise is owned at every delivery seam
      * (#B399): it answers 500 instead of leaving the request hanging.
      *
-     * @param {object}   options          - Request options (host, port, path, method, …)
+     * @param {object}   options          - Request options (host, port, path, method, …).
+     *   `options.auth` (`"user:password"`) is minted into an `Authorization: Basic`
+     *   header on both transports before dispatch; a caller-supplied
+     *   `authorization` header wins (#B465).
      * @param {object}   [data]           - Request body / query params
      * @param {function} [callback]       - `callback(err, result)` — omit to get the onComplete handle
      * @returns {void|object} `undefined` in callback form; the `{onComplete}` handle otherwise
@@ -4547,6 +4552,38 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
             }
         }
         options = cleanedOptions;
+
+        // #B465 — mint Authorization from `auth`, then drop the option.
+        // Node's `request()` consumed `auth` on HTTP/1.x only; on HTTP/2 the
+        // option-copy loop forwarded it as a literal `auth:` header (the strip
+        // set did not list it) and no Authorization was ever minted — credential
+        // disclosure in a nonstandard header plus silently-unperformed auth.
+        // Minting here and deleting the option gives both transports identical
+        // wire bytes through one code path. A caller-supplied authorization
+        // header always wins (node behaved the same way on HTTP/1.x). The block
+        // reads `options` and the global `Buffer` only — keep it self-contained.
+        if ( typeof(options.auth) != 'undefined' ) {
+            if ( typeof(options.auth) == 'string' && options.auth != '' ) {
+                if ( !options.headers ) {
+                    options.headers = {};
+                }
+                var _hasAuthorizationHeader = false;
+                var _authHeaderKeys = Object.keys(options.headers);
+                for (var _ahi = 0; _ahi < _authHeaderKeys.length; ++_ahi) {
+                    if ( _authHeaderKeys[_ahi].toLowerCase() == 'authorization' ) {
+                        _hasAuthorizationHeader = true;
+                        break;
+                    }
+                }
+                if ( !_hasAuthorizationHeader ) {
+                    options.headers.authorization = 'Basic ' + Buffer.from(options.auth).toString('base64');
+                }
+            }
+            // Deleted unconditionally — an empty or malformed credential must
+            // not leak as a header either.
+            delete options.auth;
+        }
+        // end #B465
 
         // Normalize requestTimeout to ms once — covers both HTTP/1 and HTTP/2 paths.
         if (typeof options.requestTimeout !== 'undefined') {
@@ -5830,6 +5867,7 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
         //     and are not valid HTTP headers
         //   - Remove undefined/null values
         var _NON_HTTP_OPTS = new Set([
+            'auth', // #B465 belt — minted into Authorization pre-dispatch, never a header itself
             '_body', '_comment', 'ca', 'hostname', 'host', 'port',
             'requestTimeout', 'keepAlive', 'maxSockets', 'keepAliveMsecs', 'maxFreeSockets',
             'rejectUnauthorized', 'maxRetry', 'retryUnsafe', 'agent', 'protocol', 'scheme',
