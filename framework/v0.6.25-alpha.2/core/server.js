@@ -1189,6 +1189,48 @@ function Server(options) {
                 console.debug('[ BUNDLE ][ server ][ init ] Registered '+ _dtoCount +' route DTO reference(s) for [ '+ self.appName +' ]');
             }
 
+            // #FIN3 — resolve + register every routing.json-declared message
+            // validator at BOOT. A route opts its raw request body into
+            // application-supplied schema validation with `param.messageValidator`,
+            // naming a `<bundle>/message-validators/<name>.js` FACTORY module
+            // (`module.exports = function (ctx) { return function validate(document, req) { ... }; };`).
+            // The factory runs HERE, synchronously, once per name — an expensive
+            // schema compile happens at deploy time, and a missing / broken
+            // validator module refuses to BOOT instead of silently disabling
+            // validation on that route in production (the #B57 rule, mirroring
+            // the DTO registrar above). A validator file edit therefore needs a
+            // bundle restart, exactly like DTOs, routing.json, forms and
+            // connectors.json.
+            var _msvRouting = serverOpt.routing || {};
+            var _msvSrcPath = self.conf[self.appName][self.env].bundlesPath + '/' + self.appName;
+            var _msvCount   = 0;
+            for (var _msvRule in _msvRouting) {
+                var _msvRoute = _msvRouting[_msvRule];
+                if ( typeof(_msvRoute) != 'object' || _msvRoute === null || !_msvRoute.param ) {
+                    continue;
+                }
+                var _msvName = _msvRoute.param.messageValidator;
+                if ( typeof(_msvName) == 'undefined' || _msvName === null || _msvName === '' ) {
+                    continue;
+                }
+                if ( typeof(_msvName) != 'string' ) {
+                    throw new Error('[ SERVER ] Route `'+ _msvRule +'`: `param.messageValidator` must be a string (the `message-validators/<name>.js` module to load).');
+                }
+                var _msvFn = null;
+                try {
+                    _msvFn = lib.messageValidator.register(_msvSrcPath, _msvName, { bundle: self.appName, env: self.env });
+                } catch (_msvErr) {
+                    throw new Error('[ SERVER ] Route `'+ _msvRule +'`: message validator `message-validators/'+ _msvName +'.js` could not be registered from `'+ _msvSrcPath +'`:\n'+ _msvErr.message);
+                }
+                if ( !_msvFn ) {
+                    throw new Error('[ SERVER ] Route `'+ _msvRule +'` declares `param.messageValidator` `'+ _msvName +'` but `'+ _msvSrcPath +'/message-validators/'+ _msvName +'.js` is missing, does not export a factory function, or its factory did not return a validate function (the contract is `module.exports = function (ctx) { return function validate(document, req) { ... }; };`).');
+                }
+                ++_msvCount;
+            }
+            if ( _msvCount > 0 ) {
+                console.debug('[ BUNDLE ][ server ][ init ] Registered '+ _msvCount +' route message validator(s) for [ '+ self.appName +' ]');
+            }
+
             // #COMPLY1 — lint every declared authorization flag and resolve the login
             // bounce target at BOOT. A route gates its access with `param.requireAuth`;
             // `lib/authz-gate` enforces it at both core/router.js dispatch sites.

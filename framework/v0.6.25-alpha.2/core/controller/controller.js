@@ -7701,6 +7701,12 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
      *   - `throwError(code, err)` — 2-arg form: HTTP status + Error|string
      *   - `throwError(res, code, msg)` — internal 3-arg form used by the router
      *
+     * Structured error payloads: an errorObj carrying `error` plus `fields`
+     * (the DTO/validator field map), `flash`, or `errors` (the #FIN3
+     * message-validator document-error array) is merged wholesale into the
+     * wire body, so those keys ride the JSON envelope alongside
+     * `status`/`error`/`ref`.
+     *
      * #CE1 — transient upgrade (opt-in): when the bundle sets
      * `server.transientErrors.enabled: true` and any call argument carries
      * `isTransient === true` (a `lib/connector-error`-stamped datastore
@@ -7921,6 +7927,13 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                 && typeof(res) == 'object'
                 && typeof(res.error) != 'undefined'
                 && typeof(res.flash) != 'undefined'
+                ||
+                // #FIN3 — a message-validator refusal carries its document
+                // errors ARRAY under the sibling top-level key
+                !(arguments[arguments.length-1] instanceof Error)
+                && typeof(res) == 'object'
+                && typeof(res.error) != 'undefined'
+                && typeof(res.errors) != 'undefined'
             ) { // ApiError merge
                 errorObject = merge(arguments[arguments.length-1], errorObject)
             }

@@ -928,6 +928,8 @@ declare namespace gina {
         /** Identified-caller quota gate — fixed-window counters over the kv primitive, run by the router between authz and the DTO pipe (#MS6). */
         rateLimit: any;
         idempotency: any;
+        /** Message-schema validation seam — application-supplied validators registered at boot, gated at the router band ahead of the DTO pipe (#FIN3). */
+        messageValidator: any;
         /** Stale built-release watch primitives — source-tree fingerprints, change classification, busy probes and the in-flight request gauge (#RWATCH). */
         releaseWatch: any;
         routing: {

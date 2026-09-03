@@ -231,6 +231,10 @@ function Lib() {
         // #FIN6 — Idempotency-Key dedup gate. PLAIN require, like rate-limit:
         // router-bound, stateless (state lives in the kv namespace).
         idempotency     : require('./idempotency'),
+        // #FIN3 — message-schema validation seam (application-supplied validators).
+        // PLAIN require, like rate-limit/idempotency: router-bound, load-once, and
+        // its registry lives on process.gina (survives refreshCore, dies on restart).
+        messageValidator : require('./message-validator'),
         // #COMPLY3 — authentication hardening primitives (password hashing +
         // verification, password policy, lockout, TOTP). require() — NOT _require —
         // for the authzGate reason above: a security primitive stays out of the

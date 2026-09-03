@@ -24,6 +24,11 @@ var fs                  = require('fs')
     // so this gen-0 binding IS the live module).
     , rateLimit         = lib.rateLimit
     , idempotency       = lib.idempotency
+    // #FIN3 — message-schema validation gate (application-supplied validators),
+    // run inside the dispatch band ahead of the DTO pipe. Plain lib access like
+    // its band siblings above: router-bound, load-once, registry state on
+    // process.gina.
+    , messageValidator  = lib.messageValidator
     , SuperController   = require('./controller')
     , Config            = require('./config')
 ;
@@ -991,6 +996,28 @@ function Router(env, scope) {
                         // exact synchronous path (the #B383 family: async-ness in a gate is
                         // a behaviour change, so it is confined to callers who armed it).
                         var _dispatchControllerAction = function() {
+                            // #FIN3 — application-supplied message-schema validation.
+                            // Dormant (no `param.messageValidator` on the route) the gate
+                            // returns null and mints ZERO promises — the band below runs
+                            // on today's exact synchronous path. Armed, it returns a
+                            // promise owning every refusal terminal (400/422/503/500);
+                            // the band continues only on an allow. Document-level
+                            // validation runs BEFORE the DTO pipe's field rules, and the
+                            // disclosure ordering above (401 -> 429 -> idempotency) is
+                            // preserved by construction. The catch is the last-resort
+                            // belt — the rate-limit / idempotency spine discipline.
+                            var _msvGate = messageValidator.gate(request, response, controller);
+                            if ( _msvGate ) {
+                                _msvGate.then(function onMessageValidatorVerdict(proceed) {
+                                    if (proceed) { _msvDispatchBand(); }
+                                }).catch(function onMessageValidatorError(msvErr) {
+                                    serverInstance.throwError(response, 500, (msvErr && msvErr.stack) || String(msvErr));
+                                });
+                                return;
+                            }
+                            _msvDispatchBand();
+                        };
+                        var _msvDispatchBand = function() {
                             // #DTO2 — default-on request-payload validation. A strict NO-OP
                             // unless the route declares `param.dto`. Placed BEFORE the
                             // reservedActions loop so a 422 short-circuits the whole controller
@@ -1103,6 +1130,22 @@ function Router(env, scope) {
                 // above for the full rationale: after authz, before the DTO pipe;
                 // dormant mints ZERO promises and runs the band synchronously).
                 var _dispatchControllerAction = function() {
+                    // #FIN3 — application-supplied message-schema validation (see the
+                    // with-middleware site above for the full rationale: dormant mints
+                    // ZERO promises; armed owns every refusal terminal and runs
+                    // document-level validation before the DTO pipe's field rules).
+                    var _msvGate = messageValidator.gate(request, response, controller);
+                    if ( _msvGate ) {
+                        _msvGate.then(function onMessageValidatorVerdict(proceed) {
+                            if (proceed) { _msvDispatchBand(); }
+                        }).catch(function onMessageValidatorError(msvErr) {
+                            serverInstance.throwError(response, 500, (msvErr && msvErr.stack) || String(msvErr));
+                        });
+                        return;
+                    }
+                    _msvDispatchBand();
+                };
+                var _msvDispatchBand = function() {
                     // #DTO2 — default-on request-payload validation (see the with-middleware
                     // site above). A strict NO-OP unless the route declares `param.dto`.
                     if ( !dtoPipe.validateRequestPayload(controller, request, response) ) {
