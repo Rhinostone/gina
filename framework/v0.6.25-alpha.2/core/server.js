@@ -4376,6 +4376,27 @@ function Server(options) {
             if ( !request.isMultipart ) {
                 request.setEncoding(self.conf[self.appName][self.env].encoding);
             }
+            // #FIN1 — XML request bodies reach the application verbatim. The flag is computed
+            // here, beside the multipart one, so the content-type regex exists at exactly ONE
+            // site: the three body branches (POST/PUT/PATCH) read the flag. That is the #B103
+            // lesson applied — those same three sites had drifted apart before the multipart
+            // test was collapsed to a single flag.
+            //
+            // The matched set is the one three independent implementations converge on:
+            // ASP.NET Core registers `application/xml`, `text/xml` and `application/*+xml`
+            // (MediaTypeHeaderValues.cs — ApplicationXml / TextXml / ApplicationAnyXmlSyntax,
+            // all three added by XmlSerializerInputFormatter); Spring's MimeType.includes()
+            // documents `application/*+xml` as including `application/soap+xml`; type-is
+            // (Express/body-parser) matches structured suffixes generically. Note the wildcard
+            // is scoped to `application/` in all of them — none registers `image/*+xml` or
+            // `text/*+xml` — so `image/svg+xml` is deliberately NOT matched here.
+            //
+            // RFC 7303 §9.6.1 registers the `+xml` suffix, but RFC 6838 §4.2.8 makes it a
+            // naming convention only and does NOT mandate generic processing: this set is
+            // convergent implementation practice, not a normative requirement. The anchoring
+            // correctly excludes the three RFC 7303 types that are not XML *documents* —
+            // `application/xml-dtd` (§9.5) and both `xml-external-parsed-entity` (§9.3/§9.4).
+            request.isXmlBody = /^\s*(application\/([\w.-]+\+)?xml|text\/xml)\s*(;|$)/i.test(request.headers['content-type'] || '');
             // be carfull, if you are using jQuery + cross domain, you have to set the header manually in your $.ajax query -> headers: {'X-Requested-With': 'XMLHttpRequest'}
             request.isXMLRequest       = ( request.headers['x-requested-with'] && request.headers['x-requested-with'] == 'XMLHttpRequest' ) ? true : false;
 
@@ -6547,6 +6568,26 @@ function Server(options) {
                                         return;
                                     }
                                 }
+                            } else if ( request.isXmlBody ) {
+                                // #FIN1 — hand an XML body to the application untouched: no
+                                // decode, no "true"/"false"/"on"/"null" coercion, no bracket-key
+                                // expansion. `request.body` stays the verbatim document (the same
+                                // string `request.rawBody` snapshots above), and the method slot is
+                                // left unset — the routing loop normalises it to {} further down,
+                                // so a controller still reads an object from `request.post`.
+                                //
+                                // What the legacy branch below did to XML: the data helper it
+                                // calls splits on `&`, then on `=`, and keeps only the first pair — so
+                                // `<?xml version="1.0" encoding="UTF-8"?>` alone collapsed the
+                                // WHOLE document to { '<?xml version': '"1.0" encoding' }, and that
+                                // object (having a key) then REPLACED request.body at the tail.
+                                // No error was ever raised; the document was silently truncated.
+                                //
+                                // `obj` must be set to an object rather than left null: the shared
+                                // tail below reads `typeof(obj) == 'object' && obj.count()`, and
+                                // `typeof null === 'object'`, so a null would throw inside that
+                                // guard and be answered as a 500. An empty object no-ops it.
+                                obj = {};
                             } else {
                                 if ( /application\/x\-www\-form\-urlencoded/.test(request.headers['content-type']) && /\+/.test(request.body) ) {
                                     request.body = request.body.replace(/\+/g, ' ');
@@ -6740,6 +6781,12 @@ function Server(options) {
                                         console.warn('[ Could not parse application/json PUT body ] '+ request.url +'\n'+ err.stack);
                                     }
                                 }
+                            } else if ( request.isXmlBody ) {
+                                // #FIN1 — verbatim XML body; see the POST branch for the full
+                                // rationale. PUT's tail is already null-guarded (`if ( obj && … )`)
+                                // unlike POST/PATCH, so the empty object is for uniformity across
+                                // the three sites rather than to dodge a throw.
+                                obj = {};
                             } else {
                                 if ( /application\/x\-www\-form\-urlencoded/.test(request.headers['content-type']) ) {
                                     request.body = request.body.replace(/\+/g, ' ');
@@ -6859,6 +6906,12 @@ function Server(options) {
                                         return;
                                     }
                                 }
+                            } else if ( request.isXmlBody ) {
+                                // #FIN1 — verbatim XML body; see the POST branch for the full
+                                // rationale. PATCH shares POST's tail shape, so the empty object
+                                // is load-bearing here too: a null would throw inside
+                                // `typeof(obj) == 'object' && obj.count()` and answer 500.
+                                obj = {};
                             } else {
                                 if ( /application\/x\-www\-form\-urlencoded/.test(request.headers['content-type']) && /\+/.test(request.body) ) {
                                     request.body = request.body.replace(/\+/g, ' ');

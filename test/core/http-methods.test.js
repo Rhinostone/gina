@@ -1292,3 +1292,229 @@ describe('18 - decodeURI (whole-URI) crash-safety (#B30 review follow-up)', func
         assert.match(live, /var url\s*=\s*safeDecodeURI\(local\.request\.url\)/);
     });
 });
+
+
+// ─── 19 — #FIN1: XML request bodies reach the application verbatim ───────────
+//
+// The correctness claim here is a runtime VALUE (does the document survive
+// byte-for-byte?), not a shape, so every pin below is backed by a behavioural
+// arm driving the REAL formatDataFromString, each with a subtract control.
+//
+// Red-first validation was run during development as a one-off `git show HEAD:`
+// harness comparing each pin against the pre-change bytes; it is deliberately
+// NOT baked in here, because HEAD becomes the post-change tree the moment this
+// lands and such an arm would then invert.
+
+describe('19 - body parser: XML bodies reach the application verbatim (#FIN1)', function() {
+    var src, live;
+
+    // helpers/data exposes formatDataFromString as an implicit global once the
+    // DataHelper constructor runs — same idiom as test/lib/format-data-from-string.test.js.
+    require(path.join(FW, 'helpers', 'data', 'src', 'main'))();
+    var formatDataFromString = global.formatDataFromString;
+    // utils/prototypes installs Object.prototype.count(), which the shared
+    // POST/PATCH tail calls. The replica mirrors the source, so it needs it too.
+    require(path.join(FW, '..', '..', 'utils', 'prototypes'));
+
+    function stripComments(s) {
+        return s.split('\n').filter(function(l) { return !/^\s*\/\//.test(l); }).join('\n');
+    }
+
+    // Lift the SHIPPED matcher out of the source rather than retyping it: a
+    // retyped copy could drift from what actually ships, and the table below
+    // would then certify a regex nobody runs.
+    function shippedXmlMatcher(source) {
+        var m = source.match(/request\.isXmlBody\s*=\s*\/([\s\S]*?)\/i\.test\(/);
+        assert.ok(m, 'could not lift the #FIN1 content-type matcher out of server.js');
+        return new RegExp(m[1], 'i');
+    }
+
+    // Faithful replica of the POST string-body branch (processRequestData),
+    // including the shared tail. `subtractArm` disables ONLY the #FIN1 arm,
+    // reproducing the pre-fix path while leaving everything else intact — a
+    // syntax-breaking subtract would discriminate nothing.
+    function postBranch(rawBody, contentType, opts) {
+        opts = opts || {};
+        var XML     = shippedXmlMatcher(src);
+        var request = {
+            body        : rawBody,
+            rawBody     : rawBody,
+            headers     : { 'content-type': contentType },
+            isMultipart : false
+        };
+        request.isXmlBody = opts.subtractArm ? false : XML.test(contentType || '');
+
+        var obj = null, bodyStr = null;
+
+        if ( !request.isMultipart ) {
+            if ( /application\/json/i.test(contentType) ) {
+                obj = JSON.parse(request.body);
+                request.post = obj;
+            } else if ( request.isXmlBody ) {
+                obj = {};                                  // ← the #FIN1 arm
+            } else {
+                if ( /application\/x\-www\-form\-urlencoded/.test(contentType) && /\+/.test(request.body) ) {
+                    request.body = request.body.replace(/\+/g, ' ');
+                }
+                if ( request.body.substring(0,1) == '?' ) {
+                    request.body = request.body.substring(1);
+                }
+                try { bodyStr = decodeURIComponent(request.body); } catch (e) { bodyStr = request.body; }
+                if ( /(\"false\"|\"true\"|\"on\")/.test(bodyStr) ) {
+                    bodyStr = bodyStr.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);
+                }
+                if ( /(\"null\")/i.test(bodyStr) ) {
+                    bodyStr = bodyStr.replace(/\"null\"/ig, null);
+                }
+                obj = formatDataFromString(bodyStr);
+                request.post = obj;
+            }
+        }
+        // Shared tail, verbatim from server.js. `typeof null === 'object'`, which
+        // is exactly why the arm above must set an object rather than leave null.
+        if ( typeof(obj) == 'object' && obj.count() > 0 ) {
+            request.body = request.post = obj;
+        }
+        return request;
+    }
+
+    var ISO20022 = '<?xml version="1.0" encoding="UTF-8"?>'
+                 + '<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pain.001.001.09">'
+                 + '<CstmrCdtTrfInitn><GrpHdr><MsgId>MSG-001</MsgId></GrpHdr>'
+                 + '<Amt Ccy="EUR">123.45</Amt><Note>50% off &amp; more</Note>'
+                 + '</CstmrCdtTrfInitn></Document>';
+
+    before(function() {
+        src  = fs.readFileSync(SERVER_SRC, 'utf8');
+        live = stripComments(src);
+    });
+
+    // ── 19a — structural pins (comment-stripped: the new block comments quote
+    //          several of these tokens deliberately, per the anchor-theft trap) ──
+
+    it('the content-type matcher is defined at exactly ONE site (the #B103 single-flag lesson)', function() {
+        var hits = (live.match(/request\.isXmlBody\s*=/g) || []).length;
+        assert.equal(hits, 1, 'expected exactly 1 matcher definition, got ' + hits);
+    });
+
+    it('all three body branches (POST/PUT/PATCH) read the flag rather than re-testing the header', function() {
+        var arms = (live.match(/else if \( request\.isXmlBody \)/g) || []).length;
+        assert.equal(arms, 3, 'expected 3 XML arms, got ' + arms);
+    });
+
+    it('each XML arm precedes its legacy urlencoded else', function() {
+        ['POST', 'PUT', 'PATCH'].forEach(function(m) {
+            var jsonMsg = live.indexOf('application/json ' + m + ' body');
+            assert.ok(jsonMsg > -1, m + ': json-branch anchor not found');
+            var arm     = live.indexOf('else if ( request.isXmlBody )', jsonMsg);
+            var legacy  = live.indexOf('} else {', arm);
+            assert.ok(arm > -1,        m + ': no XML arm after the json branch');
+            assert.ok(arm < legacy,    m + ': XML arm does not precede the legacy else');
+        });
+    });
+
+    it('every arm seeds obj with an object — the shared tail calls obj.count() and typeof null is object', function() {
+        var seeds = (live.match(/obj = \{\}/g) || []).length;
+        assert.equal(seeds, 3, 'expected 3 obj={} seeds, got ' + seeds);
+    });
+
+    // ── 19b — the matched SET, driven through the shipped matcher ──
+    //
+    // The set is the one ASP.NET Core, Spring and type-is converge on:
+    // application/xml + text/xml + application/*+xml. The wildcard is scoped to
+    // `application/` in all three, which is why image/svg+xml is absent below.
+
+    it('matches the industry-standard set (application/xml, text/xml, application/*+xml)', function() {
+        var XML = shippedXmlMatcher(src);
+        [
+            'application/xml',
+            'text/xml',
+            'application/xml; charset=utf-8',
+            'application/xml;charset=utf-8',
+            '  APPLICATION/XML  ',
+            'application/soap+xml;action="urn:x"',
+            'application/atom+xml',
+            'application/rss+xml',
+            'application/xhtml+xml',
+            'application/vnd.acme.thing+xml'
+        ].forEach(function(ct) {
+            assert.ok(XML.test(ct), 'should match: ' + JSON.stringify(ct));
+        });
+    });
+
+    it('rejects the RFC 7303 types that are not XML documents, and every non-XML control', function() {
+        var XML = shippedXmlMatcher(src);
+        [
+            'application/xml-dtd',                     // RFC 7303 §9.5
+            'application/xml-external-parsed-entity',  // RFC 7303 §9.3
+            'text/xml-external-parsed-entity',         // RFC 7303 §9.4
+            'application/xmlfoo',
+            'image/svg+xml',                           // no framework registers image/*+xml
+            'application/json',
+            'application/x-www-form-urlencoded',
+            'multipart/form-data; boundary=x',
+            'text/plain',
+            ''
+        ].forEach(function(ct) {
+            assert.ok(!XML.test(ct), 'should NOT match: ' + JSON.stringify(ct));
+        });
+    });
+
+    // ── 19c — behavioural: the document survives, and the subtract proves it ──
+
+    it('an ISO 20022 body reaches the application byte-identical', function() {
+        var req = postBranch(ISO20022, 'application/xml');
+        assert.equal(typeof req.body, 'string', 'body must remain a string');
+        assert.equal(req.body, ISO20022);
+        assert.equal(req.rawBody, ISO20022, 'rawBody is unaffected either way');
+    });
+
+    it('SUBTRACT: without the arm the same document is truncated to a single bogus pair', function() {
+        var req = postBranch(ISO20022, 'application/xml', { subtractArm: true });
+        assert.equal(typeof req.body, 'object', 'pre-fix, the garbage object REPLACED the body');
+        assert.notEqual(req.body, ISO20022);
+        // formatDataFromString splits on '=' and keeps only the first pair, so the
+        // XML declaration alone collapses the whole document.
+        assert.deepEqual(Object.keys(req.body), ['<?xml version']);
+    });
+
+    it('a SOAP envelope survives too (application/*+xml, the Spring-documented case)', function() {
+        var soap = '<?xml version="1.0"?><soap:Envelope '
+                 + 'xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">'
+                 + '<soap:Body><m:Pay xmlns:m="urn:x"><m:Amt>1.00</m:Amt></m:Pay></soap:Body></soap:Envelope>';
+        assert.equal(postBranch(soap, 'application/soap+xml').body, soap);
+        assert.notEqual(postBranch(soap, 'application/soap+xml', { subtractArm: true }).body, soap);
+    });
+
+    it('no boolean/null coercion touches attribute values that read "true"/"on"', function() {
+        var doc = '<?xml version="1.0"?><cfg><flag>"true"</flag><mode>"on"</mode></cfg>';
+        assert.equal(postBranch(doc, 'text/xml').body, doc);
+        // pre-fix the coercion stripped the quotes off both values
+        assert.notEqual(postBranch(doc, 'text/xml', { subtractArm: true }).body, doc);
+    });
+
+    it('the arm never throws through the shared tail (the typeof-null-is-object trap)', function() {
+        assert.doesNotThrow(function() { postBranch(ISO20022, 'application/xml'); });
+        assert.doesNotThrow(function() { postBranch('<a/>', 'application/xml'); });
+    });
+
+    // ── 19d — controls: the legacy and JSON paths are untouched ──
+
+    it('CONTROL: urlencoded bodies still decode, coerce and nest exactly as before', function() {
+        var req = postBranch('user[name]=Ada&user[age]=37&ok="true"', 'application/x-www-form-urlencoded');
+        assert.equal(req.body.user.name, 'Ada');
+        assert.equal(req.body.user.age, '37');
+        // Measured, not assumed: the server-level coercion rewrites the raw TEXT
+        // ok="true" -> ok=true, and the data helper then reads that as the plain
+        // string 'true'. Asserting the measured value is the point — this control
+        // exists to show the legacy path is byte-for-byte unchanged by #FIN1.
+        assert.equal(req.body.ok, 'true');
+        assert.equal(typeof req.body.ok, 'string');
+    });
+
+    it('CONTROL: application/json bodies still parse verbatim (#B28 untouched)', function() {
+        var req = postBranch('{"v":"50%20off","t":"true"}', 'application/json');
+        assert.equal(req.body.v, '50%20off', 'no double-decode');
+        assert.equal(req.body.t, 'true', 'no form coercion on the JSON path');
+    });
+});
