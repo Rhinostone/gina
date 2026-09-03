@@ -7258,6 +7258,13 @@ function Routing() {
      * `false` sentinel for every url. Await this method (or `.then()` it); the
      * old "unresolved promises" caveat that used to sit here was this defect.
      *
+     * Browser context, on a miss (#B462): when a rendered `404:` marker or an
+     * alternate-route lookup identifies the missing rule, the composed
+     * "route not found inside your view" diagnostic is registered on the
+     * notFound registry — keyed per rule, `count` incremented on repeats —
+     * and emitted via `console.warn` on the FIRST sighting of each key.
+     * Server context warns on every miss (unchanged).
+     *
      * @function getRouteByUrl
      * @async
      *
@@ -7527,6 +7534,7 @@ function Routing() {
                             count: 1,
                             message: msg
                         };
+                        console.warn(msg); // #B462 — announce the composed diagnostic on the FIRST sighting of each key (the registry dedups repeats)
                     } else if ( isMethodProvidedByDefault && typeof(self.notFound[notFound]) != 'undefined' ) {
                         ++self.notFound[notFound].count;
                     }
@@ -7553,7 +7561,7 @@ function Routing() {
                             count: 1,
                             message: msg
                         };
-                        //console.warn(msg);
+                        console.warn(msg); // #B462 — re-enabled: emit once per new registry key
                     } else if ( isMethodProvidedByDefault && typeof(self.notFound[notFound]) != 'undefined' ) {
                         ++self.notFound[notFound].count;
                     }
@@ -7571,7 +7579,14 @@ function Routing() {
                     notFound = method.toUpperCase() +'::'+ altRoute.request.routing.rule;
                     if ( typeof(self.notFound[notFound]) == 'undefined' ) {
                         msg = msg.replace(/\%r/, notFound);
-                        //console.warn(msg);
+                        // #B462 — the registry write was missing here, leaving the
+                        // increment arm below unreachable; aligned with the sibling
+                        // arms (create + emit once per key)
+                        self.notFound[notFound] = {
+                            count: 1,
+                            message: msg
+                        };
+                        console.warn(msg); // #B462
                     } else {
                         ++self.notFound[notFound].count;
                     }
