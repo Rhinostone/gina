@@ -3173,6 +3173,8 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
         'isStringMinLength': 'Should be at least %s characters',
         'isStringMaxLength': 'Should not be more than %s characters',
         'isJsonWebToken': 'Must be a valid JSON Web Token',
+        'isIban': 'A valid IBAN is required',
+        'isBic': 'A valid BIC is required',
         'query': 'Must be a valid response',
         // #B233 rider - dropped: `isApiError` is not a rule, so nothing ever consulted this
         // label. The API-error path assigns the SERVER's message straight onto the error
@@ -3180,6 +3182,30 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
         // replace(), so the entry only read as a translatable key that silently did nothing.
         //'isApiError': 'Condition not satisfied',
         'isInList': 'Must be one of: %s'
+    };
+    /**
+     * ISO 13616 registry - official IBAN length per country code, consumed by
+     * the `isIban` rule. Countries absent from this table are validated on
+     * shape + MOD-97 checksum alone (deliberate: the registry grows over time
+     * and an unknown country must not hard-fail a well-formed IBAN).
+     * @constant
+     * @inner
+     * @type {Object.<string, number>}
+     */
+    var _ibanLengths = {
+        'AD': 24, 'AE': 23, 'AL': 28, 'AT': 20, 'AZ': 28, 'BA': 20, 'BE': 16,
+        'BG': 22, 'BH': 22, 'BI': 27, 'BR': 29, 'BY': 28, 'CH': 21, 'CR': 22,
+        'CY': 28, 'CZ': 24, 'DE': 22, 'DJ': 27, 'DK': 18, 'DO': 28, 'EE': 20,
+        'EG': 29, 'ES': 24, 'FI': 18, 'FK': 18, 'FO': 18, 'FR': 27, 'GB': 22,
+        'GE': 22, 'GI': 23, 'GL': 18, 'GR': 27, 'GT': 28, 'HR': 21, 'HU': 28,
+        'IE': 22, 'IL': 23, 'IQ': 23, 'IS': 26, 'IT': 27, 'JO': 30, 'KW': 30,
+        'KZ': 20, 'LB': 28, 'LC': 32, 'LI': 21, 'LT': 20, 'LU': 20, 'LV': 21,
+        'LY': 25, 'MC': 27, 'MD': 24, 'ME': 22, 'MK': 19, 'MN': 20, 'MR': 27,
+        'MT': 31, 'MU': 30, 'NI': 28, 'NL': 18, 'NO': 15, 'OM': 23, 'PK': 24,
+        'PL': 28, 'PS': 29, 'PT': 25, 'QA': 29, 'RO': 24, 'RS': 22, 'RU': 33,
+        'SA': 24, 'SC': 31, 'SD': 18, 'SE': 24, 'SI': 19, 'SK': 24, 'SM': 27,
+        'SO': 23, 'ST': 25, 'SV': 28, 'TL': 23, 'TN': 24, 'TR': 26, 'UA': 29,
+        'VA': 22, 'VG': 24, 'XK': 20
     };
     /**
      * Rules already warned about by `replace()`'s fail-soft guard, so one mistyped label
@@ -4577,6 +4603,143 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
             else if ( isValid && typeof(errors['isJsonWebToken']) != 'undefined' ) {
                 delete errors['isJsonWebToken'];
                 //delete errors['stack'];
+            }
+
+            // #B78 - keep .valid consistent with a surviving isRequired error.
+            this.valid = isValid && !errors['isRequired'];
+
+            if ( errors.count() > 0 )
+                this['errors'] = errors;
+
+            return self[this['name']]
+        }
+
+        /**
+         * Validates the field value as an IBAN (ISO 13616).
+         *
+         * Tolerant read: validation runs on an uppercased copy with spaces and
+         * hyphens stripped (the ISO 13616 print format groups characters in
+         * blocks of four) - the stored field value and the DOM are NEVER
+         * mutated, so the application receives exactly what the user typed.
+         * Three checks, in order: the ISO shape, the official per-country
+         * length when the country code is in the `_ibanLengths` registry
+         * (unknown countries pass on shape + checksum alone - the registry
+         * grows over time and an unknown country must not hard-fail a
+         * well-formed IBAN), and the ISO 7064 MOD 97-10 checksum.
+         * An empty value is adjudicated by `isRequired` alone (#B78).
+         *
+         * @returns {object} the field object (chainable)
+         *
+         * @example
+         *     // rule file
+         *     "accountIban": { "isRequired": true, "isIban": true }
+         */
+        self[el]['isIban'] = function() {
+
+            // #B200 - TYPE-guarded, not merely truthy-guarded: see the isEmail
+            // note above. The guard folds into isValid (rather than letting the
+            // regex coerce) because the checks below call string methods on the
+            // candidate - a toString-spoofing object must record an invalid,
+            // never throw into the rule driver.
+            var candidate   = ( this.value && typeof(this.value) == 'string' )
+                                ? this.value.toUpperCase().replace(/[\s-]+/g, '')
+                                : this.value;
+
+            var rgx         = /^[A-Z]{2}[0-9]{2}[A-Z0-9]{1,30}$/;
+            var isValid     = ( typeof(candidate) == 'string' && rgx.test(candidate) ) ? true : false;
+
+            // Official per-country length when the country is registered;
+            // unknown countries pass on shape + checksum alone.
+            if (isValid) {
+                var country = candidate.slice(0, 2);
+                if ( typeof(_ibanLengths[country]) != 'undefined' && candidate.length !== _ibanLengths[country] ) {
+                    isValid = false;
+                }
+            }
+
+            // ISO 7064 MOD 97-10: move the first four characters to the end,
+            // expand letters (A=10 ... Z=35), then fold the digit string
+            // modulo 97 in <= 7-digit chunks so every intermediate stays far
+            // inside Number.MAX_SAFE_INTEGER - plain Number math only (the
+            // browser-bundle build chain constrains bundled source).
+            if (isValid) {
+                var rearranged  = candidate.slice(4) + candidate.slice(0, 4);
+                var expanded    = '';
+                for (var i = 0, len = rearranged.length; i < len; ++i) {
+                    var code = rearranged.charCodeAt(i);
+                    expanded += ( code >= 65 ) ? (code - 55).toString() : rearranged.charAt(i);
+                }
+                var remainder = 0;
+                for (var p = 0, pLen = expanded.length; p < pLen; p += 7) {
+                    remainder = parseInt(remainder.toString() + expanded.slice(p, p + 7), 10) % 97;
+                }
+                isValid = (remainder === 1);
+            }
+
+            var errors      = self[this['name']]['errors'] || {};
+
+            // #B78 - an empty value is adjudicated by isRequired alone: bypass on empty so a
+            // required+empty field records only isRequired, not a second 'invalid' message.
+            // #B199 - strict: only the literal empty string is "empty".
+            if ( this.value === '' ) {
+                isValid = true;
+            }
+
+            local['data'][this.name] = this.value;
+
+            if (!isValid) {
+                errors['isIban'] = replace(this['error'] || local.errorLabels['isIban'], this, 'isIban')
+            }
+            else if ( isValid && typeof(errors['isIban']) != 'undefined' ) {
+                delete errors['isIban'];
+            }
+
+            // #B78 - keep .valid consistent with a surviving isRequired error.
+            this.valid = isValid && !errors['isRequired'];
+
+            if ( errors.count() > 0 )
+                this['errors'] = errors;
+
+            return self[this['name']]
+        }
+
+        /**
+         * Validates the field value as a BIC (ISO 9362): a 4-letter business
+         * party prefix, a 2-letter country code, a 2-character alphanumeric
+         * location code, and an optional 3-character alphanumeric branch code
+         * (8 or 11 characters). Case-insensitive by regex - the stored field
+         * value and the DOM are NEVER mutated.
+         * An empty value is adjudicated by `isRequired` alone (#B78).
+         *
+         * @returns {object} the field object (chainable)
+         *
+         * @example
+         *     // rule file
+         *     "bankBic": { "isRequired": true, "isBic": true }
+         */
+        self[el]['isBic'] = function() {
+
+            // #B200 - non-strings are adjudicated by the regex (every
+            // non-string coerces to a string that fails the shape), so they
+            // record an invalid - they never throw into the rule driver.
+            var rgx         = /^[A-Za-z]{4}[A-Za-z]{2}[A-Za-z0-9]{2}([A-Za-z0-9]{3})?$/;
+            var isValid     = rgx.test(this['value']) ? true : false;
+            var errors      = self[this['name']]['errors'] || {};
+
+            // #B78 - an empty value is adjudicated by isRequired alone: bypass on empty so a
+            // required+empty field records only isRequired, not a second 'invalid' message.
+            // #B199 - strict: only the literal empty string is "empty".
+            if ( this.value === '' ) {
+                isValid = true;
+            }
+
+            local['data'][this.name] = this.value;
+
+            if (!isValid) {
+                errors['isBic'] = replace(this['error'] || local.errorLabels['isBic'], this, 'isBic')
+            }
+            else if ( isValid && typeof(errors['isBic']) != 'undefined' ) {
+                delete errors['isBic'];
             }
 
             // #B78 - keep .valid consistent with a surviving isRequired error.
