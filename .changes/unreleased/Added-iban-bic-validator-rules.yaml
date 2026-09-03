@@ -1,3 +1,0 @@
-kind: Added
-body: 'isIban and isBic FormValidator rules (#FIN4): IBAN validation per ISO 13616 - shape, official per-country length for 87 registered countries, and the ISO 7064 MOD 97-10 checksum - with a tolerant read (case and space/hyphen separators are normalized for validation only; the stored value is never mutated, and unknown country codes pass on shape + checksum), plus BIC validation per ISO 9362 (8- or 11-character shape, case-insensitive). Shared client + server like every FormValidator rule; empty values stay adjudicated by isRequired alone.'
-time: 2026-09-03T04:27:54+01:00
