@@ -297,6 +297,15 @@ declare namespace gina {
          */
         renderStream(asyncIterable: AsyncIterable<any>, contentType?: string): void;
 
+        /**
+         * Send a pre-serialised XML document.
+         * The status comes from `response.statusCode`, not from the payload.
+         * @param xmlContent - The serialised document; coerced when not a string
+         * @param contentType - Defaults to `application/xml`; pass the suffix
+         *                      family explicitly (`application/soap+xml`, …)
+         */
+        renderXML(xmlContent: string | any, contentType?: string): void;
+
         /** Send a plain-text response */
         renderTEXT(content: string | any): void;
 
@@ -884,6 +893,32 @@ declare namespace gina {
          * `override` is `true`; returns the mutated first argument.
          */
         merge: (target: object, source: object, override?: boolean) => object;
+        /**
+         * Exact-money primitive (#FIN5) — ISO 4217 minor-unit integer
+         * arithmetic, BigInt-safe. Amounts are `{ currency, exponent, minor }`
+         * where `minor` is a bigint; wire strings in and out, no floats.
+         * Display formatting stays with the i18n layer (`Intl.NumberFormat`).
+         */
+        money: {
+            /** Minor-unit exponent for an ISO 4217 code (default 2; JPY 0, BHD 3, ...). */
+            exponent(code: string): number;
+            /** Parse a canonical wire string ("19.99"); rejects floats and excess precision. */
+            parse(value: string, code: string): { currency: string; exponent: number; minor: bigint };
+            /** Build an amount from an integer minor-unit count. */
+            fromMinor(minor: string | number | bigint, code: string): { currency: string; exponent: number; minor: bigint };
+            /** Exact addition — same currency only, throws on mismatch. */
+            add(a: object, b: object): { currency: string; exponent: number; minor: bigint };
+            /** Exact subtraction (a - b) — same currency only, throws on mismatch. */
+            subtract(a: object, b: object): { currency: string; exponent: number; minor: bigint };
+            /** Exact multiplication by an INTEGER factor (fractional rates are the app's rounding). */
+            multiply(a: object, factor: string | number | bigint): { currency: string; exponent: number; minor: bigint };
+            /** Three-way comparison — same currency only, throws on mismatch. */
+            compare(a: object, b: object): -1 | 0 | 1;
+            /** Canonical wire string with exactly the currency's fraction digits ("20.00"). */
+            format(a: object): string;
+            /** Minor-unit count as a JSON-safe decimal string. */
+            toMinor(a: object): string;
+        };
         /** Prometheus metrics primitive behind `/_gina/metrics`. */
         metrics: any;
         /** Control-plane dial-host resolution — `bind_host` vs `host_v4` locality (#B160). */
@@ -892,6 +927,9 @@ declare namespace gina {
         nunjucksResolver: any;
         /** Identified-caller quota gate — fixed-window counters over the kv primitive, run by the router between authz and the DTO pipe (#MS6). */
         rateLimit: any;
+        idempotency: any;
+        /** Message-schema validation seam — application-supplied validators registered at boot, gated at the router band ahead of the DTO pipe (#FIN3). */
+        messageValidator: any;
         /** Stale built-release watch primitives — source-tree fingerprints, change classification, busy probes and the in-flight request gauge (#RWATCH). */
         releaseWatch: any;
         routing: {

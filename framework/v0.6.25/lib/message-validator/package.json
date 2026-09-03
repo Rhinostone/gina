@@ -1,0 +1,6 @@
+{
+    "name": "gina-message-validator",
+    "version": "1.0.0",
+    "description": "Pluggable message-schema validation seam at the router band (#FIN3) — the application supplies the validator (XSD, usage guideline, sidecar), the framework supplies the boot registry, the async-capable gate and the fail-closed 400/422/503 refusal shape",
+    "main": "src/main"
+}

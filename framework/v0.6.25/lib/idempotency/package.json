@@ -1,0 +1,6 @@
+{
+    "name": "gina-idempotency",
+    "version": "1.0.0",
+    "description": "Idempotency-Key request deduplication at the router band (#FIN6) — setnx reservations and recorded-response replay over the kv primitive, per the IETF Idempotency-Key draft",
+    "main": "src/main"
+}

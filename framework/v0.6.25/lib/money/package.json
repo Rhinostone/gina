@@ -1,0 +1,17 @@
+{
+  "name": "gina-lib-money",
+  "version": "1.0.0",
+  "description": "Exact-money primitive: ISO 4217 minor-unit integer arithmetic, BigInt-safe",
+
+  "author": {
+    "name": "Martin Luther ETOUMAN NDAMBWE",
+    "email": "contact@gina.io"
+  },
+  "copyright": "Copyright (c) 2009-2026 Rhinostone <contact@gina.io>",
+  "engines": {
+    "node": ">=22"
+  },
+  "main": "src/main",
+  "license": "MIT",
+  "readmeFilename": "README.md"
+}

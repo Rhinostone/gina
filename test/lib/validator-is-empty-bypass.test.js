@@ -133,10 +133,10 @@ describe('validator-is-empty-bypass §01 — source pins', function () {
             'per-field flag stays consistent with a surviving isRequired error');
     });
 
-    it('01.6 - Shape-A population count: exactly SIX rules carry the regate', function () {
+    it('01.6 - Shape-A population count: exactly EIGHT rules carry the regate', function () {
         var m = activeLines(ENGINE_SRC).match(/this\.valid = isValid && !errors\['isRequired'\];/g) || [];
-        assert.equal(m.length, 6,
-            'is + isEmail + isJsonWebToken + isBoolean + isFloat + isInList — a seventh or fifth means this file is stale');
+        assert.equal(m.length, 8,
+            'is + isEmail + isJsonWebToken + isIban + isBic + isBoolean + isFloat + isInList — a ninth or seventh means this file is stale');
     });
 });
 
@@ -241,7 +241,7 @@ describe('validator-is-empty-bypass §04 — dist fidelity', function () {
         assert.ok(raw.indexOf("!errors['isRequired'] && typeof(this.value) == 'string' && this.value == ''") === -1,
             'the old gated bypass must not survive in executable dist bytes');
         var m = raw.match(/this\.valid = isValid && !errors\['isRequired'\];/g) || [];
-        assert.equal(m.length, 6, 'the regate population must reach the bundle (5 pre-isBoolean)');
+        assert.equal(m.length, 8, 'the regate population must reach the bundle (6 pre-#FIN4)');
     });
 
     it('04.2 - gina.js no longer ships the isApiError label', function () {
@@ -251,7 +251,7 @@ describe('validator-is-empty-bypass §04 — dist fidelity', function () {
             'control: the client re-key site legitimately keeps the property NAME');
     });
 
-    it('04.3 - gina.min.js: the minified regate population is 6', function () {
+    it('04.3 - gina.min.js: the minified regate population is 8', function () {
         var min = fs.readFileSync(DIST_MIN_PATH, 'utf8');
         // Closure emission of `this.valid = isValid && !errors['isRequired'];`
         // VALIDATED against the real artifacts at each rebuild.
@@ -262,7 +262,7 @@ describe('validator-is-empty-bypass §04 — dist fidelity', function () {
         // where the break falls depends on preceding token lengths, so a strict
         // needle flips this pin on unrelated future rebuilds.
         var m = min.match(/\.valid\s*=\s*[A-Za-z_$][\w$]*\s*&&\s*!\s*[A-Za-z_$][\w$]*\s*\.\s*isRequired/g) || [];
-        assert.equal(m.length, 6,
-            'the served artifact must carry the sixth regate — gina.min.js is what browsers run');
+        assert.equal(m.length, 8,
+            'the served artifact must carry the #FIN4 regates — gina.min.js is what browsers run');
     });
 });

@@ -40,6 +40,10 @@ MVC framework for Node.js and Bun with built-in HTTP/2, multi-bundle architectur
 | Security headers | CSP with per-response nonces, HSTS, COOP / COEP / CORP, Referrer-Policy and the X-* family — per-header plugins or one `SecurityHeaders` wrapper |
 | Secrets | `${secret:KEY}` placeholders in bundle config — fail-closed, env-backed, with opt-in file and exec-bridge tiers beneath the environment; `secrets:scan` / `secrets:check` CLI |
 | Internationalisation | Per-bundle JSON catalogs, `t()` helper, swig + nunjucks `t` filter, CLDR plurals, ICU MessageFormat opt-in via `t.icu()` |
+| Exact money | `lib.money` / `gina.money` — ISO 4217 minor-unit integer arithmetic (BigInt-safe), strict wire-string parsing, same-currency guards; display via `Intl.NumberFormat` |
+| Idempotency keys | Opt-in `Idempotency-Key` dedup at the router band (IETF draft): retried mutations replay the recorded first response — 409 while in flight, 422 on payload reuse, principal-scoped over the kv primitive |
+| Message validation | `param.messageValidator` — a route-level seam running the raw request body through an application-supplied validator (XSD sidecar, JSON Schema, anything) before the action: boot-compiled factory, sync or async, fail-closed 400/422/503 refusals with `Retry-After` on checker outage |
+| XML in and out | `application/xml`, `text/xml` and `application/*+xml` request bodies reach the action verbatim on `req.body`; `self.renderXML()` sends pre-serialised responses with the right content type and charset. The application brings its own XML library — the framework parses none and builds none |
 | Observability | Built-in `/_gina/metrics` Prometheus endpoint (opt-in, IP-allowlisted) — process metrics + HTTP counter / duration histogram with cardinality-safe route labels; structured JSON logs with request ids (`GINA_LOG_FORMAT=json`) |
 | Dev Inspector | Embedded dev SPA at `/_gina/inspector` — request data, live logs, SQL with index-coverage badges, flow timings, app events, AI token stream |
 | OpenAPI & MCP | `bundle:openapi` emits OpenAPI 3.1 from `routing.json`; `bundle:mcp` emits an MCP tool manifest; built-in MCP runtime server (stdio + Streamable HTTP) |
@@ -62,23 +66,29 @@ open https://localhost:3100
 
 > **npm 12+** blocks install scripts by default, and gina's post-install bootstraps `~/.gina` and the framework dependencies. Install with `npm install -g gina@latest --allow-scripts=gina`, or allow it once for all global installs with `npm config set allow-scripts=gina --location=user`. (Not needed on npm ≤ 11.)
 
-## What's in 0.6.24
+## What's in 0.6.25
 
-> **Restart your bundles — no rebuild needed.** This release does not change the
-> browser bundle: all three fixes are server-side, inside the Couchbase
-> connector. A `gina bundle:restart` is enough, and `gina bundle:build` is not
-> required. Projects on other connectors are unaffected.
+> **Restart AND rebuild your bundles.** This release changes the browser bundle:
+> the exact-money primitive (`gina.money`), the `isIban`/`isBic` validation
+> rules and the routing-helper diagnostic all ride `gina.min.js`. Run
+> `gina bundle:build` after upgrading, then `gina bundle:restart`.
 
-> **No settings reset.** `0.6.24` is a patch — the `shortVersion` stays `0.6`,
+> **No settings reset.** `0.6.25` is a patch — the `shortVersion` stays `0.6`,
 > so your `~/.gina/0.6/settings.json` is untouched. (`0.6.0` was the reset.)
 
-**A Couchbase connector reliability release.** Three failure paths that reported
-nothing usable to the caller — one of them silently — now surface the real
-error. Full detail in [CHANGELOG.md](./CHANGELOG.md).
+**The financial-messaging foundations release** — five additive building blocks
+for ISO 20022-class and payments-grade applications, plus one hardening fix and
+two bug fixes. Full detail in [CHANGELOG.md](./CHANGELOG.md).
 
-- **Fixed — `bulkInsert` reports a failed prologue instead of returning `undefined` (#B460).** Its outer `try` wraps the method's own body, so a synchronous failure raised before the insert was dispatched — a connection that cannot be resolved, or either of the two `rec` validations — was caught, written to `console.error` and then swallowed, and the method fell off the end. Both documented call shapes broke on that path in opposite ways: the `await` form resolved with `undefined`, so a caller treating "did not throw" as success recorded an insert that never happened, and `.onComplete(cb)` threw a `TypeError` at the call site. In both, the error existed only in the log. The promise, its one-shot resolver and the `.onComplete` shim are now built before the `try`, so the outer catch settles the call. **Behaviour change:** a fire-and-forget call that ignores the return now surfaces an `unhandledRejection` where it previously failed silently. **Scope:** this changes what `bulkInsert` RETURNS, not what its promise RESOLVES WITH — a rows-less success still resolves `null`, so keep any rows-based success check you have.
-- **Fixed — a Couchbase entity that fails to register now names itself (#B461).** The catch guarding entity-class construction and `.sql`-derived method attachment emitted only a bare stack, and none of its three call sites captures a result or takes an error argument — so a throw left the entity partially built, or absent, with nothing in the log identifying which entity or which `.sql` file was responsible. The first symptom was a missing method at request time, arbitrarily far from the cause. The diagnostic now carries the entity, the source file, the method being attached and the underlying cause. Boot behaviour is deliberately unchanged: registration failures remain non-fatal.
-- **Fixed — the reconnect classifier no longer throws under every supported SDK (#B204).** `gina.onError`'s handler tested `err instanceof couchbase.Error`, but no supported couchnode exports a bare `Error` class, so the check raised `TypeError: Right-hand side of 'instanceof' is not an object` the moment the handler ran — and because that operand is evaluated first, the shutdown-bucket message arm was unreachable too. On the Express engine this replaced the real error with the `TypeError`; on the default `isaac` engine the listener is never dispatched at all, so there is no behaviour change there. Each `instanceof` is now guarded on the class existing. Deliberately a guard, not an activation: the arms it protects stay inert on modern SDKs, and the real error now reaches the handler's designed terminal path.
+- **Added — verbatim XML request bodies (#FIN1).** A POST, PUT or PATCH whose `Content-Type` is `application/xml`, `text/xml` or any `application/*+xml` type reaches your action verbatim: `req.body` is the exact document as a string, and you parse it with the library of your choice — gina never parses XML itself. Previously such a body was silently destroyed by the form-encoded decode path.
+- **Added — `self.renderXML(xmlContent, contentType)` (#FIN2).** First-class XML responses: send a pre-serialised document and the delegate owns the wire concerns — `application/xml` by default with your bundle's charset (RFC 7303), an optional `+xml`-suffix content type (`application/soap+xml`, `atom+xml`, vendor trees), HEAD suppression with byte-accurate `content-length`, the HTTP/2 pseudo-header status, opt-in trailers.
+- **Added — message-schema validation seam (#FIN3).** Declare `"messageValidator": "<name>"` in a route's `param` block and ship a factory at `message-validators/<name>.js` — boot-compiled (a broken module refuses the boot instead of silently skipping validation), sync or async, fed the verbatim body string. Refusals are fail-closed: 422 with your `errors` array, 400 for an unparseable document, 503 + `Retry-After` when your checker is down. Gina ships no schema engine — the validator is yours; the hook, the ordering and the refusal shape are the framework's.
+- **Added — `isIban` / `isBic` FormValidator rules (#FIN4).** IBAN per ISO 13616 — shape, official per-country length for 87 registered countries, and the ISO 7064 MOD 97-10 checksum — with a tolerant read (case and separators normalized for validation only; the stored value is never mutated), plus BIC per ISO 9362. Client + server, like every built-in rule.
+- **Added — exact-money primitive (#FIN5).** `lib.money` server-side and `gina.money` in the browser bundle: ISO 4217 minor-unit integer arithmetic on BigInt, strict wire-string `parse()` that rejects float inputs, `add`/`subtract`/`multiply`/`compare` with same-currency guards, canonical `format()`. Display formatting stays with `Intl.NumberFormat`.
+- **Added — idempotency keys (#FIN6).** Opt-in `Idempotency-Key` request deduplication at the router band, per the IETF draft: the recorded first response replays with `Idempotency-Replayed: true`, a duplicate in flight gets 409 + `Retry-After`, key reuse with a different payload gets 422. Principal-scoped, over a kv namespace you declare; dormant unless enabled.
+- **Security — Inspector inline-script data can no longer be read as template source.** The shared inline-script helper now escapes `{` and `}` inside JSON string literals as well as `<`, so a stored value like `{{ 7*7 }}` renders literally instead of executing with the page's locals in scope. Values parse back identical; only pages emitting the Inspector block were reachable.
+- **Fixed — the `query()` basic-auth option is honoured on HTTP/2 and can no longer leak (#B465).** `options.auth` is minted into `Authorization: Basic` before dispatch on BOTH transports and the option is deleted pre-dispatch. Previously node consumed it on HTTP/1.x only, while the HTTP/2 path forwarded it as a literal `auth:` header with authentication silently unperformed. A caller-supplied authorization header always wins.
+- **Fixed — the client-side routing helper no longer swallows its own diagnostic (#B462).** A route missing from the running table now surfaces as a `console.warn` on the first sighting (the `gina.notFound` registry still dedups repeats), and the alternate-route arm records its registry entry so repeat counts accumulate.
 
 ## Documentation
 
