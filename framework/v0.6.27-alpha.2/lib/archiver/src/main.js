@@ -392,7 +392,9 @@ function Archiver() {
 
 
             var list = fs.readdirSync(dir);
-            f = 1; fLen = list.length;
+            // #B474 — start at 0: node's readdir never returns `.`/`..`, and the
+            // former `f = 1` silently dropped the first entry of the top-level dir
+            f = 0; fLen = list.length;
             for (; f < fLen; ++f) {
                 // input list
                 files.push(dir +'/'+ list[f]);
@@ -403,12 +405,6 @@ function Archiver() {
         }
 
         var filename  = files[i];
-
-        if ( /^(\.|\.\.)$/.test(filename) ) {// ignore this
-            browse(method, dir, target, zipInstance, options, files, outFiles, i+1, mainOutput, isBatchProcessing, cb)
-        }
-
-
 
         // scan completed
         if ( typeof(filename) == 'undefined' ) {
