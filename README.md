@@ -66,29 +66,26 @@ open https://localhost:3100
 
 > **npm 12+** blocks install scripts by default, and gina's post-install bootstraps `~/.gina` and the framework dependencies. Install with `npm install -g gina@latest --allow-scripts=gina`, or allow it once for all global installs with `npm config set allow-scripts=gina --location=user`. (Not needed on npm ≤ 11.)
 
-## What's in 0.6.25
+## What's in 0.6.26
 
-> **Restart AND rebuild your bundles.** This release changes the browser bundle:
-> the exact-money primitive (`gina.money`), the `isIban`/`isBic` validation
-> rules and the routing-helper diagnostic all ride `gina.min.js`. Run
-> `gina bundle:build` after upgrading, then `gina bundle:restart`.
+> **Restart your bundles — no rebuild needed.** Every fix in this release is
+> server-side; the browser bundle is byte-identical to `0.6.25`
+> (`gina.min.js` and `gina.min.css` both unchanged), so `gina bundle:restart`
+> is the whole pickup.
 
-> **No settings reset.** `0.6.25` is a patch — the `shortVersion` stays `0.6`,
+> **No settings reset.** `0.6.26` is a patch — the `shortVersion` stays `0.6`,
 > so your `~/.gina/0.6/settings.json` is untouched. (`0.6.0` was the reset.)
 
-**The financial-messaging foundations release** — five additive building blocks
-for ISO 20022-class and payments-grade applications, plus one hardening fix and
-two bug fixes. Full detail in [CHANGELOG.md](./CHANGELOG.md).
+**The error-path and orphan-reclaim release** — four fixes: two on the error
+response itself, where failures were invisible precisely because they only fire
+when something has already gone wrong, and two reclaiming artifacts that a
+process death used to strand forever. Full detail in
+[CHANGELOG.md](./CHANGELOG.md).
 
-- **Added — verbatim XML request bodies (#FIN1).** A POST, PUT or PATCH whose `Content-Type` is `application/xml`, `text/xml` or any `application/*+xml` type reaches your action verbatim: `req.body` is the exact document as a string, and you parse it with the library of your choice — gina never parses XML itself. Previously such a body was silently destroyed by the form-encoded decode path.
-- **Added — `self.renderXML(xmlContent, contentType)` (#FIN2).** First-class XML responses: send a pre-serialised document and the delegate owns the wire concerns — `application/xml` by default with your bundle's charset (RFC 7303), an optional `+xml`-suffix content type (`application/soap+xml`, `atom+xml`, vendor trees), HEAD suppression with byte-accurate `content-length`, the HTTP/2 pseudo-header status, opt-in trailers.
-- **Added — message-schema validation seam (#FIN3).** Declare `"messageValidator": "<name>"` in a route's `param` block and ship a factory at `message-validators/<name>.js` — boot-compiled (a broken module refuses the boot instead of silently skipping validation), sync or async, fed the verbatim body string. Refusals are fail-closed: 422 with your `errors` array, 400 for an unparseable document, 503 + `Retry-After` when your checker is down. Gina ships no schema engine — the validator is yours; the hook, the ordering and the refusal shape are the framework's.
-- **Added — `isIban` / `isBic` FormValidator rules (#FIN4).** IBAN per ISO 13616 — shape, official per-country length for 87 registered countries, and the ISO 7064 MOD 97-10 checksum — with a tolerant read (case and separators normalized for validation only; the stored value is never mutated), plus BIC per ISO 9362. Client + server, like every built-in rule.
-- **Added — exact-money primitive (#FIN5).** `lib.money` server-side and `gina.money` in the browser bundle: ISO 4217 minor-unit integer arithmetic on BigInt, strict wire-string `parse()` that rejects float inputs, `add`/`subtract`/`multiply`/`compare` with same-currency guards, canonical `format()`. Display formatting stays with `Intl.NumberFormat`.
-- **Added — idempotency keys (#FIN6).** Opt-in `Idempotency-Key` request deduplication at the router band, per the IETF draft: the recorded first response replays with `Idempotency-Replayed: true`, a duplicate in flight gets 409 + `Retry-After`, key reuse with a different payload gets 422. Principal-scoped, over a kv namespace you declare; dormant unless enabled.
-- **Security — Inspector inline-script data can no longer be read as template source.** The shared inline-script helper now escapes `{` and `}` inside JSON string literals as well as `<`, so a stored value like `{{ 7*7 }}` renders literally instead of executing with the page's locals in scope. Values parse back identical; only pages emitting the Inspector block were reachable.
-- **Fixed — the `query()` basic-auth option is honoured on HTTP/2 and can no longer leak (#B465).** `options.auth` is minted into `Authorization: Basic` before dispatch on BOTH transports and the option is deleted pre-dispatch. Previously node consumed it on HTTP/1.x only, while the HTTP/2 path forwarded it as a literal `auth:` header with authentication silently unperformed. A caller-supplied authorization header always wins.
-- **Fixed — the client-side routing helper no longer swallows its own diagnostic (#B462).** A route missing from the running table now surfaces as a `console.warn` on the first sighting (the `gina.notFound` registry still dedups repeats), and the alternate-route arm records its registry entry so repeat counts accumulate.
+- **Fixed — an error response no longer crashes on a non-numeric `status` (#B466).** A page whose own vocabulary includes a field named `status` — say `{status: "draft"}` rendered alongside an error — had that value stamped straight into the HTTP response, which threw `ERR_HTTP_INVALID_STATUS_CODE` and replaced the intended error page with an unhandled 500. Every status the error path resolves is now validated against node's own rule (an integer from 100 to 999) and degrades to a 500 error page when it does not qualify. A numeric status still sets the HTTP status exactly as documented. This also closes the same hole for an explicitly passed three-digit-but-invalid code such as `"099"`.
+- **Fixed — error responses carry the content-type they declare (#B467).** Two branches of the error path — the Internet Explorer override, and the branch taken when a request arrives with no `user-agent` header at all, the common shape for machine callers — passed the header *name* as node's status-message argument instead of a headers object. Node read the MIME string character by character: over HTTP/1.1 the response came back with roughly ten to thirty junk headers named `0`, `1`, `2`…, a reason phrase reading `content-type`, and no content-type at all; over HTTP/2 the headers were dropped entirely. Nothing threw, so the malformed response was completely silent. Both branches now pass a headers object, and the plain-text branch declares the bundle encoding as its charset. That half is user-visible wherever error copy is not plain ASCII: the error body is JSON written as UTF-8, and a charset-less `text/plain` invites the client to guess a single-byte encoding, so accented characters and non-Latin scripts in a message shown to a visitor render as mojibake.
+- **Fixed — staged upload parts stranded by a restart are reclaimed at boot (#B469).** The `upload.autoTmpCleanupTimeout` deletion timer is per-upload and in-process, so a restart stranded every staged part it was holding, and a part that never reached `self.store()` had no reclaim path at all — on deployments that restart often, server-generated `.part` files accumulated indefinitely. When the timer is armed, server init now sweeps each configured landing directory for staged-shaped `.part` files older than the configured timeout, floored at one hour so an in-flight upload from a sibling process on a shared staging directory is never touched. Deliberately conservative: exact server-generated name shape only, regular files only, symlinks never followed, non-recursive. A disabled timer — the shipped default — still arms no sweep.
+- **Fixed — job records stranded by a process death are reclaimed (#B471).** The deferred function of an async job lives only in its creating process, so a record left `running` by a crash or an unclean restart could never settle: on a durable store its `expiresAt` stayed null forever, the TTL sweep's own guard excluded it, listings reported phantom running work, and the documented polling pattern never terminated. The sweep is now preceded by an orphan-reclaim pass on durable stores: a non-terminal record older than `jobs.orphanTimeout` (seconds, default 86400, `0` or `false` disables, floored at 60) is marked `failed` with error name `JobOrphanedError`, after which normal `ttl` retention removes it on schedule. The built-in memory store is exempt, and no completion webhook fires for a reclaim — the record itself carries the truth.
 
 ## Documentation
 
