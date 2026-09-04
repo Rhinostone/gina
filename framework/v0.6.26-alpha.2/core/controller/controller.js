@@ -123,6 +123,31 @@ const { type }      = require('node:os');
 var SwigFilters     = lib.SwigFilters;
 var statusCodes     = requireJSON( _( getPath('gina').core + '/status.codes') );
 
+/**
+ * #B466 — is `v` a status code node's `writeHead()` will accept ?
+ *
+ * Encodes node's own rule (integer 100-999) rather than membership of
+ * `statusCodes`: that table carries a `_comment` key, so a bare
+ * `typeof(statusCodes[v]) != 'undefined'` test accepts the status
+ * `"_comment"`, and it would also coerce a valid-but-unlisted code.
+ * `/^\d{3}$/` is not sufficient either — it accepts `"099"`, which node
+ * rejects. The `statusCodes` lookup remains in place as the DIAGNOSTIC
+ * (the `[ ApiValidator ]` warn); this predicate is the CORRECTNESS gate.
+ *
+ * @param {*} v - candidate status
+ * @returns {boolean} true when node would accept `v` as an HTTP status
+ *
+ * @example
+ *      _isValidHttpStatus(404)      // true
+ *      _isValidHttpStatus('404')    // true  (node accepts numeric strings)
+ *      _isValidHttpStatus('draft')  // false
+ *      _isValidHttpStatus('099')    // false (node rejects it)
+ */
+var _isValidHttpStatus = function (v) {
+    var n = Number(v);
+    return Number.isInteger(n) && n >= 100 && n <= 999;
+};
+
 // cached at module load — these env vars never change at runtime (#P19)
 var _isDev          = process.env.NODE_ENV_IS_DEV && process.env.NODE_ENV_IS_DEV.toLowerCase() === 'true';
 var _isLocalScope   = process.env.NODE_SCOPE_IS_LOCAL && process.env.NODE_SCOPE_IS_LOCAL.toLowerCase() === 'true';
@@ -7906,8 +7931,13 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
         ) {
 
             msg    = ( !/^\d+$/.test(code) && typeof(msg) == 'undefined' ) ?  code : msg;
-            // Preserve an explicitly passed 3-digit HTTP status code; fall back to res.status or 500
-            code    = ( /^\d{3}$/.test(String(code)) ) ? code : ( res && typeof(res.status) != 'undefined' ) ? res.status : 500;
+            // Preserve an explicitly passed HTTP status code; fall back to res.status or 500.
+            // #B466 — both candidates are validated: an unvalidated res.status
+            // reached writeHead() verbatim and threw ERR_HTTP_INVALID_STATUS_CODE
+            // on any non-numeric value, i.e. the error page failed exactly when
+            // it was needed. Guarding the explicit arm too closes the same hole
+            // for a 3-digit-but-invalid code such as "099".
+            code    = _isValidHttpStatus(code) ? code : ( res && _isValidHttpStatus(res.status) ) ? res.status : 500;
             // #CE1 — a transient datastore failure resolving to 500 upgrades
             // to 503 when the bundle opted in (explicit non-500 preserved above)
             code    = _maybeUpgradeTransient503(code);
@@ -7984,7 +8014,14 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
 
         } else if (arguments.length < 3) {
             msg           = code || null;
-            code          = res || 500;
+            // #B466 — `res` holds the code in this shape, and an invalid SCALAR
+            // would reach writeHead() verbatim. An OBJECT is deliberately passed
+            // through untouched: the errorObj shape is unpacked at the site-2
+            // resolution below (which applies the same guard), and collapsing it
+            // here would break the #CE1 transient-503 upgrade that depends on it.
+            code          = ( res !== null && typeof(res) == 'object' ) ? res
+                          : _isValidHttpStatus(res) ? res
+                          : 500;
             res           = local.res;
         }
 
@@ -8056,7 +8093,8 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                 // allowing this.throwError(err)
                 if ( typeof(code) == 'object' && !msg && typeof(code.status) != 'undefined' && typeof(code.error) != 'undefined' ) {
                     msg     = code.error || code.message;
-                    code    = code.status || 500;
+                    // #B466 — same guard as the resolution arms above.
+                    code    = _isValidHttpStatus(code.status) ? code.status : 500;
                     // #CE1 — second upgrade site: the 2-arg errorObj shape
                     // resolves its status only here, after the early header
                     // point above — so this site sets its own header too
