@@ -136,7 +136,12 @@ function Archiver() {
                 _done.then(
                     function()    { cb(false, _target); },
                     function(err) { cb(err, null); }
-                );
+                ).catch(function(cbErr) {
+                    // a throwing callback must stay an uncaught EXCEPTION, as it was
+                    // when delivery ran inside the stream handler — never a rejection
+                    // that a non-default --unhandled-rejections policy would swallow
+                    process.nextTick(function() { throw cbErr; });
+                });
             }
         };
     };
@@ -155,7 +160,9 @@ function Archiver() {
      * opens — input reads, the zip generator, the output write — reach the
      * callback as the stream's error, and a listener attached after the run has
      * settled is still delivered. The singleton also emits
-     * `archiver-<method>#complete` `(err, target)` for observers.
+     * `archiver-<method>#complete` `(err, target)` for observers. A run that
+     * fails may leave a partial `<target>/<name>.zip` on disk; the next run to
+     * the same path removes it before writing.
      *
      * @param {string|Array<{input: string, output: string}>} src - a filename, a dirname, or a list of
      *  `{ input, output }` pairs where `output` is the entry path inside the archive

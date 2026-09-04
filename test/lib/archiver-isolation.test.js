@@ -318,10 +318,53 @@ describe('04 - error paths that used to crash the process', { skip: IS_ROOT && '
 
 
 // ---------------------------------------------------------------------------
-// 05 — no state leaked onto the global object (runs after the arms above)
+// 05 — a throwing callback surfaces as an uncaught EXCEPTION (child process)
 // ---------------------------------------------------------------------------
 
-describe('05 - no implicit globals', function () {
+describe('05 - a throwing onComplete callback stays an uncaught exception', function () {
+
+    // Delivery moved from inside a stream handler (a throw there was an
+    // uncaughtException) to a Promise shim (a throw there is a rejection).
+    // Under node's default policy both crash; under --unhandled-rejections=warn
+    // a rejection is SWALLOWED while an exception still crashes. The shim must
+    // rethrow so the application's own error keeps its pre-fix visibility.
+    var CHILD = [
+        "var fs = require('fs'); var A = require(process.env.GINA_ARCHIVER_MAIN); var R = process.env.ROOT;",
+        "process.on('uncaughtException',  function (e) { console.log('SURFACED-AS uncaughtException: ' + e.message); process.exit(0); });",
+        "process.on('unhandledRejection', function (e) { console.log('SURFACED-AS unhandledRejection: ' + (e && e.message)); process.exit(0); });",
+        "var out = R + '/out_throw/'; fs.mkdirSync(out);",
+        "A.compress([{ input: R + '/ok.bin', output: 'ok.bin' }], out, { name: 't', level: 1 }).onComplete(function () { throw new Error('app callback threw'); });",
+        "setTimeout(function () { console.log('SURFACED-AS nothing'); process.exit(0); }, 3000);"
+    ].join('\n');
+
+    var root;
+
+    before(function () {
+        root = fs.mkdtempSync(path.join(os.tmpdir(), 'gina-arch-throw-'));
+        fs.writeFileSync(path.join(root, 'ok.bin'), 'ok');
+    });
+    after(function () {
+        try { fs.rmSync(root, { recursive: true, force: true }); } catch (e) { /* best effort */ }
+    });
+
+    it('the callback\'s own error reaches uncaughtException, not unhandledRejection', function () {
+        var r = spawnSync(process.execPath, ['-e', CHILD], {
+            encoding: 'utf8',
+            timeout: 15000,
+            env: Object.assign({}, process.env, { GINA_ARCHIVER_MAIN: MAIN_SOURCE, ROOT: root })
+        });
+        var out = String(r.stdout);
+        assert.match(out, /SURFACED-AS uncaughtException: app callback threw/, 'got: ' + out.trim());
+        assert.doesNotMatch(out, /unhandledRejection/, 'the application error must not become a swallowable rejection');
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// 06 — no state leaked onto the global object (runs after the arms above)
+// ---------------------------------------------------------------------------
+
+describe('06 - no implicit globals', function () {
 
     it('neither outputStream nor zipFolder exists on `global` after array and directory runs', function () {
         assert.ok(!('outputStream' in global), 'outputStream leaked as an implicit global');
