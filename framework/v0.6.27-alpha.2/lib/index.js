@@ -81,7 +81,10 @@ function Lib() {
         money           : _require('./money'),
         routing         : _require('./routing'),
         // #B32-residual — plain require: archiver is a `new Archiver()` EventEmitter
-        // SINGLETON (archiver/src/main.js:510). _require re-instantiated it every
+        // SINGLETON (`module.exports = new Archiver()` at the tail of archiver/src/main.js;
+        // since #B473 every compress()/decompress() call settles on its own per-call
+        // channel INSIDE that singleton, so the instance itself must stay shared and
+        // resident). _require re-instantiated it every
         // refreshCore() (per-request churn) and left each prior instance pinned via the
         // gen-0 lib registry — it was the named instance in the leak's heap snapshot.
         // A singleton must not hot-reload (same reason as logger/job/State/instrument).

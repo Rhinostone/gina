@@ -41,7 +41,6 @@ function Archiver() {
     var self        = this;
     var isGFFCtx    = ((typeof (module) !== 'undefined') && module.exports) ? false :  true;
     var merge       = (isGFFCtx) ? require('lib/merge') : require('../../../lib/merge');
-    var zip         = null;
 
 
     // var fs = null, zlib = null, Emitter = null;
@@ -62,51 +61,137 @@ function Archiver() {
         level       : 9   // compression level
     };
 
-    var local = {};
+    /**
+     * Per-call completion channel (#B473).
+     *
+     * `compress()` and `decompress()` each hand the caller a `{ onComplete }`
+     * handle. The channel behind it is created per call, settles at most once,
+     * delivers a listener attached after settlement, and on failure destroys
+     * every stream the call tracked, so overlapping calls in one process cannot
+     * release each other or close each other's streams. The singleton still
+     * emits `eventName` `(err, target)` on settlement, purely for observers —
+     * the same shape as the connectors' per-call Promise latch.
+     *
+     * @inner
+     * @private
+     * @param {string} eventName - the singleton event to broadcast on settlement
+     * @returns {{settle: function, onComplete: function, track: function}} the call's channel
+     */
+    var createRun = function(eventName) {
+        var _resolve, _reject, _settled = false, _target = null, _streams = [];
+        var _done = new Promise(function(resolve, reject) {
+            _resolve = resolve;
+            _reject  = reject;
+        });
+        // A fire-and-forget caller (no onComplete, no trailing callback) observed
+        // silence on failure before; keep it that way rather than surfacing an
+        // unhandled rejection. `.then(cb)` consumers still see the rejection.
+        _done.catch(function() {});
 
-
+        return {
+            /**
+             * Register a stream this call opened, so a failure can release it.
+             * @private
+             * @param {stream.Stream} stream - readable or writable
+             * @returns {stream.Stream} the same stream, for chaining
+             */
+            track: function(stream) {
+                _streams.push(stream);
+                return stream;
+            },
+            /**
+             * Settle THIS call, at most once. On an error every tracked stream is
+             * destroyed first, so no file descriptor outlives a failed run.
+             * @private
+             * @param {Error|boolean} err - the error, or `false` on success
+             * @param {string|null} target - the archive / extraction path
+             * @returns {void}
+             */
+            settle: function(err, target) {
+                if (_settled) {
+                    return;
+                }
+                _settled = true;
+                var streams = _streams;
+                _streams = [];
+                if (err) {
+                    for (var s = 0, sLen = streams.length; s < sLen; ++s) {
+                        try { streams[s].destroy(); } catch (ignore) { /* already gone */ }
+                    }
+                    _reject(err);
+                } else {
+                    _target = target;
+                    _resolve(target);
+                }
+                self.emit(eventName, err, target);
+            },
+            /**
+             * Deliver `(err, target)` to `cb` once settled — including when the
+             * call settled before `cb` was attached.
+             * @private
+             * @param {function} cb - `(err, target)`; `err` is `false` on success
+             * @returns {void}
+             */
+            onComplete: function(cb) {
+                _done.then(
+                    function()    { cb(false, _target); },
+                    function(err) { cb(err, null); }
+                );
+            }
+        };
+    };
 
     /**
-     * compress
+     * Compress a file, a directory, or a list of files and directories into
+     * `<target>/<name>.zip`.
      *
-     * @param {string|array} src - filename, dirname or array of filenames & dirnames e.g: `/usr/local/data/dump.sql`
+     * The array form (`src` = `[{ input, output }, …]`) and the directory form
+     * always produce a DEFLATE zip. The single-file form pipes the file through
+     * zlib's gzip and writes the result under the `.zip` name — a documented
+     * asymmetry; `decompress()` does not read it back.
      *
-     * Array must be a collection e.g.:
-     *  [
-     *      {
-     *          input: '/usr/loca/data/img/favicon.ico'
-     *          ouput: 'img/favicon.ico
-     *      },
-     *      {
-     *          input: '/usr/local/backup/mysql/dump.sql',
-     *          ouput: 'dump/my-db.sql'
-     *      }
-     *  ]
+     * Each call settles its own handle exactly once, so overlapping calls in one
+     * process are isolated from each other. Errors on every stream the call
+     * opens — input reads, the zip generator, the output write — reach the
+     * callback as the stream's error, and a listener attached after the run has
+     * settled is still delivered. The singleton also emits
+     * `archiver-<method>#complete` `(err, target)` for observers.
      *
-     * @param {string} output pathname - e.g: `/var/backup/mysql/`
-     * @param {object} [options] you can also pass Zlib class options, see: https://nodejs.org/api/zlib.html#zlib_class_options
-     *  {
-     *      method: 'gzip',
-     *      name: 'my-dump', // this is optional
-     *      level: 7    // `0` for no compression; `1` for best speed; `9` for best compression
-     *  }
+     * @param {string|Array<{input: string, output: string}>} src - a filename, a dirname, or a list of
+     *  `{ input, output }` pairs where `output` is the entry path inside the archive
+     * @param {string} target - output directory, created if missing
+     * @param {object} [options] - merged over the defaults; zlib class options are accepted
+     * @param {string} [options.method='gzip'] - `gzip` (the only method the single-file form implements)
+     * @param {string} [options.name='default'] - archive basename
+     * @param {number} [options.level=9] - compression level, `0` (store) to `9` (best)
+     * @param {function} [cb] - trailing callback `(err, target)` for `promisify`; may stand in for `options`
+     * @returns {{onComplete: function}} completion handle — `onComplete(cb)` attaches `(err, target)` and returns the handle
+     * @throws {Error} synchronously on an unsupported `options.method`
      *
-     * @callback [cb] - Used for `promisify`
-     *
+     * @example
+     *  lib.archiver.compress([{ input: '/srv/app/package.json', output: 'package.json' }], '/backup/', { name: 'app', level: 9 })
+     *      .onComplete(function (err, archivePath) {
+     *          if (err) { return; }           // e.g. err.code === 'EACCES' on an unreadable input
+     *          // archivePath === '/backup/app.zip'
+     *      });
+     * @example
+     *  // promisify shapes — a trailing callback, with or without options
+     *  lib.archiver.compress('/var/dump.sql', '/backup/', function (err, archivePath) {});
      */
     this.compress = function(src, target, options) {
 
-        // Used for `promisify`
+        // trailing callback (promisify form): compress(src, target, [options], cb)
         var cb = null;
-        if ( typeof(arguments[arguments.length-1]) == 'function' ){
+        if ( typeof(arguments[arguments.length-1]) == 'function' ) {
             cb = arguments[arguments.length-1];
-            self.once('archiver-'+ options.method +'#complete', function(err, target){
-                zip = null;
-                return cb(err, target)
-            })
+            if ( typeof(options) == 'function' ) {
+                options = undefined;
+            }
         }
 
-        options = ( typeof(options) != 'undefined' ) ? merge(options, defaultCompressionOptions) : defaultCompressionOptions;
+        // a fresh copy: merge() mutates its target, and an omitted `options`
+        // used to alias the shared defaults object across calls
+        options = merge( merge({}, options || {}), defaultCompressionOptions );
 
         if ( options.tmp != null ) {
             options.unlinkSrc = true;
@@ -119,41 +204,35 @@ function Archiver() {
         if ( !fs.existsSync(target))
             new _(target).mkdirSync();
 
-        // if ( /\.(zip|gz)$/.test(target) ) {
-        //     options.method = 'gzip';
-        // }
-
         if ( self.allowedCompressionMethods.indexOf(options.method.toLowerCase()) < 0 ) {
             throw new Error('compression methode `'+ options.method +'` not supported !');
         }
 
-
-
-        local.options = options;
-        zip = new JSZip(); // zipInstance
-
-        compress(options.method, src, target, zip, options);
-
-        return {
+        var run    = createRun('archiver-'+ options.method +'#complete');
+        var handle = {
             onComplete: function onCompressionCompleted(cb) {
-                self.once('archiver-'+ options.method +'#complete', function(err, target){
-                    zip = null;
-                    cb(err, target)
-                })
-            }//,
-            //addSignature : selt.addSignature
+                run.onComplete(cb);
+                return handle;
+            }
+        };
+        if (cb) {
+            run.onComplete(cb);
         }
+
+        compress(options.method, src, target, new JSZip(), options, run);
+
+        return handle;
     }
 
 
-    var compress = function(method, src, target, zipInstance, options) {
+    var compress = function(method, src, target, zipInstance, options, run) {
 
         var stats = null;
 
         var processSrc = function(method, src, target, zipInstance, options, cb) {
 
             if ( !fs.existsSync(src) ) {
-                self.emit('archiver-'+ method +'#complete', new Error('file not found `'+ src +'`'));
+                run.settle(new Error('file not found `'+ src +'`'));
 
                 return;
             }
@@ -183,11 +262,11 @@ function Archiver() {
                     output  = fs.createWriteStream(target +'.zip');
                 }
 
-                compressFile(method, input, output, zipInstance, isBatchProcessing, function(err, target, zipInstance) {
+                compressFile(method, input, output, zipInstance, isBatchProcessing, run, function(err, target, zipInstance) {
                     if ( isBatchProcessing ) {
                         cb(err, zipInstance);
                     } else {
-                        self.emit('archiver-'+ method +'#complete', err, target)
+                        run.settle(err, target)
                     }
 
                 });
@@ -216,16 +295,16 @@ function Archiver() {
                     if ( isBatchProcessing ) {
                         cb(err, zipInstance);
                     } else {
-                        self.emit('archiver-'+ method +'#complete', err, target);
+                        run.settle(err, target);
                     }
-                });
+                }, run);
             } else {
                 var err = new Error('[ lib/archiver ] only supporting real `filename` & `dirname` as `src` input at for now');
                 err.status = 500;
                 if ( isBatchProcessing ) {
                     cb(err, zipInstance);
                 } else {
-                    self.emit('archiver-'+ method +'#complete', err, null)
+                    run.settle(err, null)
                 }
             }
         }
@@ -245,8 +324,11 @@ function Archiver() {
                 fs.unlinkSync(output);
             }
 
-            outputStream = fs.createWriteStream(output);
-
+            // per-call (#B473): an implicit global here let one run close another's stream
+            var outputStream = run.track(fs.createWriteStream(output));
+            outputStream.once('error', function(streamErr) {
+                run.settle(streamErr, null);
+            });
 
             var i = 0, len = src.length;
             var processList = function(method, files, target, zipInstance, options, i, len, err) {
@@ -255,22 +337,18 @@ function Archiver() {
 
                     if (!err && zipInstance) {
 
-                        zipInstance
-                            .generateNodeStream({ compression: 'DEFLATE', compressionOptions : {level: options.level } })
-                            .pipe(outputStream);
-
-                        outputStream
-                            .once('err', function(){
-                                outputStream.close();
-                                self.emit('archiver-'+ method +'#complete', err, null);
-                            })
-                            .once('finish', function(){
-                                outputStream.close();
-                                self.emit('archiver-'+ method +'#complete', false, this.path);
-                            })
+                        var gen = run.track(zipInstance.generateNodeStream({ compression: 'DEFLATE', compressionOptions : {level: options.level } }));
+                        gen.once('error', function(genErr) {
+                            run.settle(genErr, null);
+                        });
+                        outputStream.once('finish', function(){
+                            outputStream.close();
+                            run.settle(false, this.path);
+                        });
+                        gen.pipe(outputStream);
 
                     } else {
-                        self.emit('archiver-'+ method +'#complete', err, null);
+                        run.settle(err, null);
                     }
 
                     return
@@ -311,19 +389,28 @@ function Archiver() {
         } else {
             var err = new Error('[ lib/archiver ] `src` must be a `string` or an `array`');
             err.status = 500;
-            self.emit('archiver-'+ method +'#complete', err, null)
+            run.settle(err, null)
         }
 
     }
 
-    var compressFile = function(method, input, output, zipInstance, isBatchProcessing, cb, isPackage) {
+    var compressFile = function(method, input, output, zipInstance, isBatchProcessing, run, cb, isPackage) {
 
         var methodObject = null;
         isPackage = ( typeof(isPackage) == 'undefined' ) ? false: isPackage;
 
         if ( isBatchProcessing ) {
 
-            zipInstance.file(output, fs.createReadStream(input));
+            // the lib opens this stream, so the lib owns its error: whether JSZip
+            // re-surfaces a read failure on its output stream is a timing race —
+            // measured on the same input, the process crashed on an unhandled
+            // 'error' in about one run in four and the run hung with a partial
+            // archive on disk otherwise (a non-first entry hung every time)
+            var batchInput = run.track(fs.createReadStream(input));
+            batchInput.once('error', function(readErr) {
+                run.settle(readErr, null);
+            });
+            zipInstance.file(output, batchInput);
 
             cb(false, output, zipInstance);
             return
@@ -349,6 +436,13 @@ function Archiver() {
             }
             return
         } else {
+            run.track(input).once('error', function(readErr) {
+                run.settle(readErr, null);
+            });
+            run.track(methodObject).once('error', function(zlibErr) {
+                run.settle(zlibErr, null);
+            });
+            run.track(output);
             input
                 .pipe(methodObject)
                 .pipe(output);
@@ -357,7 +451,7 @@ function Archiver() {
 
         output
             .once('error', function onCompressionError(err) {
-                cb(err, null)
+                run.settle(err, null);
             })
             .once('finish', function onCompressionFinished(){
                 if (isPackage) {
@@ -369,9 +463,10 @@ function Archiver() {
 
     }
 
-    var browse = function(method, dir, target, zipInstance, options, files, outFiles, i, mainOutput, isBatchProcessing, cb) {
+    var browse = function(method, dir, target, zipInstance, options, files, outFiles, i, mainOutput, isBatchProcessing, cb, run) {
 
         var input  = null, output = null;
+        var zipFolder = null;   // per-call (#B473): was an implicit global
         var f = null, fLen = null;
         if (files.length == 0) {
             files.push(dir);
@@ -383,7 +478,10 @@ function Archiver() {
                     fs.unlinkSync(outFiles[0]);
                 }
 
-                mainOutput = fs.createWriteStream(outFiles[0]);
+                mainOutput = run.track(fs.createWriteStream(outFiles[0]));
+                mainOutput.once('error', function(streamErr) {
+                    run.settle(streamErr, null);
+                });
 
                 // main zip dir
                 target = zipFolder =  '.'+ dir.substring(dir.lastIndexOf('/')) + '/';
@@ -414,19 +512,15 @@ function Archiver() {
                 return
             }
 
-            zipInstance
-                .generateNodeStream({ compression: 'DEFLATE', compressionOptions : {level: local.options.level } })
-                .pipe(mainOutput);
-
-            mainOutput
-                .once('err', function(){
-                    mainOutput.close();
-                    cb(err, null);
-                })
-                .once('finish', function(){
-                    mainOutput.close();
-                    cb(false, this.path);
-                })
+            var gen = run.track(zipInstance.generateNodeStream({ compression: 'DEFLATE', compressionOptions : {level: options.level } }));
+            gen.once('error', function(genErr) {
+                run.settle(genErr, null);
+            });
+            mainOutput.once('finish', function(){
+                mainOutput.close();
+                cb(false, this.path);
+            });
+            gen.pipe(mainOutput);
 
         } else {
 
@@ -438,11 +532,14 @@ function Archiver() {
 
             if ( stats.isFile() ) {
 
-                input   = fs.createReadStream(filename);
+                input   = run.track(fs.createReadStream(filename));
+                input.once('error', function(readErr) {
+                    run.settle(readErr, null);
+                });
                 // output  = fs.createWriteStream(outFiles[i]);
 
                 zipInstance.file(outFiles[i], input);
-                browse(method, dir, target, zipInstance, options, files, outFiles, i+1, mainOutput, isBatchProcessing, cb);
+                browse(method, dir, target, zipInstance, options, files, outFiles, i+1, mainOutput, isBatchProcessing, cb, run);
 
                 // ------------------------------------ once we get a method to retrieve the archive headers
                 // compressFile(method, input, output, zipInstance, isBatchProcessing, function(err, output) {
@@ -474,7 +571,7 @@ function Archiver() {
                     ++index;
                 }
 
-                browse(method, newDir, target, zipInstance, options, files, outFiles, i+1, mainOutput, isBatchProcessing, cb)
+                browse(method, newDir, target, zipInstance, options, files, outFiles, i+1, mainOutput, isBatchProcessing, cb, run)
             }
         }
 
@@ -485,10 +582,12 @@ function Archiver() {
     /**
      * decompress
      *
-     * Inverse of `compress()` — extracts a `.zip` archive into a target directory.
-     * Mirrors compress()'s completion contract: emits `archiver-decompress#complete`
-     * `(err, target)` on the singleton and returns an `{ onComplete: fn }` handle
-     * (a trailing callback is also accepted for `promisify`). Uses JSZip 3.x
+     * Inverse of the array and directory forms of `compress()` — extracts a `.zip`
+     * archive into a target directory (the single-file form writes a gzip stream,
+     * which this does not read). Mirrors compress()'s completion contract: each
+     * call settles its own `{ onComplete: fn }` handle exactly once (a trailing
+     * callback is also accepted for `promisify`), and the singleton emits
+     * `archiver-decompress#complete` `(err, target)` for observers. Uses JSZip 3.x
      * (`loadAsync` + per-entry `async('nodebuffer')`).
      *
      * @param {string} src - absolute path to the `.zip` archive
@@ -506,20 +605,17 @@ function Archiver() {
     this.decompress = function(src, target, options) {
 
         var path   = require('path');
+        var run    = createRun('archiver-decompress#complete');
         var handle = {
             onComplete: function onDecompressionCompleted(cb) {
-                self.once('archiver-decompress#complete', function (err, t) {
-                    cb(err, t)
-                })
+                run.onComplete(cb);
+                return handle;
             }
         };
 
         // Used for `promisify` — same trailing-callback contract as compress()
         if ( typeof(arguments[arguments.length-1]) == 'function' ) {
-            var _pcb = arguments[arguments.length-1];
-            self.once('archiver-decompress#complete', function (err, t) {
-                return _pcb(err, t)
-            })
+            run.onComplete(arguments[arguments.length-1]);
         }
 
         if ( !/\/$/.test(target) ) {
@@ -534,7 +630,7 @@ function Archiver() {
             // defer so a synchronous error still reaches a listener attached
             // via the returned handle's onComplete() on the same tick
             process.nextTick(function () {
-                self.emit('archiver-decompress#complete', new Error('archive not found `'+ src +'`'), null);
+                run.settle(new Error('archive not found `'+ src +'`'), null);
             });
             return handle;
         }
@@ -551,7 +647,7 @@ function Archiver() {
                 var i = 0;
                 var next = function () {
                     if ( i >= entries.length ) {
-                        self.emit('archiver-decompress#complete', false, target);
+                        run.settle(false, target);
                         return;
                     }
                     var it   = entries[i++];
@@ -559,7 +655,7 @@ function Archiver() {
 
                     // zip-slip guard: an entry must never escape the target dir
                     if ( dest !== targetAbs && dest.indexOf(targetAbs + path.sep) !== 0 ) {
-                        self.emit('archiver-decompress#complete', new Error('unsafe entry path in archive: `'+ it.relPath +'`'), null);
+                        run.settle(new Error('unsafe entry path in archive: `'+ it.relPath +'`'), null);
                         return;
                     }
 
@@ -578,17 +674,17 @@ function Archiver() {
                         fs.writeFileSync(dest, content);
                         next();
                     }).catch(function (err) {
-                        self.emit('archiver-decompress#complete', err, null);
+                        run.settle(err, null);
                     });
                 };
                 next();
 
             }).catch(function (err) {
-                self.emit('archiver-decompress#complete', err, null);
+                run.settle(err, null);
             });
         } catch (err) {
             process.nextTick(function () {
-                self.emit('archiver-decompress#complete', err, null);
+                run.settle(err, null);
             });
         }
 
