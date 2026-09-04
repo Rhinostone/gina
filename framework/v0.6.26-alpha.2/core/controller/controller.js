@@ -8120,7 +8120,12 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                 // TODO - test with internet explorer then remove this if working
                 if ( typeof(req.headers['user-agent']) != 'undefined' ) {
                     if ( /msie/i.test(req.headers['user-agent']) ) {
-                        res.writeHead(code, "content-type", "text/plain");
+                        // #B467 - Node's signature is writeHead(status[, statusMessage][, headers]):
+                        // the 3-arg form used here put the mime STRING in the headers slot, so Node
+                        // index-keyed it into junk headers ("0","1",...) and emitted NO content-type.
+                        // The charset is declared because the body below is JSON.stringify(...) written
+                        // via res.end(), i.e. UTF-8 - same form the text-render path already builds.
+                        res.writeHead(code, { 'content-type': 'text/plain; charset='+ bundleConf.encoding } );
                     } else {
                         var contentType = ( responseHeaders && responseHeaders['content-type'])
                                          ? responseHeaders['content-type']
@@ -8131,7 +8136,9 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                 } else if ( typeof(responseHeaders['content-type']) != 'undefined' ) {
                     res.writeHead(code, { 'content-type': responseHeaders['content-type']} )
                 } else {
-                    res.writeHead(code, "content-type", bundleConf.server.coreConfiguration.mime['json']+ '; charset='+ bundleConf.encoding);
+                    // #B467 - same 3-arg misuse as the MSIE branch above; the mime expression is
+                    // unchanged, only the argument shape is corrected.
+                    res.writeHead(code, { 'content-type': bundleConf.server.coreConfiguration.mime['json']+ '; charset='+ bundleConf.encoding } );
                 }
 
 
