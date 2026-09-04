@@ -162,6 +162,91 @@ var parseByteSize = function(value) {
     }
 };
 
+/**
+ * #B469 — reclaim staged multipart parts a PREVIOUS process stranded.
+ *
+ * A staged upload part has exactly two reclaim paths: the `movefiles()` unlink
+ * when `self.store()` publishes it, and the per-upload `autoTmpCleanupTimeout`
+ * timer — which is in-process, so every part it was holding outlives a restart.
+ * This sweep runs the same policy across process lifetimes: at boot, remove
+ * from each configured staging directory the parts old enough that an armed
+ * timer would already have taken them, had its process survived.
+ *
+ * Deliberately conservative:
+ * - name-gated on the exact staged shape (32 lowercase hex + `.part`, the
+ *   server-generated name) — a client-named orphan predating that naming is
+ *   indistinguishable from an application file and is left alone;
+ * - regular files only (`lstat`, never follows a symlink), non-recursive;
+ * - age-gated on mtime, so a part a SIBLING live process is still streaming
+ *   into a shared staging dir (fresh mtime while chunks land) is never touched;
+ * - every step tolerates a concurrent removal (`ENOENT` is not an error — a
+ *   sibling bundle sweeping the same dir, or the app unlinking its own part).
+ *
+ * @private
+ * @function sweepStagedUploadOrphans
+ * @param {array} dirs - Absolute staging directories (already resolved, deduped by the caller)
+ * @param {number} olderThanMs - Only parts whose mtime is older than this many ms are removed; a non-positive/NaN value makes the sweep a no-op
+ * @param {function} done - Completion callback
+ * @param {object} done.report - `{ scanned, removed, errors }` counters (`scanned` = name-matching entries considered)
+ * @returns {void}
+ * @example
+ *   sweepStagedUploadOrphans([ '/var/data/uploads' ], 3600000, function(report) {
+ *       console.debug('removed ' + report.removed + ' orphaned staged part(s)');
+ *   });
+ */
+var sweepStagedUploadOrphans = function(dirs, olderThanMs, done) {
+    var report = { scanned: 0, removed: 0, errors: 0 };
+    if ( !(olderThanMs > 0) ) { // NaN/0/negative — refuse to sweep on a broken threshold
+        return done(report);
+    }
+    var d = 0;
+    var nextDir = function() {
+        if (d >= dirs.length) {
+            return done(report);
+        }
+        var dir = dirs[d]; d++;
+        fs.readdir(dir, function(readdirErr, names) {
+            if (readdirErr) {
+                // a staging dir that does not exist yet has nothing to reclaim
+                if (readdirErr.code != 'ENOENT') report.errors++;
+                return nextDir();
+            }
+            var cutoff = Date.now() - olderThanMs;
+            var n = 0;
+            var nextName = function() {
+                if (n >= names.length) {
+                    return nextDir();
+                }
+                var name = names[n]; n++;
+                if ( !/^[0-9a-f]{32}\.part$/.test(name) ) {
+                    return nextName();
+                }
+                report.scanned++;
+                var full = dir + '/' + name;
+                fs.lstat(full, function(lstatErr, stats) {
+                    if (lstatErr) {
+                        if (lstatErr.code != 'ENOENT') report.errors++;
+                        return nextName();
+                    }
+                    if ( !stats.isFile() || stats.mtimeMs > cutoff ) {
+                        return nextName();
+                    }
+                    fs.unlink(full, function(unlinkErr) {
+                        if (unlinkErr) {
+                            if (unlinkErr.code != 'ENOENT') report.errors++;
+                        } else {
+                            report.removed++;
+                        }
+                        nextName();
+                    });
+                });
+            };
+            nextName();
+        });
+    };
+    nextDir();
+};
+
 var _isDebugLog = function() {
     return process.env.LOG_LEVEL === 'debug' || process.env.LOG_LEVEL === 'trace';
 };
@@ -1835,6 +1920,57 @@ function Server(options) {
                     } else {
                         console.warn('[ BUNDLE ][ server ][ init ] upload write-error PROBE active — group(s) [ '+ _probeGroups.join(', ') +' ] will fail every upload with a guarded 500 (`simulateWriteError`). Test-only; inert in production scope.');
                     }
+                }
+            }
+
+            // ── #B469 — staged-upload orphan sweep (boot-time) ──
+            // The `autoTmpCleanupTimeout` deletion timer is per-upload and
+            // in-process: a restart strands every part it was holding, and a
+            // part that never reaches `self.store()` (the request failed after
+            // the multipart parse, or the app consumed the staged file some
+            // other way) has NO other reclaim path. So when the operator HAS
+            // armed the timer, honour that same policy across process
+            // lifetimes: sweep the configured staging dirs at boot for staged
+            // parts old enough that a surviving timer would already have taken
+            // them. The threshold is floored at 1h: an in-flight upload from a
+            // sibling live process on a SHARED staging dir keeps a fresh mtime
+            // while its chunks land, and the floor keeps even a stalled one
+            // safe. A disabled timer (the shipped default) arms NO sweep — the
+            // docs say tmp cleanup is then the operator's own job, and this
+            // keeps that contract intact. Runs in every scope (production is
+            // where restarts strand parts); duplicate sweeps of a dir shared
+            // across merged-process bundles are harmless (idempotent,
+            // ENOENT-tolerant).
+            if ( _uploadSettings && _uploadSettings.groups && typeof(_uploadSettings.groups) == 'object' ) {
+                // mirrors the request path's arming gate for the timer itself
+                var _hasSweepTimeout = (
+                    typeof(_uploadSettings.autoTmpCleanupTimeout) != 'undefined'
+                    &&  _uploadSettings.autoTmpCleanupTimeout != ''
+                    &&  _uploadSettings.autoTmpCleanupTimeout != 0
+                    &&  !/false/i.test(_uploadSettings.autoTmpCleanupTimeout)
+                ) ? true : false;
+                var _sweepTimeoutMs = (!_hasSweepTimeout) ? null : parseTimeout(_uploadSettings.autoTmpCleanupTimeout);
+                if (_sweepTimeoutMs) {
+                    // staging-dir set = the resolved global landing dir + every
+                    // group override — the same resolution the write site uses
+                    var _sweepDirs = [ ( _uploadSettings.uploadDir || _uploadSettings.tmpPath || os.tmpdir() ) ];
+                    var _sweepGroupNames = Object.keys(_uploadSettings.groups);
+                    for (var _sg = 0; _sg < _sweepGroupNames.length; _sg++) {
+                        var _sgPath = _uploadSettings.groups[_sweepGroupNames[_sg]] && _uploadSettings.groups[_sweepGroupNames[_sg]].path;
+                        if ( _sgPath && _sweepDirs.indexOf(_sgPath) < 0 ) {
+                            _sweepDirs.push(_sgPath);
+                        }
+                    }
+                    var _sweepAppName = self.appName;
+                    setImmediate(function() {
+                        sweepStagedUploadOrphans(_sweepDirs, Math.max(_sweepTimeoutMs, 3600000), function(report) {
+                            if (report.removed || report.errors) {
+                                console.info('[ BUNDLE ][ '+ _sweepAppName +' ][ server ][ init ] upload orphan sweep: removed '+ report.removed +' staged part(s)'+ ( report.errors ? ' ('+ report.errors +' error(s))' : '' ) +' across '+ _sweepDirs.length +' staging dir(s)');
+                            } else {
+                                console.debug('[ BUNDLE ][ '+ _sweepAppName +' ][ server ][ init ] upload orphan sweep: no orphaned staged parts ('+ _sweepDirs.length +' staging dir(s))');
+                            }
+                        });
+                    });
                 }
             }
 

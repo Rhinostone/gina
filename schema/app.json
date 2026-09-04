@@ -80,6 +80,57 @@
           "default": ["127.0.0.1", "::1"]
         }
       }
+    },
+    "jobs": {
+      "type": "object",
+      "description": "Async-job primitive tuning (`lib/job`, #AI6). The primitive is always-on; an absent block means sane defaults with the in-memory record store. Read once at bundle start (gna.js) — changes need a bundle restart.",
+      "additionalProperties": false,
+      "properties": {
+        "store": {
+          "type": "string",
+          "description": "Name of a connectors.json entry providing a durable record store (sqlite, redis, mongodb ship implementations). Records then survive a bundle restart and are readable cross-process; the deferred FUNCTION always lives in the creating process only. Fail-fast: a configured store that cannot be built aborts the boot rather than silently falling back to memory. Absent = the in-memory store."
+        },
+        "maxConcurrency": {
+          "type": "number",
+          "description": "Max deferred functions running at once in this process; the rest queue. Default 4."
+        },
+        "ttl": {
+          "type": "number",
+          "description": "Terminal-record retention, SECONDS: a completed/failed record is swept this long after finishing. Default 3600."
+        },
+        "sweepInterval": {
+          "type": "number",
+          "description": "Internal sweep cadence, SECONDS (an unref'd timer — never holds the process open). 0 disables the internal timer (drive lib.job.sweep() yourself). Default 300."
+        },
+        "idSize": {
+          "type": "number",
+          "description": "Job id length, characters. Default 21."
+        },
+        "retryBackoffMs": {
+          "type": "number",
+          "description": "Base delay (ms) between attempts of a failed job created with maxAttempts > 1; doubles each attempt. Retries run on the creating process only. Default 1000."
+        },
+        "orphanTimeout": {
+          "type": ["number", "boolean"],
+          "description": "#B471 — orphan-reclaim ceiling, SECONDS. A non-terminal record whose last transition is older than this (or whose scheduled retry is this far overdue) is presumed stranded by a dead process and terminalized as `failed` with error name `JobOrphanedError`; normal ttl retention then applies. Durable stores only — the built-in memory store is exempt (it cannot hold another process's orphans). A record reclaimed while its origin was merely slow self-corrects on the origin's next write; no completion webhook fires for a reclaim. Default 86400 (24h); 0 or false disables; positive values are floored at 60."
+        },
+        "webhookMaxAttempts": {
+          "type": "number",
+          "description": "Completion-webhook delivery retry ceiling. Default 3."
+        },
+        "webhookBackoffMs": {
+          "type": "number",
+          "description": "Webhook retry backoff base (ms); doubles each retry. Default 500."
+        },
+        "webhookTimeoutMs": {
+          "type": "number",
+          "description": "Per-attempt webhook request timeout (ms). Default 5000."
+        },
+        "webhookSecret": {
+          "type": "string",
+          "description": "HMAC secret for signing completion-webhook payloads (X-Gina-Signature). Omit to disable signing."
+        }
+      }
     }
   },
   "definitions": {

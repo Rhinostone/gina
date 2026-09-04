@@ -46,7 +46,12 @@
  *     session-store cleanup pattern) — NOT `lib/cron`, which is dormant (not
  *     registered in `lib/index.js`, not instantiated at boot). A bundle may
  *     drive an extra sweep from its own cron, but the internal timer
- *     guarantees baseline retention regardless.
+ *     guarantees baseline retention regardless. Since #B471 the sweep is
+ *     preceded by an orphan-reclaim pass on DURABLE stores: a non-terminal
+ *     record stranded by a dead process (its deferred fn died with it) is
+ *     terminalized as `failed`/`JobOrphanedError` once older than
+ *     `orphanTimeout` (default 24h, `0` disables), so retention and the
+ *     polling surface stay truthful across process lifetimes.
  *
  * The primitive is always-on. Optional tuning via `app.json` (an absent block
  * means sane defaults):
@@ -168,6 +173,16 @@ var DEFAULT_WEBHOOK_TIMEOUT_MS = 5000;
 var DEFAULT_RETRY_BACKOFF_MS = 1000;
 
 /**
+ * Default orphan-reclaim ceiling, SECONDS (24h). A non-terminal record whose
+ * last transition is older than this is presumed stranded by a dead process
+ * and reclaimed as `failed` (`JobOrphanedError`) by {@link sweep}'s reclaim
+ * pass — durable stores only; see {@link reclaimOrphans}. `0` disables.
+ * @constant
+ * @type {number}
+ */
+var DEFAULT_ORPHAN_TIMEOUT = 86400;
+
+/**
  * The active record store (memory store by default). `null` until the first
  * {@link create} or {@link start}.
  *
@@ -175,6 +190,26 @@ var DEFAULT_RETRY_BACKOFF_MS = 1000;
  * @type {JobStore|null}
  */
 var _store = null;
+
+/**
+ * `true` when {@link _store} is the BUILT-IN memory store (defaulted, not
+ * app-supplied). The orphan-reclaim pass skips it: an in-process store cannot
+ * hold another process's orphans (process death wipes it), so reclaim there
+ * could only ever produce false positives on long-running live jobs.
+ *
+ * @inner
+ * @type {boolean}
+ */
+var _storeIsBuiltinMemory = false;
+
+/**
+ * Orphan-reclaim ceiling, SECONDS. `0` = disabled. Floored at 60 when armed
+ * (a smaller value would reclaim jobs still legitimately mid-flight).
+ *
+ * @inner
+ * @type {number}
+ */
+var _orphanTimeout = DEFAULT_ORPHAN_TIMEOUT;
 
 /**
  * In-flight worker count. Bounded by {@link _maxConcurrency}.
@@ -248,7 +283,7 @@ function noop() {}
  * @property {number}      updatedAt   - Epoch ms of the last transition.
  * @property {?number}     startedAt   - Epoch ms the worker began; `null` while pending.
  * @property {?number}     finishedAt  - Epoch ms of the terminal transition; `null` until then.
- * @property {?number}     expiresAt   - Epoch ms after which a terminal record is sweepable; `null` until terminal — deliberately including while a retry is pending, so the sweep can never purge a retryable job.
+ * @property {?number}     expiresAt   - Epoch ms after which a terminal record is sweepable; `null` until terminal — deliberately including while a retry is pending, so the TTL sweep can never purge a retryable job. On a durable store that protection is bounded by the orphan-reclaim pass: a record left non-terminal past `orphanTimeout` is marked `failed` first, which stamps `expiresAt` and hands it to ordinary retention (see {@link reclaimOrphans}). The built-in memory store is exempt, so the guarantee is unbounded there.
  * @property {?number}     nextRetryAt - Epoch ms of the next scheduled attempt while a failed attempt awaits its retry; `null` once terminal (absent if the job never settled).
  * @property {?number}     webhookDeliveredAt - Epoch ms a completion webhook succeeded; absent until delivered.
  * @property {?boolean}    webhookFailed      - `true` once webhook delivery exhausts its retries; absent otherwise.
@@ -354,6 +389,7 @@ function serializeError(err) {
 function ensureStarted() {
     if (!_store) {
         _store = createMemoryStore();
+        _storeIsBuiltinMemory = true;
     }
     ensureSweepTimer();
 }
@@ -757,8 +793,106 @@ function remove(id, cb) {
 }
 
 /**
- * Purge terminal records whose TTL has elapsed. Invoked automatically by the
- * internal timer; also callable directly (e.g. from a bundle cron, or a test).
+ * #B471 — reclaim non-terminal records stranded by a DEAD process. The
+ * deferred function lives only in its creating process (a closure cannot be
+ * serialised), so a record left `running` — or `pending` past its scheduled
+ * retry — by a process death can never settle: `expiresAt` stays `null`, the
+ * TTL sweep's own `expires_at IS NOT NULL` guard excludes it forever, and a
+ * consumer polling it polls forever. This pass terminalizes such records as
+ * `failed` with error name `JobOrphanedError`, after which normal retention
+ * applies and the ordinary sweep deletes them on schedule.
+ *
+ * Age gates (both on ceilings, so a LIVE process's work always survives):
+ * - `running`:  last transition (`updatedAt`) older than the ceiling.
+ * - `pending` with a scheduled retry: `now` past `nextRetryAt` + ceiling —
+ *   a live origin retries at ~`nextRetryAt`, so the ceiling past it is
+ *   unambiguous, and a record merely WAITING on backoff is never touched.
+ * - plain `pending` (never ran): the `updatedAt` gate, like `running`.
+ *
+ * A record reclaimed while its origin was merely SLOW self-corrects: every
+ * origin write (`update()`, the worker's running transition, a retry
+ * re-enqueue) is unguarded last-write-wins, so the real outcome overwrites
+ * the synthetic failure. The transient `failed` reading is the disclosed
+ * cost. Reclaim fires NO completion webhook — under multi-process stores two
+ * processes may reclaim concurrently (no cross-process claim verb exists),
+ * and a self-healing job would otherwise emit contradictory notifications;
+ * the record itself carries the truth.
+ *
+ * Skipped entirely when disabled (`orphanTimeout: 0`/`false`), when the
+ * store is the BUILT-IN memory store (an in-process store cannot hold
+ * another process's orphans), or when the store lacks `list` (a minimal
+ * third-party store). Never throws; a list/update error is logged and the
+ * pass moves on — a reclaim that broke the sweep would be a worse failure
+ * than the strand it repairs.
+ *
+ * @inner
+ * @param   {number}   now - Epoch ms.
+ * @param   {function} cb  - `cb(reclaimedCount)`; never receives an error.
+ * @returns {void}
+ */
+function reclaimOrphans(now, cb) {
+    if (!_orphanTimeout || _storeIsBuiltinMemory || !_store || typeof _store.list !== 'function') {
+        cb(0); return;
+    }
+    var ceilingMs = _orphanTimeout * 1000;
+    var reclaimed = 0;
+    var states    = [STATES.RUNNING, STATES.PENDING];
+    var si        = 0;
+
+    var nextState = function() {
+        if (si >= states.length) {
+            if (reclaimed > 0) {
+                console.info('[lib.job] orphan reclaim: marked ' + reclaimed + ' stranded record(s) `failed` (JobOrphanedError, ceiling ' + _orphanTimeout + 's)');
+            }
+            cb(reclaimed); return;
+        }
+        var state = states[si]; si++;
+        _store.list({ state: state }, function(listErr, recs) {
+            if (listErr || !Array.isArray(recs)) {
+                if (listErr) console.warn('[lib.job] orphan reclaim: list(' + state + ') failed — skipping this pass: ' + (listErr.message || listErr));
+                return nextState();
+            }
+            var ri = 0;
+            var nextRec = function() {
+                if (ri >= recs.length) return nextState();
+                var rec = recs[ri]; ri++;
+                var stranded = false;
+                if (state === STATES.RUNNING) {
+                    stranded = (now - (rec.updatedAt || rec.startedAt || rec.createdAt || now)) > ceilingMs;
+                } else if (rec.nextRetryAt) {
+                    stranded = now > (rec.nextRetryAt + ceilingMs);
+                } else {
+                    stranded = (now - (rec.updatedAt || rec.createdAt || now)) > ceilingMs;
+                }
+                if (!stranded) return nextRec();
+                update(rec.id, {
+                    state:       STATES.FAILED,
+                    error:       { name: 'JobOrphanedError', message: 'reclaimed: `' + state + '` past jobs.orphanTimeout (' + _orphanTimeout + 's) — the owning process likely exited before settling this job', stack: null },
+                    nextRetryAt: null,
+                    finishedAt:  now,
+                    expiresAt:   now + _ttl * 1000
+                }, function(uErr, updated) {
+                    if (uErr) {
+                        console.warn('[lib.job] orphan reclaim: update failed for job `' + rec.id + '`: ' + (uErr.message || uErr));
+                    } else if (updated) {
+                        reclaimed++;
+                    }
+                    nextRec();
+                });
+            };
+            nextRec();
+        });
+    };
+    nextState();
+}
+
+/**
+ * Purge terminal records whose TTL has elapsed — preceded by the #B471
+ * orphan-reclaim pass (see {@link reclaimOrphans}), so records a dead
+ * process stranded become terminal and then age out through this same
+ * purge. Invoked automatically by the internal timer; also callable
+ * directly (e.g. from a bundle cron, or a test). The callback contract is
+ * unchanged: `removedCount` counts DELETIONS only, never reclaims.
  *
  * @memberof module:gina/lib/job
  * @param   {function} [cb] - `cb(err, removedCount)`.
@@ -770,7 +904,10 @@ function remove(id, cb) {
 function sweep(cb) {
     if (typeof cb !== 'function') cb = noop;
     if (!_store) { cb(null, 0); return; }
-    _store.sweep(Date.now(), cb);
+    var now = Date.now();
+    reclaimOrphans(now, function() {
+        _store.sweep(now, cb);
+    });
 }
 
 /**
@@ -786,6 +923,7 @@ function sweep(cb) {
  * @param   {number}   [opts.sweepInterval=300]  - Sweep interval (seconds); `0` disables the internal timer.
  * @param   {number}   [opts.idSize=21]          - jobId length (characters).
  * @param   {number}   [opts.retryBackoffMs=1000]    - Base delay (ms) between attempts of a failed job with retries remaining; doubles each attempt.
+ * @param   {number|boolean} [opts.orphanTimeout=86400] - Orphan-reclaim ceiling (SECONDS): a non-terminal record whose last transition is older than this is reclaimed as `failed` (`JobOrphanedError`) by the sweep pass — durable stores only, the built-in memory store is exempt. `0`/`false` disables; positive values are floored at 60.
  * @param   {number}   [opts.webhookMaxAttempts=3]   - Completion-webhook retry ceiling.
  * @param   {number}   [opts.webhookBackoffMs=500]   - Webhook backoff base (ms); doubles each retry.
  * @param   {number}   [opts.webhookTimeoutMs=5000]  - Per-attempt webhook request timeout (ms).
@@ -814,6 +952,13 @@ function start(opts) {
     if (typeof opts.retryBackoffMs === 'number' && opts.retryBackoffMs >= 0) {
         _retryBackoffMs = Math.floor(opts.retryBackoffMs);
     }
+    // 0 / false disables the orphan-reclaim pass; a positive value is floored
+    // at 60s so a mistyped tiny ceiling cannot reclaim jobs mid-flight.
+    if (opts.orphanTimeout === 0 || opts.orphanTimeout === false) {
+        _orphanTimeout = 0;
+    } else if (typeof opts.orphanTimeout === 'number' && opts.orphanTimeout > 0) {
+        _orphanTimeout = Math.max(60, Math.floor(opts.orphanTimeout));
+    }
     if (typeof opts.webhookMaxAttempts === 'number' && opts.webhookMaxAttempts > 0) {
         _webhookMaxAttempts = Math.floor(opts.webhookMaxAttempts);
     }
@@ -827,7 +972,13 @@ function start(opts) {
         _webhookSecret = opts.webhookSecret;
     }
     if (!_store) {
-        _store = (opts.store && typeof opts.store === 'object') ? opts.store : createMemoryStore();
+        if (opts.store && typeof opts.store === 'object') {
+            _store = opts.store;
+            _storeIsBuiltinMemory = false;
+        } else {
+            _store = createMemoryStore();
+            _storeIsBuiltinMemory = true;
+        }
     } else if (opts.store && typeof opts.store === 'object' && opts.store !== _store) {
         // Store adoption is once-only: a store arriving after one is installed
         // (e.g. a create() already ran ensureStarted() and defaulted to the
@@ -900,6 +1051,8 @@ function reset() {
     _webhookTimeoutMs   = DEFAULT_WEBHOOK_TIMEOUT_MS;
     _webhookSecret      = null;
     _retryBackoffMs     = DEFAULT_RETRY_BACKOFF_MS;
+    _orphanTimeout      = DEFAULT_ORPHAN_TIMEOUT;
+    _storeIsBuiltinMemory = false;
 }
 
 module.exports = {

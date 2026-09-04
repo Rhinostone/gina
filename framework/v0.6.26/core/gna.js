@@ -1536,6 +1536,7 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
                                         sweepInterval:  _jobsConf.sweepInterval,
                                         idSize:         _jobsConf.idSize,
                                         retryBackoffMs: _jobsConf.retryBackoffMs,
+                                        orphanTimeout:  _jobsConf.orphanTimeout,
                                         webhookMaxAttempts: _jobsConf.webhookMaxAttempts,
                                         webhookBackoffMs:   _jobsConf.webhookBackoffMs,
                                         webhookTimeoutMs:   _jobsConf.webhookTimeoutMs,
