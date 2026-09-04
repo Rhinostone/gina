@@ -377,7 +377,12 @@ describe('job-retry § 10 — source pins', function() {
     });
 
     it('terminal patches clear nextRetryAt (and success clears the mid-retry error)', function() {
-        assert.equal((src.match(/nextRetryAt: null/g) || []).length, 2, 'both terminal patches clear it');
+        // 3 = settle()'s failed patch + settle()'s completed patch + the #B471
+        // orphan-reclaim patch (reclaimOrphans — a synthetic terminal write for
+        // records stranded by a dead process). Every terminal patch must clear
+        // nextRetryAt; a count moving OFF 3 means a new terminal write site
+        // appeared (or one vanished) — re-census before touching this number.
+        assert.equal((src.match(/nextRetryAt: null/g) || []).length, 3, 'every terminal patch clears it');
         assert.ok(src.indexOf('result: result, error: null') > -1, 'success patch clears error');
     });
 
