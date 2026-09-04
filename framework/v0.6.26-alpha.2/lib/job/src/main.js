@@ -283,7 +283,7 @@ function noop() {}
  * @property {number}      updatedAt   - Epoch ms of the last transition.
  * @property {?number}     startedAt   - Epoch ms the worker began; `null` while pending.
  * @property {?number}     finishedAt  - Epoch ms of the terminal transition; `null` until then.
- * @property {?number}     expiresAt   - Epoch ms after which a terminal record is sweepable; `null` until terminal — deliberately including while a retry is pending, so the sweep can never purge a retryable job.
+ * @property {?number}     expiresAt   - Epoch ms after which a terminal record is sweepable; `null` until terminal — deliberately including while a retry is pending, so the TTL sweep can never purge a retryable job. On a durable store that protection is bounded by the orphan-reclaim pass: a record left non-terminal past `orphanTimeout` is marked `failed` first, which stamps `expiresAt` and hands it to ordinary retention (see {@link reclaimOrphans}). The built-in memory store is exempt, so the guarantee is unbounded there.
  * @property {?number}     nextRetryAt - Epoch ms of the next scheduled attempt while a failed attempt awaits its retry; `null` once terminal (absent if the job never settled).
  * @property {?number}     webhookDeliveredAt - Epoch ms a completion webhook succeeded; absent until delivered.
  * @property {?boolean}    webhookFailed      - `true` once webhook delivery exhausts its retries; absent otherwise.
