@@ -677,7 +677,7 @@
         },
         "autoTmpCleanupTimeout": {
           "type": ["string", "number", "boolean"],
-          "description": "Arms a per-file deletion timer at parse time for each landed file (e.g. \"30s\", \"10m\", \"1h\", \"500ms\"; a bare number is milliseconds). false, 0 or empty disables it — the shipped default. Block-level only."
+          "description": "Arms a per-file deletion timer at parse time for each landed file (e.g. \"30s\", \"10m\", \"1h\", \"500ms\"; a bare number is milliseconds). false, 0 or empty disables it — the shipped default. Block-level only. When armed, a boot-time sweep also reclaims staged parts (<32 hex>.part) a previous process stranded — parts older than this timeout (floored at 1h) in the configured landing directories; disabled means no sweep, and removing staged files is then the operator's own job."
         },
         "groups": {
           "type": "object",
