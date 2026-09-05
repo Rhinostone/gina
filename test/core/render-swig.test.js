@@ -1354,13 +1354,17 @@ describe('15 - CSP nonce: dev-only Inspector + patch inline scripts', function()
         var literal = (s.match(/'<script' \+ _cspNonceAttr \+ '>/g) || []);
         var tpl     = (s.match(/'<script' \+ _cspNonceTplAttr \+ '>/g) || []);
         // _cachePatchScript + _patchScript splice into htmlContent AFTER
-        // compiledTemplate(data) ran — the per-request literal is correct there.
-        assert.strictEqual(literal.length, 2,
-            'expected exactly 2 post-execute dev-script openings on _cspNonceAttr (got ' + literal.length + ')');
-        // __gdScript + __logsScript are baked into the swig-compiled layout (the
-        // cached compiled template) — they take the render-time template form.
-        assert.strictEqual(tpl.length, 2,
-            'expected exactly 2 compile-baked dev-script openings on _cspNonceTplAttr (got ' + tpl.length + ')');
+        // compiledTemplate(data) ran, and since #B464 so does the Inspector
+        // data script (buildInspectorDataScript, module bottom) — the
+        // per-request literal is correct at all three.
+        assert.strictEqual(literal.length, 3,
+            'expected exactly 3 post-execute dev-script openings on _cspNonceAttr (got ' + literal.length + ')');
+        // __logsScript is the one script still baked into the swig-compiled
+        // layout (the cached compiled template) — it takes the render-time
+        // template form. The data script left the template with #B464: baked
+        // in, it froze request 1's page data into every later execute.
+        assert.strictEqual(tpl.length, 1,
+            'expected exactly 1 compile-baked dev-script opening on _cspNonceTplAttr (got ' + tpl.length + ')');
     });
 
     it('leaves no bare framework-assembled <script> opening assignment', function() {

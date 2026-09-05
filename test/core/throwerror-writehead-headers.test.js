@@ -77,7 +77,14 @@ describe('#B467 §00 - instrument validation', function () {
     });
 
     it('the comment strip removes lines without blanking the file', function () {
-        assert.ok(live.length > src.length * 0.5,
+        // the strip must fail in BOTH directions: a no-op strip and a gutting
+        // strip each make the negative pins below vacuous. The floor is the one
+        // the sibling strip controls use (connector-settle-parity, couchbase-
+        // concurrency): controller.js is comment-dense and legitimately sits
+        // near 50% live, so a 0.5 floor tripped on a dead-code removal (#B475).
+        assert.ok(live.length < src.length,
+            'the strip must have removed something');
+        assert.ok(live.length > src.length * 0.3,
             'strip must not gut the source - the pins below would pass vacuously');
         assert.ok(live.indexOf('res.writeHead(') > -1,
             'live code must survive the strip');

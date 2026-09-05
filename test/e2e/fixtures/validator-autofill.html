@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>gina autofill-signal e2e harness</title>
+    <!-- Empty data-URI icon: suppress the favicon.ico request for a clean console. -->
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="/css/vendor/gina/gina.min.css">
+
+    <!--
+        RUNTIME harness for #B478 - the autofill signal. Boots the REAL built gina
+        bundle with a NON-EMPTY forms whisper (/js/gina.onload.autofill.js) so
+        core.js scans + binds the rule-bound form below. The served gina.min.css
+        declares the `gina-autofill-start` keyframe on the autofill pseudo-classes;
+        automation cannot put a control into the browser's real autofill state, so
+        the spec applies that SAME served keyframe through the harness class below.
+        Everything downstream - the animationstart event, the validator's
+        form-level proxy, the live check, the submit gate - is the shipped code.
+
+        Load order matches a real gina render: the onload defines onGinaLoaded +
+        __ginaWebroot, THEN the gina bundle boots.
+    -->
+    <script src="/js/gina.onload.autofill.js"></script>
+    <script src="/js/gina.min.js"></script>
+    <script>
+        // Minimal page: the framework's own `ginaloaded` listener loses the
+        // attach race, so invoke onGinaLoaded manually to flip
+        // isFrameworkLoaded (the loader's guard makes a duplicate call a
+        // no-op). core.js then scans forms and publishes gina.validator.
+        (function () {
+            var tries = 0;
+            function kick() {
+                try {
+                    if (
+                        window.gina
+                        && window.gina.config
+                        && typeof window.onGinaLoaded === 'function'
+                        && !window.gina.isFrameworkLoaded
+                    ) {
+                        window.onGinaLoaded(window.gina);
+                    }
+                } catch (e) {
+                    if (window.console && console.error) {
+                        console.error('[harness] onGinaLoaded threw', e && e.stack || e);
+                    }
+                }
+                if ((!window.gina || !window.gina.isFrameworkLoaded) && tries++ < 100) {
+                    setTimeout(kick, 50);
+                }
+            }
+            kick();
+        }());
+    </script>
+    <style>
+        body { margin: 0; padding: 1rem; font-family: system-ui, sans-serif; }
+        /* Harness-only: the SERVED keyframe (declared in gina.min.css) applied
+           through a class - the one thing automation must simulate. */
+        .af-simulate { animation-name: gina-autofill-start; animation-duration: 1ms; }
+        /* Control: a keyframe of ANOTHER name must leave the validator unmoved. */
+        @keyframes af-other-start { from { outline-offset: inherit; } to { outline-offset: inherit; } }
+        .af-other { animation-name: af-other-start; animation-duration: 1ms; }
+    </style>
+</head>
+<body>
+    <h1>gina autofill-signal harness</h1>
+
+    <!--
+        A rule-bound, live-checked form (rules: email isRequired + isEmail; secret
+        isRequired). Each control sits directly inside its `.form-item` so the
+        validator's error marking (`$el.parentNode.className`) lands on the wrapper.
+        Plain <button type="submit">, no disabled attribute, no autocomplete
+        attributes - the reported page's shape.
+    -->
+    <form id="afform" data-gina-form-rule="afform" data-gina-form-live-check-enabled="true" action="/af-sink" method="post">
+        <div class="form-item">
+            <label for="af-email">E-mail</label>
+            <input id="af-email" type="text" name="email">
+        </div>
+        <div class="form-item">
+            <label for="af-secret">Secret</label>
+            <input id="af-secret" type="password" name="secret">
+        </div>
+        <button id="afform-submit" type="submit">Submit</button>
+    </form>
+</body>
+</html>

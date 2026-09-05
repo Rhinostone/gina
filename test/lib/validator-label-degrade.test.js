@@ -286,9 +286,9 @@ describe('05 - every replace() call site passes the label key it resolves', func
         });
     }
 
-    it('there are exactly 28 live call sites', function () {
+    it('there are exactly 29 live call sites', function () {
         // A new call site must be threaded too; this trips when one is added unthreaded.
-        assert.equal(callSites().length, 28);
+        assert.equal(callSites().length, 29);
     });
 
     it('each site passes, as its 3rd argument, the same key it reads from local.errorLabels', function () {
@@ -306,7 +306,7 @@ describe('05 - every replace() call site passes the label key it resolves', func
     });
 
     it('every label key used at a call site has an English default', function () {
-        // This is what makes "degrade to the English default" true at 28/28 sites rather
+        // This is what makes "degrade to the English default" true at 29/29 sites rather
         // than merely usual. `alias` is excluded: it resolves to 'is', which IS a default.
         var defaults = ENGINE_SRC
             .slice(ENGINE_SRC.indexOf('var _defaultErrorLabels = {'), ENGINE_SRC.indexOf("'isInList': 'Must be one of: %s'"))
