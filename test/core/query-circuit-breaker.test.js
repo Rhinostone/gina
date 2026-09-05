@@ -49,8 +49,8 @@ describe('01 - source: the breaker gate sits ABOVE the protocol dispatch', funct
 
     it('admission runs before both protocol handlers are invoked', function() {
         var gate = src.indexOf('var _cbGate      = _circuitAdmit(');
-        var h2   = src.indexOf('return handleHTTP2ClientRequest(browser, options, callback, 0, isCritical);');
-        var h1   = src.indexOf('return handleHTTP1ClientRequest(browser, options, callback);');
+        var h2   = src.indexOf('handleHTTP2ClientRequest(browser, options, callback, 0, isCritical);');
+        var h1   = src.indexOf('handleHTTP1ClientRequest(browser, options, callback);');
         assert.ok(gate > -1 && h2 > -1 && h1 > -1, 'gate + both dispatch calls must exist');
         assert.ok(gate < h2 && gate < h1, 'the gate must precede both dispatch calls');
     });

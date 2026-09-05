@@ -4056,7 +4056,8 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
      *  @param {array} files
      *
      * @returns {{onComplete: function}|undefined} the fluent handle when `cb`
-     *   is omitted — `store(target).onComplete(cb)` — or `undefined` when
+     *   is omitted — `store(target).onComplete(cb)`, delivering to that call's
+     *   callback alone (#B475) — or `undefined` when
      *   `cb` is provided
      *
      * @example
@@ -4330,8 +4331,11 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
 
             return {
                 onComplete : function(cb){
-                    self.on('uploaded', cb);
-                    start(target, files)
+                    // #B475 — deliver through the callback path: a per-call channel,
+                    // no listener left on the shared instance emitter (the .on() this
+                    // used to register was never removed, so a later store() on the
+                    // same instance re-invoked every earlier callback with its result)
+                    start(target, files, cb)
                 }
             }
         } else {
@@ -4490,12 +4494,80 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
     };
 
     /**
+     * Build the per-call delivery adapter behind the fluent `{onComplete}`
+     * handle (#B475). Reproduces the contract the former emitter-side facades
+     * gave the application: a JSON-looking string body is parsed, a
+     * single-argument error delivery (#B404) reaches `cb(err)`, a known
+     * non-2xx status reaches `cb(data)`, success reaches `cb(false, data)`,
+     * and a native or typed `Error` — the bare shape the callback path hands
+     * over on a transport or pre-transport failure — is wrapped as the
+     * `{status, error}` object the fluent form documents (`err.status` when
+     * the error carries one, 500 otherwise). A synchronous throw inside `cb`
+     * is answered by the same "while catching back" 500 as the callback path;
+     * a rejected thenable is owned by `_ownAsyncCbRejection`. Returns nothing,
+     * so the delivering site's own async-rejection wrap around its callback
+     * never sees the thenable a second time.
+     *
+     * @inner
+     * @param {function} cb - The application callback registered through `onComplete`
+     * @returns {function} `deliver(err, data)` — invoked by the per-call channel
+     */
+    var _fluentDelivery = function(cb) {
+        return function deliverToFluentCallback(err, data) {
+            if ( typeof(data) == 'string' && /^(\{|%7B|\[{)|\[\]/.test(data) ) {
+                try {
+                    data = JSON.parse(data)
+                } catch (parseErr) {
+                    data = {
+                        status    : 500,
+                        error     : data
+                    }
+                }
+            }
+            // a bare Error (transport or pre-transport failure) rides the
+            // {status, error} wrap the fluent form has always delivered
+            if ( err instanceof Error ) {
+                err = { status: err.status || 500, error: err };
+            }
+            try {
+                // #B404 — error deliveries are single-argument (`cb(err)` on
+                // failure, `cb(false, data)` on success): with `data` undefined
+                // the payload rides the error slot
+                if ( typeof(data) == 'undefined' ) {
+                    _ownAsyncCbRejection(cb(err));
+                    return;
+                }
+                if ( data.status && !/^2/.test(data.status) && typeof(local.options.conf.server.coreConfiguration.statusCodes[data.status]) != 'undefined') {
+                    _ownAsyncCbRejection(cb(data));
+                    return;
+                }
+                _ownAsyncCbRejection(cb(err, data));
+            } catch (e) {
+                var infos = local.options, controllerName = infos.controller.substring(infos.controller.lastIndexOf('/'));
+                var msg = 'Controller Query Exception while catching back.\nBundle: '+ infos.bundle +'\nController File: /controllers'+ controllerName +'\nControl: this.'+ infos.control +'(...)\n\r' + e.stack;
+                var exception = new Error(msg);
+                exception.status = 500;
+                self.throwError(exception);
+            }
+        };
+    };
+
+    /**
      * Make an outbound HTTP/HTTPS request from a controller action.
      *
      * Accepts arguments in any of these forms:
      * - `query(options, data, callback)`
      * - `query(options, callback)`
      * - `query(options, data)` — returns a handle exposing `onComplete(cb)`.
+     *   Since #B475 the handle is a PER-CALL channel: concurrent fluent
+     *   queries on one controller each deliver to their own callback, every
+     *   registration fires (`onComplete()` returns the handle, so it chains),
+     *   a registration made after the call settled still fires on the next
+     *   tick, and the handle comes back on EVERY path — a synchronous failure
+     *   (missing host, unreadable certificate, open circuit) reaches `cb(err)`
+     *   on the next tick instead of throwing at the call site. `query#complete`
+     *   is emitted on the controller only when nothing consumed the outcome
+     *   (no callback, no `onComplete`), one tick after settlement.
      *   The handle is NOT a thenable — to `await`, promisify the call the way
      *   the framework does internally:
      *   `await require('util').promisify(self.query)(options, {})`.
@@ -4516,8 +4588,8 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
      *   header on both transports before dispatch; a caller-supplied
      *   `authorization` header wins (#B465).
      * @param {object}   [data]           - Request body / query params
-     * @param {function} [callback]       - `callback(err, result)` — omit to get the onComplete handle
-     * @returns {void|object} `undefined` in callback form; the `{onComplete}` handle otherwise
+     * @param {function} [callback]       - `callback(err, result)` — omit (or pass `null`) to get the onComplete handle
+     * @returns {void|object} `undefined` in callback form; the `{onComplete}` handle otherwise — on every path, including the synchronous failures (#B475)
      */
     // replaced: arguments object — use named params (#P23)
     this.query = function(options, data, callback) {
@@ -4527,6 +4599,60 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
             data = {};
         }
         data = data || {};
+        // #B475 — the fluent form gets ONE per-call delivery channel. A missing
+        // (or null) callback used to mean "emit `query#complete` on the shared
+        // instance emitter", which the `{onComplete}` facades consumed with a
+        // destructive `removeAllListeners` + `once`: a second fluent query on
+        // the same instance evicted the first listener (its callback never
+        // fired, the survivor could receive the other call's payload), and the
+        // synchronous failure paths returned emit()'s boolean instead of the
+        // handle. Now every fluent query rides the callback path — every
+        // delivery guard and every retry carries this channel — and query()
+        // returns the handle on every path. The event still fires, one tick
+        // after settlement, when nothing consumed the outcome (a discarded
+        // handle, a direct listener): the documented "if omitted, emits".
+        var _handle = undefined;
+        if ( typeof(callback) != 'function' ) {
+            var _fluentCbs = [], _settledArgs = null;
+            _handle = {
+                onComplete: function(cb) {
+                    var deliver = _fluentDelivery(cb);
+                    _fluentCbs.push(deliver);
+                    if (_settledArgs) { // registered after the call settled
+                        var lateArgs = _settledArgs;
+                        process.nextTick(function() { deliver.apply(null, lateArgs); });
+                    }
+                    return _handle;
+                }
+            };
+            callback = function perCallDelivery(err, data) {
+                var args = arguments;
+                if (_fluentCbs.length) {
+                    _settledArgs = args;
+                    for (var i = 0, len = _fluentCbs.length; i < len; ++i) {
+                        _fluentCbs[i].apply(null, args);
+                    }
+                    return;
+                }
+                // nothing registered yet — a synchronous failure settling before
+                // `.onComplete()` could run, or a handle nobody chained on: hold
+                // one tick, then deliver if a callback arrived, else emit
+                process.nextTick(function() {
+                    _settledArgs = args;
+                    if (_fluentCbs.length) {
+                        for (var i = 0, len = _fluentCbs.length; i < len; ++i) {
+                            _fluentCbs[i].apply(null, args);
+                        }
+                        return;
+                    }
+                    if (args.length > 1) {
+                        self.emit('query#complete', args[0], args[1]);
+                    } else {
+                        self.emit('query#complete', args[0]);
+                    }
+                });
+            };
+        }
         // preventing multiple call of self.query() when controller is rendering from another required controller
         if (
             typeof(local.options) != 'undefined'
@@ -4623,10 +4749,11 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
             err = new Error('SuperController::query() needs at least a `host IP` or a `hostname`');
             if (callback) {
                 try {
-                    return _ownAsyncCbRejection(callback(err))
+                    _ownAsyncCbRejection(callback(err))
                 } catch (_syncCbErr) {
-                    return _ownSyncCbThrow(_syncCbErr);
+                    _ownSyncCbThrow(_syncCbErr);
                 }
+                return _handle;
             }
             // #B404 by-catch — mirror the callback branch's return: without it the
             // emitter branch fell through and the doomed query kept executing.
@@ -4827,14 +4954,15 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                     if (!isCritical) {
                         // mirror the H3 `_swallowIfNonCritical` contract: log-only, no callback
                         console.warn('[QUERY][circuit-open][non-critical] swallowed '+ (options.method || '') +' '+ (options.path || '') +' to '+ _cbAuthority);
-                        return;
+                        return _handle;
                     }
                     if (callback) {
                         try {
-                            return _ownAsyncCbRejection(callback(_cbErr));
+                            _ownAsyncCbRejection(callback(_cbErr));
                         } catch (_syncCbErr) {
-                            return _ownSyncCbThrow(_syncCbErr);
+                            _ownSyncCbThrow(_syncCbErr);
                         }
+                        return _handle;
                     }
                     return self.emit('query#complete', _cbErr);
                 }
@@ -4863,18 +4991,20 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                 options._timelineStart = Date.now();
             }
             if ( /http2/.test(httpLib) ) {
-                return handleHTTP2ClientRequest(browser, options, callback, 0, isCritical);
+                handleHTTP2ClientRequest(browser, options, callback, 0, isCritical);
             } else {
-                return handleHTTP1ClientRequest(browser, options, callback);
+                handleHTTP1ClientRequest(browser, options, callback);
             }
+            return _handle;
 
         } catch(err) {
             if (callback) {
                 try {
-                    return _ownAsyncCbRejection(callback(err))
+                    _ownAsyncCbRejection(callback(err))
                 } catch (_syncCbErr) {
-                    return _ownSyncCbThrow(_syncCbErr);
+                    _ownSyncCbThrow(_syncCbErr);
                 }
+                return _handle;
             }
             self.emit('query#complete', err)
         }
@@ -5434,50 +5564,10 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
             if (req.end) req.end();
         }
 
-        return {
-            onComplete  : function(cb) {
-                // Remove any orphaned listener from a previous query call on this instance
-                // before registering the new one to prevent listener accumulation.
-                self.removeAllListeners('query#complete');
-                self.once('query#complete', function(err, data){
+        // #B475 — no per-transport {onComplete} facade here any more: query()
+        // mints ONE per-call channel for the fluent form and returns the handle
+        // itself, so this handler always receives a callback.
 
-                    if ( typeof(data) == 'string' && /^(\{|%7B|\[{)|\[\]/.test(data) ) {
-                        try {
-                            data = JSON.parse(data)
-                        } catch (err) {
-                            data = {
-                                status    : 500,
-                                error     : data
-                            }
-                        }
-                    }
-
-                    try {
-                        // #B404 — error-path emits are single-argument, mirroring the
-                        // callback-form contract (callback(err) on failure, callback(false, data)
-                        // on success): deliver the payload as the error argument. Without this
-                        // guard the dispatch below dereferenced `data.status` with `data`
-                        // undefined and the catch misattributed the TypeError to the app callback.
-                        if ( typeof(data) == 'undefined' ) {
-                            return _ownAsyncCbRejection(cb(err))
-                        }
-                        if ( data.status && !/^2/.test(data.status) && typeof(local.options.conf.server.coreConfiguration.statusCodes[data.status]) != 'undefined') {
-                            return _ownAsyncCbRejection(cb(data))
-                        }
-
-                        return _ownAsyncCbRejection(cb(err, data))
-                    } catch (e) {
-                        var infos = local.options, controllerName = infos.controller.substring(infos.controller.lastIndexOf('/'));
-                        var msg = 'Controller Query Exception while catching back.\nBundle: '+ infos.bundle +'\nController File: /controllers'+ controllerName +'\nControl: this.'+ infos.control +'(...)\n\r' + e.stack;
-                        var exception = new Error(msg);
-                        exception.status = 500;
-
-                        return self.throwError(exception);
-                    }
-                })
-            }
-
-        }
     }
 
     /**
@@ -5536,7 +5626,7 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
      * @inner
      * @param {object}   browser     - HTTP/2 client module (node:http2)
      * @param {object}   options     - Request options (:authority, :method, :path, :scheme, headers, etc.)
-     * @param {function} [callback]  - Node-style callback; if omitted, emits 'query#complete' on self
+     * @param {function} [callback]  - Node-style callback; `query()` always supplies one since #B475 (the per-call channel behind the fluent handle)
      * @param {number}   [retryCount=0] - Current retry attempt (0 = first try)
      * @param {boolean}  [isCritical=true] - When false, errors are swallowed silently (H3)
      *
@@ -6332,9 +6422,11 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                     }
                 }
 
-                // #B33 — same released-response skip as the callback-mode intercept above;
-                // emitter mode falls through to the query#complete emit so listeners
-                // still learn the outcome.
+                // #B33 — same released-response skip as the callback-mode intercept above.
+                // The intercept answers the redirect and returns: the outcome is not
+                // delivered to the application in either mode (#B475 measured). This
+                // emitter-mode branch is unreachable now that every fluent query rides
+                // the callback path.
                 if (local.res != null && data.status && /^3/.test(data.status) && typeof data.headers !== 'undefined') {
                     self.removeAllListeners(['query#complete']);
                     local.res.writeHead(data.status, data.headers);
@@ -6564,56 +6656,10 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
             _sendRequest();
         }
 
-        return {
-            onComplete  : function(cb) {
+        // #B475 — no per-transport {onComplete} facade here any more: query()
+        // mints ONE per-call channel for the fluent form and returns the handle
+        // itself, so this handler always receives a callback.
 
-                // Remove any orphaned listener from a previous query call on this instance
-                // before registering the new one to prevent listener accumulation.
-                self.removeAllListeners('query#complete');
-                self.once('query#complete', function(err, data){
-
-                    if ( typeof(data) == 'string' && /^(\{|%7B|\[{)|\[\]/.test(data) ) {
-                        try {
-                            data = JSON.parse(data)
-                        } catch (err) {
-                            data = {
-                                status    : 500,
-                                error     : data
-                            }
-                        }
-                    }
-
-                    try {
-                        // #B404 — error-path emits are single-argument, mirroring the
-                        // callback-form contract (callback(err) on failure, callback(false, data)
-                        // on success): deliver the payload as the error argument. Without this
-                        // guard the dispatch below dereferenced `data.status` with `data`
-                        // undefined and the catch misattributed the TypeError to the app callback.
-                        if ( typeof(data) == 'undefined' ) {
-                            return _ownAsyncCbRejection(cb(err))
-                        }
-                        if ( data.status && !/^2/.test(data.status) && typeof(local.options.conf.server.coreConfiguration.statusCodes[data.status]) != 'undefined') {
-                            _ownAsyncCbRejection(cb(data))
-                        } else {
-                            // required when control is used in an halted state
-                            // Ref.: resumeRequest()
-                            if ( self.isHaltedRequest() && typeof(local.onHaltedRequestResumed) != 'undefined' ) {
-                                local.onHaltedRequestResumed(err);
-                            }
-
-                            _ownAsyncCbRejection(cb(err, data))
-                        }
-                    } catch (e) {
-                        var infos = local.options, controllerName = infos.controller.substring(infos.controller.lastIndexOf('/'));
-                        var msg = 'Controller Query Exception while catching back.\nBundle: '+ infos.bundle +'\nController File: /controllers'+ controllerName +'\nControl: this.'+ infos.control +'(...)\n\r' + e.stack;
-                        var exception = new Error(msg);
-                        exception.status = 500;
-                        self.throwError(exception);
-                        return;
-                    }
-                })
-            }
-        }
     }
 
 

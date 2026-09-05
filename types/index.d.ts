@@ -407,9 +407,12 @@ declare namespace gina {
          * Make an outbound HTTP/HTTPS request.
          * @param options - Request options (host, port, path, method, headers, critical, ...)
          * @param data - Request body / query params
-         * @param callback - `callback(err, result)` -- omit for Promise
+         * @param callback - `callback(err, result)` -- omit (or pass `null`) to get the
+         *   fluent `{ onComplete }` handle: a PER-CALL channel (#B475) returned on
+         *   every path, chainable, delivering `cb(false, data)` on success and
+         *   `cb(err)` on failure. Never a Promise -- promisify the call to `await` it.
          */
-        query(options: QueryOptions, data?: object, callback?: (err: Error | null, result: any) => void): void | Promise<any>;
+        query(options: QueryOptions, data?: object, callback?: (err: Error | null, result: any) => void): QueryHandle | void;
 
         /**
          * Download a file from a remote URL and stream it to the client.
@@ -556,6 +559,16 @@ declare namespace gina {
     }
 
     // ─── Query / Download option shapes ───────────────────────────────────
+
+    /**
+     * The fluent handle `query()` returns when no callback is given (#B475): one
+     * per call, so concurrent fluent queries on one controller never share a
+     * channel; `onComplete()` returns the handle so registrations chain, and a
+     * registration made after the call settled still fires on the next tick.
+     */
+    interface QueryHandle {
+        onComplete(cb: (err: any, data?: any) => void): QueryHandle;
+    }
 
     interface QueryOptions {
         host?: string;

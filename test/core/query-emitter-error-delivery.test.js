@@ -21,10 +21,11 @@
 'use strict';
 
 var assert = require('node:assert');
-var { describe, it, before } = require('node:test');
+var { describe, it, before, after } = require('node:test');
 var fs   = require('fs');
 var path = require('path');
 var net  = require('net');
+var http = require('http');
 
 var FW = require('../fw');
 var SOURCE = path.join(FW, 'core', 'controller', 'controller.js');
@@ -41,41 +42,36 @@ function countOf(text, needle) {
     return n;
 }
 
-describe('01 - #B404 source pins: both facades guard the single-argument error delivery', function() {
+describe('01 - #B404 source pins: the fluent delivery adapter guards the single-argument error delivery', function() {
 
     var src = fs.readFileSync(SOURCE, 'utf8');
-    var OPENER = 'onComplete  : function(cb) {'; // two-space form — the query facades only (the store facade differs)
+    // #B475 — the two per-transport facades collapsed into ONE constructor-scope
+    // adapter behind the per-call handle; the pins now target that adapter.
+    var DEF = 'var _fluentDelivery = function(cb) {';
 
-    it('the error-delivery wrap exists in both facades, distinct from its siblings', function() {
-        assert.equal(countOf(src, '_ownAsyncCbRejection(cb(err))'), 2,
-            'the guard delivery, both transports');
-        // needle-distinctness control (can-fail): the 2-arg sibling still reads 2 —
-        // were the guard needle a substring of it, the census above would read 4.
-        assert.equal(countOf(src, '_ownAsyncCbRejection(cb(err, data))'), 2,
+    it('the error-delivery wrap exists in the adapter, distinct from its siblings', function() {
+        assert.equal(countOf(src, '_ownAsyncCbRejection(cb(err))'), 1,
+            'the guard delivery, one adapter for both transports');
+        // needle-distinctness control (can-fail): the 2-arg sibling still reads 1 —
+        // were the guard needle a substring of it, the census above would read 2.
+        assert.equal(countOf(src, '_ownAsyncCbRejection(cb(err, data))'), 1,
             'control: the success-branch needle stays distinct and untouched');
     });
 
-    it('the guard sits inside each facade sync-guard try, before the data.status dispatch', function() {
-        assert.equal(countOf(src, OPENER), 2, 'expected exactly the two query facades');
-        var from = 0, seen = 0;
-        while (true) {
-            var at = src.indexOf(OPENER, from);
-            if (at < 0) { break; }
-            var end = src.indexOf('while catching back.', at);
-            assert.ok(end > at, 'each facade must close with its own catch marker');
-            var block = src.slice(at, end);
-            var tryAt        = block.lastIndexOf('try {'); // the sync-guard try (the string-parse try comes first)
-            var guardAt      = block.indexOf("typeof(data) == 'undefined'");
-            var cbErrAt      = block.indexOf('_ownAsyncCbRejection(cb(err))');
-            var dataStatusAt = block.indexOf('data.status &&');
-            assert.ok(tryAt > -1 && guardAt > tryAt, 'the guard opens the sync-guard try');
-            assert.ok(cbErrAt > guardAt, 'the delivery sits under the guard');
-            assert.ok(dataStatusAt > cbErrAt, 'the legacy data.status dispatch runs only for two-argument deliveries');
-            assert.ok(block.indexOf('#B404') > -1, 'the guard is annotated in place');
-            seen++;
-            from = end;
-        }
-        assert.equal(seen, 2, 'both query facades verified');
+    it('the guard sits inside the adapter sync-guard try, before the data.status dispatch', function() {
+        assert.equal(countOf(src, DEF), 1, 'expected exactly one fluent delivery adapter');
+        var at  = src.indexOf(DEF);
+        var end = src.indexOf('while catching back.', at);
+        assert.ok(end > at, 'the adapter must close with its own catch marker');
+        var block = src.slice(at, end);
+        var tryAt        = block.lastIndexOf('try {'); // the sync-guard try (the string-parse try comes first)
+        var guardAt      = block.indexOf("typeof(data) == 'undefined'");
+        var cbErrAt      = block.indexOf('_ownAsyncCbRejection(cb(err))');
+        var dataStatusAt = block.indexOf('data.status &&');
+        assert.ok(tryAt > -1 && guardAt > tryAt, 'the guard opens the sync-guard try');
+        assert.ok(cbErrAt > guardAt, 'the delivery sits under the guard');
+        assert.ok(dataStatusAt > cbErrAt, 'the legacy data.status dispatch runs only for two-argument deliveries');
+        assert.ok(block.indexOf('#B404') > -1, 'the guard is annotated in place');
     });
 
     it('the host-missing emitter branch returns like its callback twin (#B404 by-catch)', function() {
@@ -90,7 +86,18 @@ describe('01 - #B404 source pins: both facades guard the single-argument error d
 
 describe('02 - #B404 behavioral: handle-mode error outcomes reach the app listener', function() {
 
-    before(function() {
+    // #B475 — the handle is a per-call channel, so the outcome arms below drive a
+    // REAL upstream instead of a bare inst.emit: /404 and /502 answer the JSON
+    // bodies the former single-argument emits carried, everything else 200 {"ok":true}
+    var srv44 = null, port44 = 0;
+    before(async function() {
+        srv44 = http.createServer(function(q, r) {
+            if (q.url === '/404') { r.writeHead(404, { 'content-type': 'application/json' }); return r.end('{"status":404,"error":"Not Found"}'); }
+            if (q.url === '/502') { r.writeHead(502, { 'content-type': 'application/json' }); return r.end('{"status":502,"error":"upstream down"}'); }
+            r.writeHead(200, { 'content-type': 'application/json' }); r.end('{"ok":true}');
+        });
+        await new Promise(function(res) { srv44.listen(0, '127.0.0.1', res); });
+        port44 = srv44.address().port;
         setContext('bundle', 'tb44');
         setContext('env', 'dev');
         setContext('gina', {
@@ -100,6 +107,11 @@ describe('02 - #B404 behavioral: handle-mode error outcomes reach the app listen
                 host: '127.0.0.1', hostname: 'http://127.0.0.1:65531'
             } } } }
         });
+    });
+
+    after(function() {
+        try { if (typeof srv44.closeAllConnections === 'function') { srv44.closeAllConnections(); } } catch (e) {}
+        try { srv44.close(); } catch (e) {}
     });
 
     function makeInst() {
@@ -149,8 +161,8 @@ describe('02 - #B404 behavioral: handle-mode error outcomes reach the app listen
             });
         });
     }
-    function h1Opts(P) {
-        return { protocol: 'http/1.1', scheme: 'http', host: '127.0.0.1', port: P, path: '/x', method: 'GET', requestTimeout: '2s', maxRetry: 0, headers: { 'content-type': 'application/json' } };
+    function h1Opts(P, p) {
+        return { protocol: 'http/1.1', scheme: 'http', host: '127.0.0.1', port: P, path: p || '/x', method: 'GET', requestTimeout: '2s', maxRetry: 0, headers: { 'content-type': 'application/json' } };
     }
     function h2Opts(P) {
         return { protocol: 'http/2.0', scheme: 'http', hostname: 'http://127.0.0.1:' + P, host: '127.0.0.1', port: P, path: '/x', method: 'GET', requestTimeout: '2s', headers: { 'content-type': 'application/json' } };
@@ -198,11 +210,10 @@ describe('02 - #B404 behavioral: handle-mode error outcomes reach the app listen
     });
 
     it('success control: a two-argument delivery still dispatches (false, data) — the guard does not hijack it', async function() {
-        var P = await freePort();
         var h = makeInst(), got = [];
-        var handle = h.inst.query(h1Opts(P), {});
+        var handle = h.inst.query(h1Opts(port44), {});
         handle.onComplete(function(err, data) { got.push([err, data && data.ok, typeof data !== 'undefined']); });
-        h.inst.emit('query#complete', false, { ok: true }); // synchronous — beats the dead-port failure
+        await waitFor(function() { return got.length || h.thrown.length; }, 3000);
         await hold(50);
         assert.deepStrictEqual(got, [[false, true, true]]);
         assert.equal(ownMatches(h.thrown, /Controller Query Exception/).length, 0);
@@ -210,11 +221,10 @@ describe('02 - #B404 behavioral: handle-mode error outcomes reach the app listen
     });
 
     it('a non-2xx outcome delivered single-argument reaches the listener as the error', async function() {
-        var P = await freePort();
         var h = makeInst(), got = [];
-        var handle = h.inst.query(h1Opts(P), {});
+        var handle = h.inst.query(h1Opts(port44, '/404'), {});
         handle.onComplete(function(err, data) { got.push({ err: err, dataDefined: typeof data !== 'undefined' }); });
-        h.inst.emit('query#complete', { status: 404, error: 'Not Found' }); // the :non-2xx emit shape, single-argument
+        await waitFor(function() { return got.length || h.thrown.length; }, 3000); // the non-2xx body rides the error slot, single-argument
         await hold(50);
         assert.equal(got.length, 1, 'pre-fix measured: the facade crashed on data.status before invoking the listener');
         assert.equal(got[0].err.status, 404);
@@ -224,11 +234,10 @@ describe('02 - #B404 behavioral: handle-mode error outcomes reach the app listen
     });
 
     it('a SYNC listener throw on an error delivery is owned by the facade catch — correctly attributed now', async function() {
-        var P = await freePort();
         var h = makeInst();
-        var handle = h.inst.query(h1Opts(P), {});
+        var handle = h.inst.query(h1Opts(port44, '/502'), {});
         handle.onComplete(function() { throw new Error('t44-sync-boom'); });
-        h.inst.emit('query#complete', { status: 502, error: 'upstream down' });
+        await waitFor(function() { return h.thrown.length; }, 3000);
         await hold(50);
         var m = ownMatches(h.thrown, /t44-sync-boom/);
         assert.equal(m.length, 1, 'the app throw must reach throwError exactly once');
@@ -238,11 +247,10 @@ describe('02 - #B404 behavioral: handle-mode error outcomes reach the app listen
     });
 
     it('an ASYNC listener rejection on an error delivery is owned by the async guard', async function() {
-        var P = await freePort();
         var h = makeInst();
-        var handle = h.inst.query(h1Opts(P), {});
+        var handle = h.inst.query(h1Opts(port44, '/502'), {});
         handle.onComplete(async function() { throw new Error('t44-async-boom'); });
-        h.inst.emit('query#complete', { status: 502, error: 'upstream down' });
+        await waitFor(function() { return h.thrown.length; }, 3000);
         await hold(50);
         var m = ownMatches(h.thrown, /t44-async-boom/);
         assert.equal(m.length, 1, 'the rejection must reach throwError through the error-delivery wrap');
