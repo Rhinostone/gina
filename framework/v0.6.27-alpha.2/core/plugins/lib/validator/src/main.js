@@ -9244,6 +9244,10 @@ function ValidatorPlugin(rules, data, formId, culture) {
      * A field is "withheld" when it carries the autofill state AND reads
      * empty. Text-like controls only - a checkbox or radio never withholds.
      *
+     * Exposed on the plugin instance as `gina.validator.isAutofillValueWithheld`
+     * (#B341): the engine's `isRequired` consults it at submit time to render the
+     * honest `isRequiredAutofill` label instead of the plain required one.
+     *
      * @param {object} $el - form control (DOMObject)
      *
      * @returns {boolean} true when the browser filled the field but has not released its value yet
@@ -11333,6 +11337,9 @@ function ValidatorPlugin(rules, data, formId, culture) {
         instance.handleErrorsDisplay    = handleErrorsDisplay;
         instance.send                   = send;
         instance.setErrorLabels         = setErrorLabels;
+        // #B341 - the engine consults the plugin's single definition of a withheld
+        // autofill (#B478) to pick the honest `isRequired` label at submit time.
+        instance.isAutofillValueWithheld = isAutofillValueWithheld;
         //instance.handleXhrResponse      = handleXhrResponse;
     }
 

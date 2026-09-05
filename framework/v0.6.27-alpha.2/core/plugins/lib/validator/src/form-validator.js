@@ -160,6 +160,10 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
         // object (main.js `errorObject[f].isApiError = result.fields[f]`) and never calls
         // replace(), so the entry only read as a translatable key that silently did nothing.
         //'isApiError': 'Condition not satisfied',
+        // #B341 - consulted in place of the plain required label when the browser has
+        // autofilled the control but still withholds its value from script at submit
+        // time; alias-filled from an app-supplied required label (see _labelAliasFill).
+        'isRequiredAutofill': 'Filled in by your browser: click the field to confirm it',
         'isInList': 'Must be one of: %s'
     };
     /**
@@ -204,6 +208,8 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
      * min/max variants of the three Length families), so the key an app can
      * OBSERVE in a field's `errors` object is not the key the catalog is
      * consulted under — translating the observable key was a silent no-op.
+     * #B341 adds a fifth: `isRequired` consults `isRequiredAutofill` for a
+     * withheld browser autofill, so a translated `isRequired` covers it too.
      * This copies each app-supplied generic onto the specifics the app did
      * not supply itself. English defaults are never touched here; an
      * app-supplied specific key always wins over its generic.
@@ -220,7 +226,9 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
             'isIntegerMinLength' : 'isIntegerLength',
             'isIntegerMaxLength' : 'isIntegerLength',
             'isStringMinLength'  : 'isStringLength',
-            'isStringMaxLength'  : 'isStringLength'
+            'isStringMaxLength'  : 'isStringLength',
+            // #B341 - the honest variant of a withheld-autofill required failure
+            'isRequiredAutofill' : 'isRequired'
         };
         for (var specific in aliasMap) {
             if (
@@ -231,6 +239,57 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
             }
         }
         return labels;
+    };
+    /**
+     * #B341 - is this field's control autofilled by the browser with its value still
+     * withheld from script? Browser-only. Delegates to the validator plugin's single
+     * definition of the state (`gina.validator.isAutofillValueWithheld`, #B478) so
+     * the engine and the live-check layer can never disagree on what "withheld"
+     * means. No plugin (server side, a standalone engine) => false.
+     *
+     * @param {object} field - the field object (`self[name]`); `target` is its control
+     *
+     * @returns {boolean} true when the browser filled the control but has not released its value yet
+     *
+     * @example
+     * _isWithheldAutofill(self['password']); // true on Chrome before the first gesture
+     *
+     * @inner
+     */
+    var _isWithheldAutofill = function(field) {
+        if (
+            !isGFFCtx
+            || !field || !field.target
+            || typeof(gina) == 'undefined'
+            || typeof(gina.validator) == 'undefined'
+            || typeof(gina.validator.isAutofillValueWithheld) != 'function'
+        ) {
+            return false;
+        }
+        return gina.validator.isAutofillValueWithheld(field.target);
+    };
+
+    /**
+     * #B341 - drop the `data-gina-form-autofill-withheld` marker once the field is
+     * adjudicated on a readable value, or found empty with no autofill state.
+     *
+     * @param {object} field - the field object (`self[name]`)
+     *
+     * @returns {void}
+     *
+     * @example
+     * _clearWithheldAutofill(self['password']);
+     *
+     * @inner
+     */
+    var _clearWithheldAutofill = function(field) {
+        if (
+            isGFFCtx
+            && field && field.target && field.target.dataset
+            && typeof(field.target.dataset.ginaFormAutofillWithheld) != 'undefined'
+        ) {
+            delete field.target.dataset.ginaFormAutofillWithheld;
+        }
     };
     local.errorLabels = _defaultErrorLabels;
     // #i18n (server) — resolve built-in rule labels from the bundle catalog's
@@ -2243,10 +2302,27 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
 
 
             if (!isValid) {
-                errors['isRequired'] = replace(this.error || local.errorLabels['isRequired'], this, 'isRequired')
+                // #B341 - a browser autofill can leave the control VISIBLY filled while
+                // the value is still withheld from script at submit time (Chrome, until
+                // a trusted gesture). #B478 keeps such a field out of the live checks;
+                // the submit collectors stay strict on purpose, so the verdict here is
+                // right and an empty credential is never posted - but the plain
+                // required label names a problem the user cannot see. Consult the
+                // honest label instead (key `isRequiredAutofill`, alias-filled from an
+                // app-supplied `isRequired` so a localized catalog never mixes
+                // languages) and expose the state on the control for consumer CSS and
+                // scripts. The errors key stays `isRequired`; the gate is untouched.
+                if ( _isWithheldAutofill(this) ) {
+                    errors['isRequired'] = replace(this.error || local.errorLabels['isRequiredAutofill'], this, 'isRequiredAutofill');
+                    if ( this.target.dataset ) { this.target.dataset.ginaFormAutofillWithheld = 'true'; }
+                } else {
+                    errors['isRequired'] = replace(this.error || local.errorLabels['isRequired'], this, 'isRequired')
+                    _clearWithheldAutofill(this);
+                }
             }
             // if error tagged by a previous vlaidation, remove it when isValid == true
             else if ( isValid ) {
+                _clearWithheldAutofill(this);
                 if (typeof(errors['isRequired']) != 'undefined' )
                     delete errors['isRequired'];
                 //delete errors['stack'];
