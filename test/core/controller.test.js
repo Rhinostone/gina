@@ -4713,7 +4713,7 @@ describe('39 - resumeRequest replays a halted GET request (behavioral)', functio
 // `callback(...)` / `cb(...)` delivery unowned — no response, the request hung
 // to client/proxy timeout, the rejection floated to the process-level handler.
 // Post-fix ONE constructor-scope `_ownAsyncCbRejection` helper wraps all 22
-// delivery expressions (4 facade `cb` sites + 18 direct `callback` sites): a
+// delivery expressions (4 facade `cb` sites + 19 direct `callback` sites): a
 // thenable return gets a `.catch` routing to the same throwError shape the
 // sync-delivery catches build (flat 500); sync behaviour at every wrapped site
 // is byte-unchanged. 40a pins the shipped text; 40b drives the REAL code
@@ -4741,11 +4741,11 @@ describe('40a - #B399 query delivery seams own an async callback rejection: sour
         assert.ok(b.indexOf('self.throwError(exception);') > -1, 'routes to throwError');
     });
 
-    it("the adapter's 3 cb sites and all 18 direct callback sites are wrapped", function() {
+    it("the adapter's 3 cb sites and all 19 direct callback sites are wrapped", function() {
         // #B475 — the two per-transport facades collapsed into ONE per-call adapter
         assert.equal(countOf(src, '_ownAsyncCbRejection(cb(data))'), 1, 'adapter data-status branch');
         assert.equal(countOf(src, '_ownAsyncCbRejection(cb(err, data))'), 1, 'adapter success branch');
-        assert.equal(countOf(src, '_ownAsyncCbRejection(callback('), 18, 'every direct delivery expression (query prep + both transport bodies)');
+        assert.equal(countOf(src, '_ownAsyncCbRejection(callback('), 19, 'every direct delivery expression (query prep incl. the #B479 nested-render refusal + both transport bodies)');
     });
 
     it('the ONE fluent delivery adapter registers the guard inside the sync-guard try (#B475: both per-transport facades are gone)', function() {

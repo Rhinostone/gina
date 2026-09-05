@@ -4564,8 +4564,9 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
      *   registration fires (`onComplete()` returns the handle, so it chains),
      *   a registration made after the call settled still fires on the next
      *   tick, and the handle comes back on EVERY path — a synchronous failure
-     *   (missing host, unreadable certificate, open circuit) reaches `cb(err)`
-     *   on the next tick instead of throwing at the call site. `query#complete`
+     *   (missing host, unreadable certificate, open circuit, a nested-render
+     *   refusal) reaches `cb(err)` on the next tick instead of throwing at the
+     *   call site. `query#complete`
      *   is emitted on the controller only when nothing consumed the outcome
      *   (no callback, no `onComplete`), one tick after settlement.
      *   The handle is NOT a thenable — to `await`, promisify the call the way
@@ -4578,7 +4579,14 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
      *   `cb(err)` with `data` undefined — a plain `{status, error}` object for
      *   a non-2xx status or a transport failure, a native `Error` for a
      *   pre-transport failure (missing host, unreadable certificate, open
-     *   circuit) — and on success `cb(false, data)`.
+     *   circuit, nested-render refusal) — and on success `cb(false, data)`.
+     *
+     * A query issued while the controller is rendering from another required
+     * controller (`renderingStack` deeper than one frame — the required
+     * controller shares the caller's options object) is refused without
+     * contacting the upstream (#B479): the callback receives an `Error` whose
+     * `code` is `NESTED_RENDER` — in-line in the callback form, on the next
+     * tick through the handle — and the handle still comes back.
      *
      * An `async` callback's rejected promise is owned at every delivery seam
      * (#B399): it answers 500 instead of leaving the request hanging.
@@ -4589,7 +4597,7 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
      *   `authorization` header wins (#B465).
      * @param {object}   [data]           - Request body / query params
      * @param {function} [callback]       - `callback(err, result)` — omit (or pass `null`) to get the onComplete handle
-     * @returns {void|object} `undefined` in callback form; the `{onComplete}` handle otherwise — on every path, including the synchronous failures (#B475)
+     * @returns {void|object} `undefined` in callback form; the `{onComplete}` handle otherwise — on every path, including the synchronous failures (#B475) and the nested-render refusal (#B479)
      */
     // replaced: arguments object — use named params (#P23)
     this.query = function(options, data, callback) {
@@ -4659,7 +4667,22 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
             && typeof(local.options.renderingStack) != 'undefined'
             && local.options.renderingStack.length > 1
         ) {
-            return false
+            // #B479 — this exit handed back a bare boolean and delivered nothing:
+            // the callback form never fired and the fluent chain threw on it. A
+            // refused query now settles like every other synchronous failure
+            // (#B475): a coded Error reaches the per-call channel — in-line for
+            // the callback form, next tick through the handle — under both
+            // owners, the handle comes back, and the upstream is never contacted.
+            // No emitter fallback: after the minting above `callback` is always
+            // a function here.
+            err = new Error('SuperController::query() refused: the controller is rendering from another required controller (renderingStack depth '+ local.options.renderingStack.length +')');
+            err.code = 'NESTED_RENDER';
+            try {
+                _ownAsyncCbRejection(callback(err))
+            } catch (_syncCbErr) {
+                _ownSyncCbThrow(_syncCbErr);
+            }
+            return _handle;
         }
         // by default
         self.isProcessingError = false;

@@ -1,0 +1,3 @@
+kind: Fixed
+body: '`self.query()` issued while the controller is rendering from another required controller (a `renderingStack` deeper than one frame, which `requireController` produces because the required controller shares the caller''s options object) returned the literal `false` and delivered nothing: the callback form never fired and the fluent `query(...).onComplete(cb)` chain threw `TypeError`. The refused query now settles like every other synchronous failure: the callback receives an `Error` whose `code` is `NESTED_RENDER` (in-line in the callback form; on the next tick through the handle, wrapped as `{status: 500, error}`), the handle comes back on that path too, and the upstream is still never contacted (#B479)'
+time: 2026-09-05T05:40:41+01:00
