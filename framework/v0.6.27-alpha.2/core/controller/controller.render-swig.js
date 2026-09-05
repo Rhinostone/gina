@@ -666,6 +666,32 @@ module.exports = async function render(userData, displayInspector, errOptions, d
         localOptions.debugMode = self.isCacheless()
     }
 
+    // #B464 — decide the Inspector injection ONCE per request. The compile
+    // branch reads it to assemble the pre-compile plugin (the data MARKER
+    // included); BOTH cache paths read it post-execute to turn that marker
+    // into this request's data script — or into nothing (a persisted layout
+    // carries the marker for every later request of every view, wanted or
+    // not). The predicate is the compile branch's, verbatim.
+    var _inspectorWanted = (
+        hasViews() && self.isCacheless() && !isWithoutLayout
+        && localOptions.debugMode
+        ||
+        hasViews() && self.isCacheless() && !isWithoutLayout
+        && typeof(localOptions.debugMode) == 'undefined'
+        ||
+        hasViews() && localOptions.debugMode
+    ) ? true : false;
+    // #B464 — the two XHR hidden inputs used to be spliced into the layout
+    // under these two gates (the debug branch of the compile block and its
+    // cacheless-XHR sibling); they are now spliced into the executed HTML on
+    // both cache paths under the same gates, so a request's data is never
+    // part of the compiled template or the persisted layout-cache file.
+    var _xhrInputsWanted = self.isXMLRequest() && (
+        _inspectorWanted && localOptions.debugMode
+        ||
+        !_inspectorWanted && hasViews() && self.isCacheless()
+    ) ? true : false;
+
     try {
 
         if (!userData) {
@@ -897,8 +923,6 @@ module.exports = async function render(userData, displayInspector, errOptions, d
 
         var  assets                 = null
             , mapping               = null
-            , XHRData               = null
-            , XHRView               = null
             , isDeferModeEnabled    = null
             , hasExternalsPlugins    = null
             , viewInfos             = null
@@ -1001,6 +1025,11 @@ module.exports = async function render(userData, displayInspector, errOptions, d
 
         var isLoadingPartial = false;
         assets  = {assets:"${assets}"};
+        // #B464 — the placeholder object the Inspector payload carries as
+        // `view.assets`, captured here because the http/2 preload block below
+        // re-uses the `assets` binding for the getAssets() string and nulls it,
+        // and the payload is now built AFTER that block ran.
+        var _inspectorAssets = assets;
         // replaced: fs.readFileSync — async read (#P29)
         layout = await fs.promises.readFile(layoutPath, 'utf8');
         // #B130 upgrade path — in cached mode the layout-cache file persists the
@@ -1024,6 +1053,14 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                 '<script{% if page.cspNonce %} nonce="{{ page.cspNonce }}"{% endif %}>$1'
             );
         }
+        // #B464 upgrade path — a layout-cache file persisted by a pre-#B464
+        // build carries the FIRST request's `window.__ginaData` script (and,
+        // for an XHR render, its hidden inputs) verbatim, and cached mode
+        // never re-primes an existing file. Rewrite the persisted script to
+        // the marker the post-execute splice expects and drop the persisted
+        // inputs; the layout-cache write further down persists the healed
+        // text, so this heals once per stale file.
+        layout = healPersistedInspectorData(layout);
         // Loading from cache
         if (
             String(self.serverInstance._cacheIsEnabled).toLowerCase() === 'true'
@@ -1084,6 +1121,29 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                 // #HDR5 — {{ page.cspNonce }} app-template nonce helper. Absent when no nonce.
                 if (_cspNonce) { data.page.cspNonce = _cspNonce; }
                 htmlContent = compiledTemplate(data);
+                // #B464 — the cached compiled template carries only a MARKER
+                // where the Inspector data script used to be baked; swap it
+                // for THIS request's script (or drop it), then splice the XHR
+                // hidden inputs. The payload's snapshot count supersedes the
+                // pre-execute one so the late-bind patch below appends only
+                // the entries pushed after the payload was built.
+                var _cacheInspSplice = spliceInspectorData(htmlContent, _inspectorWanted, data, _inspectorAssets, local, self, _cspNonceAttr);
+                htmlContent = _cacheInspSplice.html;
+                if ( _cacheInspSplice.flowSnapshotCount !== null ) {
+                    _cacheFlowSnapshot = _cacheInspSplice.flowSnapshotCount;
+                }
+                if ( _xhrInputsWanted ) {
+                    // #FI + #QI — inject flow and queries into data.page.data so the
+                    // XHR hidden input carries them (the compile branch's injection
+                    // never runs on a hit).
+                    if (data.page.flow)    { data.page.data.flow    = data.page.flow; }
+                    if (data.page.queries) { data.page.data.queries = data.page.queries; }
+                    var _cacheViewInfos = JSON.clone(data.page.view);
+                    if ( !isWithoutLayout ) {
+                        _cacheViewInfos.assets = _inspectorAssets;
+                    }
+                    htmlContent = spliceXhrInputs(htmlContent, data, _cacheViewInfos);
+                }
                 // #RWATCH S3 — stale-release banner before writeCache (rides cache
                 // hit + miss); byte-inert unless local + !dev + releaseWatch.enabled.
                 htmlContent = releaseBanner.maybeInject(htmlContent, localOptions.conf, _cspNonceAttr);
@@ -1344,15 +1404,8 @@ module.exports = async function render(userData, displayInspector, errOptions, d
         if ( !isWithoutLayout )
                 viewInfos.assets = assets;
 
-        if (
-            hasViews() && self.isCacheless() && !isWithoutLayout
-            && localOptions.debugMode
-            ||
-            hasViews() && self.isCacheless() && !isWithoutLayout
-            && typeof(localOptions.debugMode) == 'undefined'
-            ||
-            hasViews() && localOptions.debugMode
-        ) {
+        // #B464 — the predicate is _inspectorWanted (decided above, once).
+        if ( _inspectorWanted ) {
             // #QI — inject dev-mode query log into data.page for Inspector
             if (local._queryLog && local._queryLog.length > 0) {
                 data.page.queries = local._queryLog;
@@ -1395,144 +1448,20 @@ module.exports = async function render(userData, displayInspector, errOptions, d
             // so reading .length later would include entries pushed after this point.
             var _flowSnapshotCount = (local._timeline) ? local._timeline.entries.length : 0;
 
-            var __gdGina = JSON.parse(JSON.stringify(data.page));
-            __gdGina.view.assets      = {};
-            __gdGina.view.scripts     = 'ignored-by-toolbar';
-            __gdGina.view.stylesheets = 'ignored-by-toolbar';
-
-            var __gdUser = JSON.parse(JSON.stringify(data.page));
-            __gdUser.view.scripts     = 'ignored-by-toolbar';
-            __gdUser.view.stylesheets = 'ignored-by-toolbar';
-            __gdUser.view.assets      = assets;
-
-            // Inspector secret redaction (#R7) — strip secret-looking fields from
-            // the Inspector clone before any sink (HTML script tag, engine.io push,
-            // /_gina/agent SSE). The actual template `data` is never touched.
-            // Inject the resolved redact config so the statusbar shim can apply
-            // the same rules to validator `ginaToolbar.update()` calls client-side.
-            var _redactConf = inspectorRedact.getConfig(local.options.conf);
-            __gdGina.inspectorRedact = {
-                patterns    : _redactConf.patterns,
-                types       : _redactConf.types,
-                replacement : _redactConf.replacement
-            };
-            // Expose bundle scope so the Inspector knows whether to offer the
-            // Reveal toggle (only local-scope bundles ship the unredacted snapshot
-            // via /_gina/reveal — see serverInstance._lastGinaDataUnredacted below).
-            if (__gdGina.environment) {
-                __gdGina.environment.scope = process.env.NODE_SCOPE || null;
-            }
-
-            // Template engine identity (name + version) for the Inspector View
-            // badge. Read from the cached resolver decision; fall back to the
-            // package's package.json when the cache is missing (test stubs,
-            // very-early bootstrap). Defensive — never break render.
-            try {
-                var _swigDec   = process.gina && process.gina._swigDecision;
-                var _swigPkg   = (_swigDec && _swigDec['package']) || '@rhinostone/swig';
-                var _swigVer   = (_swigDec && _swigDec.version) || null;
-                if (!_swigVer) {
-                    try { _swigVer = require(_swigPkg + '/package.json').version; }
-                    catch (e) { _swigVer = null; }
-                }
-                var _engineName = _swigPkg.replace(/^@rhinostone\//, '');
-                if (__gdGina.environment) {
-                    __gdGina.environment.templateEngine = { name: _engineName, version: _swigVer };
-                }
-                if (__gdUser.environment) {
-                    __gdUser.environment.templateEngine = { name: _engineName, version: _swigVer };
-                }
-            } catch (e) { /* defensive — engine badge falls back to client heuristic */ }
-
-            // Inspector View tab Weight/Load fallback. When the popup's
-            // window.opener is unreachable (Cross-Origin-Opener-Policy on the
-            // host page nulls opener references), the client-side Performance
-            // API path can't compute weight/load. These server-side values let
-            // the Inspector render dual badges (server dimmed | client primary)
-            // and a server-only badge when client is unavailable.
-            //
-            //   serverMs    — best-available server processing duration; updated
-            //                 by the late-bind patch script below with the final
-            //                 total once `response-write` + `total` entries are
-            //                 appended to the timeline.
-            //   weightBytes — null at emit time, late-bound by the patch script
-            //                 from `Buffer.byteLength(htmlContent)` (only known
-            //                 after htmlContent is finalised).
-            var _serverMsInit = null;
-            try {
-                if (local._timeline && local._timeline.entries.length > 0) {
-                    var _latestEndMs = local._timeline.requestStart;
-                    for (var _mi = 0, _mlen = local._timeline.entries.length; _mi < _mlen; _mi++) {
-                        var _mEnt = local._timeline.entries[_mi];
-                        if (typeof _mEnt.endMs === 'number' && _mEnt.endMs > _latestEndMs) {
-                            _latestEndMs = _mEnt.endMs;
-                        }
-                    }
-                    if (_latestEndMs > local._timeline.requestStart) {
-                        _serverMsInit = _latestEndMs - local._timeline.requestStart;
-                    }
-                }
-            } catch (e) { _serverMsInit = null; }
-            if (__gdGina.environment) {
-                __gdGina.environment.metrics = { weightBytes: null, serverMs: _serverMsInit };
-            }
-            if (__gdUser.environment) {
-                __gdUser.environment.metrics = { weightBytes: null, serverMs: _serverMsInit };
-            }
-
-            // #INS8 — expose the standalone Inspector URL so statusbar.html can
-            // prefer it over the embedded /_gina/inspector/ path. Null when
-            // unset = fall back to legacy embedded popup.
-            var _inspUrlConf = null;
-            try {
-                var _confSource = local.options.conf || {};
-                if (_confSource.content && _confSource.content.settings
-                    && _confSource.content.settings.inspector
-                    && _confSource.content.settings.inspector.url) {
-                    _inspUrlConf = _confSource.content.settings.inspector.url;
-                }
-            } catch (e) { /* leave null */ }
-            __gdGina.inspectorUrl = _inspUrlConf;
-            // #CC6 — mirror the events capture gate to the browser: the
-            // statusbar's component-event capture honours the same knob
-            // (settings > inspector.events.captureArgs); metadata always,
-            // detail values only when opted in.
-            __gdGina.inspectorEventsCaptureArgs = !!(process.gina && process.gina._inspectorEventsCaptureArgs);
-
-            var __gdPayload = { gina: __gdGina, user: __gdUser };
-            // Snapshot the unredacted payload BEFORE the redact pass, gated on
-            // bundle scope. Production / beta / testing never store this — the
-            // /_gina/reveal endpoint will 403 with no snapshot to leak.
-            var __gdPayloadUnredacted = (process.env.NODE_SCOPE === 'local')
-                ? JSON.parse(JSON.stringify(__gdPayload)) : null;
-            __gdPayload = inspectorRedact.redact(__gdPayload, {
-                compiledPatterns : _redactConf.compiledPatterns,
-                replacement      : _redactConf.replacement
-            });
-
-            var __gdScript = '<script' + _cspNonceTplAttr + '>window.__ginaData = '
-                // #B451 - the previous blocklist here matched only the literal
-                // '</' + 'script>' and '<!--'. It was bypassable: a trailing space
-                // or slash after the tag name also closes the block per the HTML5
-                // script-data-end-tag-name state, and both injected when measured.
-                // The helper escapes '<' itself, so no terminator spelling survives.
-                + inlineScript.safeInlineJson(__gdPayload)
-                + ';</script>\n';
-
-            // Expose last snapshot for engine.io push and /_gina/agent SSE
-            self.serverInstance._lastGinaData = __gdPayload;
-            if (__gdPayloadUnredacted) {
-                self.serverInstance._lastGinaDataUnredacted = __gdPayloadUnredacted;
-            } else {
-                // Defensive: clear any stale unredacted snapshot if scope changed mid-process.
-                self.serverInstance._lastGinaDataUnredacted = null;
-            }
-            process.emit('inspector#data', __gdPayload);
+            // #B464 — the payload (the __gdGina / __gdUser clones, the engine
+            // badge, metrics, the Inspector URL, the capture gate, redaction,
+            // the serverInstance sinks and the inspector data event) is built
+            // AFTER template execution by buildInspectorDataScript() at the
+            // bottom of this file, on both cache paths, and spliced where the
+            // pre-compile plugin below leaves the INSPECTOR_DATA_MARKER. Baked
+            // into the layout here, the former __gdScript literal was compiled
+            // once per view, cached, persisted to the layout-cache file — and
+            // served request 1's page data to every later request and process.
 
             var __logsScript = '<script' + _cspNonceTplAttr + '>'
                 + 'window.__ginaLogs = window.__ginaLogs || [];'
                 + '(function(w){'
-                + 'var _c=w.console,_l=w.__ginaLogs,_b=' + inlineScript.safeInlineString(__gdUser.environment && __gdUser.environment.bundle || '') + ';'
+                + 'var _c=w.console,_l=w.__ginaLogs,_b=' + inlineScript.safeInlineString(data.page.environment && data.page.environment.bundle || '') + ';'
                 + '["log","info","warn","error","debug"].forEach(function(lvl){'
                 + 'var orig=_c[lvl].bind(_c);'
                 + '_c[lvl]=function(){'
@@ -1561,7 +1490,11 @@ module.exports = async function render(userData, displayInspector, errOptions, d
             plugin = '\t'
                 + '{# Gina Inspector #}'
                 + __logsScript
-                + __gdScript
+                // #B464 — a marker, never the data script: spliceInspectorData()
+                // resolves it post-execute on both cache paths. The statusbar
+                // body that follows reads window.__ginaData at load, so the
+                // script lands ahead of it exactly where the literal used to.
+                + INSPECTOR_DATA_MARKER + '\n'
                 + _statusbarTpl
                 + '{# END Gina Inspector #}'
             ;
@@ -1573,15 +1506,8 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                     // XHR hidden input carries them to the Inspector on popin/dialog open.
                     if (data.page.flow)    { data.page.data.flow    = data.page.flow; }
                     if (data.page.queries) { data.page.data.queries = data.page.queries; }
-                    XHRData = '\t<input type="hidden" id="gina-without-layout-xhr-data" value="'+ encodeRFC5987ValueChars(JSON.stringify(data.page.data)) +'">\n\r';
-                    XHRView = '\n<input type="hidden" id="gina-without-layout-xhr-view" value="'+ encodeRFC5987ValueChars(JSON.stringify(viewInfos)) +'">';
-                    if ( /<\/body>/i.test(layout) ) {
-                        layout = layout.replace(/<\/body>/i, XHRData + XHRView + '\n\t</body>');
-                    } else {
-                        // Popin case
-                        // Fix added on 2023-01-25
-                        layout += XHRData + XHRView + '\n\t'
-                    }
+                    // #B464 — the hidden inputs themselves are spliced into the
+                    // executed HTML by spliceXhrInputs(), never into the layout.
                 }
             }
 
@@ -1657,17 +1583,8 @@ module.exports = async function render(userData, displayInspector, errOptions, d
             // XHR hidden input carries them to the Inspector on popin/dialog open.
             if (data.page.flow)    { data.page.data.flow    = data.page.flow; }
             if (data.page.queries) { data.page.data.queries = data.page.queries; }
-            XHRData = '\n<input type="hidden" id="gina-without-layout-xhr-data" value="'+ encodeRFC5987ValueChars(JSON.stringify(data.page.data)) +'">';
-            XHRView = '\n<input type="hidden" id="gina-without-layout-xhr-view" value="'+ encodeRFC5987ValueChars(JSON.stringify(viewInfos)) +'">';
-            if ( /<\/body>/i.test(layout) ) {
-                layout = layout.replace(/<\/body>/i, XHRData + XHRView + '\n\t</body>');
-            } else {
-                // Popin case
-                // Fix added on 2023-01-25
-                layout += XHRData + XHRView + '\n\t'
-            }
-
-            // layout += XHRData + XHRView;
+            // #B464 — the hidden inputs themselves are spliced into the
+            // executed HTML by spliceXhrInputs(), never into the layout.
 
         } else { // other envs like prod ...
             // adding javascripts
@@ -1908,6 +1825,18 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                 // compiledTemplate(data) (swig re-evaluates the var per execute); absent when no nonce.
                 if (_cspNonce) { data.page.cspNonce = _cspNonce; }
                 htmlContent = compiledTemplate(data);
+                // #B464 — see the cache-hit twin above: this request's data
+                // script replaces the marker (or the marker goes), then the XHR
+                // hidden inputs are spliced; the snapshot count supersedes the
+                // pre-compile one taken in the compile branch.
+                var _inspSplice = spliceInspectorData(htmlContent, _inspectorWanted, data, _inspectorAssets, local, self, _cspNonceAttr);
+                htmlContent = _inspSplice.html;
+                if ( _inspSplice.flowSnapshotCount !== null ) {
+                    _flowSnapshotCount = _inspSplice.flowSnapshotCount;
+                }
+                if ( _xhrInputsWanted ) {
+                    htmlContent = spliceXhrInputs(htmlContent, data, viewInfos);
+                }
                 // #RWATCH S3 — stale-release banner before writeCache (rides cache
                 // hit + miss); byte-inert unless local + !dev + releaseWatch.enabled.
                 htmlContent = releaseBanner.maybeInject(htmlContent, localOptions.conf, _cspNonceAttr);
@@ -2130,3 +2059,305 @@ module.exports = async function render(userData, displayInspector, errOptions, d
         return self.throwError(res, 500, err);
     }
 };
+
+
+// ---- #B464 - module-scope helpers for the post-execute Inspector data splice ----
+// Everything below is per-call and takes its render()-scoped inputs as
+// parameters (the #B60 / #B61 shape): nothing here may read `self`, `local`,
+// `data` or `assets` from an enclosing scope, because in prod this module is
+// a singleton shared by concurrent renders.
+
+/**
+ * The placeholder the pre-compile Inspector plugin carries where the
+ * `window.__ginaData` script used to be baked. An HTML comment: swig passes it
+ * through untouched, it carries no `{`, `}` or `<script` (the #B463 helper
+ * contract is unaffected), and it is inert if a request ever leaves it in place.
+ *
+ * @constant {string}
+ */
+var INSPECTOR_DATA_MARKER = '<!--gina:inspector-data-->';
+
+/**
+ * A `window.__ginaData` script exactly as pre-#B464 builds persisted it into a
+ * layout-cache file: the opener is the bare tag, the #B130 render-time
+ * conditional, or the pre-#B130 literal nonce. The payload was serialised with
+ * every `<` escaped, so the first `;</script>` after the opener is the real
+ * terminator; the optional trailing newline is the one the old builder appended.
+ *
+ * @constant {RegExp}
+ */
+var RE_PERSISTED_INSPECTOR_DATA = /<script(?: nonce="[^"]*"|\{% if page\.cspNonce %\} nonce="\{\{ page\.cspNonce \}\}"\{% endif %\})?>window\.__ginaData = [\s\S]*?;<\/script>\n?/g;
+
+/**
+ * The two XHR hidden inputs exactly as pre-#B464 builds persisted them (the
+ * value is RFC 5987 percent-encoded, so it never contains a quote).
+ *
+ * @constant {RegExp}
+ */
+var RE_PERSISTED_XHR_INPUT = /[ \t]*<input type="hidden" id="gina-without-layout-xhr-(?:data|view)" value="[^"]*">(?:\r?\n)?/g;
+
+/**
+ * Heal a layout-cache file persisted by a pre-#B464 build: the persisted
+ * `window.__ginaData` script — the FIRST request's page data, served to every
+ * later request and process that compiled from the file — becomes the marker
+ * the post-execute splice expects, and persisted XHR hidden inputs are dropped.
+ * Idempotent (a healed layout matches neither regex) and inert on a layout that
+ * never carried either; app-authored scripts and inputs are untouched because
+ * both regexes anchor on the framework's own emission shapes. The caller
+ * persists the result back to the file on the same compile-cache miss.
+ *
+ * @inner
+ * @param {string} layout - The layout text as read from the layout-cache file
+ * @returns {string} The layout, with the marker in place of a persisted data script
+ * @example
+ * var stale  = await fs.promises.readFile(layoutCacheFile, 'utf8');
+ * var healed = healPersistedInspectorData(stale); // the persisted script is now the marker
+ */
+function healPersistedInspectorData(layout) {
+    if (
+        typeof layout !== 'string'
+        || layout.indexOf('__ginaData') < 0 && layout.indexOf('gina-without-layout-xhr-') < 0
+    ) {
+        return layout;
+    }
+    // A function replacer: the marker carries no `$`, but the form is the house
+    // rule for every splice on this file (see the #TPL2 note in render()).
+    layout = layout.replace(RE_PERSISTED_INSPECTOR_DATA, function () { return INSPECTOR_DATA_MARKER + '\n'; });
+    layout = layout.replace(RE_PERSISTED_XHR_INPUT, '');
+    return layout;
+}
+
+/**
+ * Build this request's Inspector payload and its inline `<script>` — the block
+ * that lived inline in render()'s compile branch until #B464, extracted so
+ * BOTH cache paths run it AFTER `compiledTemplate(data)`. Clones `data.page`
+ * twice (the toolbar view and the redacted user view), stamps the engine
+ * badge, the server metrics, the Inspector URL and the capture gate, snapshots
+ * the unredacted payload for `/_gina/reveal` (local scope only), redacts (#R7),
+ * refreshes the serverInstance sinks and emits the inspector data event — so a
+ * cache HIT now refreshes those sinks too, where before only a compile did.
+ *
+ * The script opens with the LITERAL nonce attribute: it is spliced into the
+ * executed HTML, never into the compiled template, so the per-request value is
+ * correct there (the same reasoning as the two late-bind patch scripts).
+ *
+ * @inner
+ * @param {object} data          - The executed template context (`data.page` populated)
+ * @param {object} assets        - The `view.assets` placeholder the payload carries
+ * @param {object} local         - The per-request closure (`_timeline`, `options.conf`)
+ * @param {object} self          - The SuperController instance (`serverInstance` sinks)
+ * @param {string} _cspNonceAttr - Literal ` nonce="..."` fragment, or `''`
+ * @returns {{script: string, flowSnapshotCount: number}} The inline script, and the
+ *          timeline length at payload-build time (the late-bind patch's slice point)
+ * @example
+ * var built = buildInspectorDataScript(data, assets, local, self, ' nonce="abc"');
+ * // built.script opens with `<script nonce="abc">` and assigns window.__ginaData
+ */
+function buildInspectorDataScript(data, assets, local, self, _cspNonceAttr) {
+    // #FI — the late-bind patch appends every timeline entry pushed AFTER this
+    // point (data.page.flow.entries is a reference to local._timeline.entries).
+    var flowSnapshotCount = (local._timeline) ? local._timeline.entries.length : 0;
+
+    var __gdGina = JSON.parse(JSON.stringify(data.page));
+    __gdGina.view.assets      = {};
+    __gdGina.view.scripts     = 'ignored-by-toolbar';
+    __gdGina.view.stylesheets = 'ignored-by-toolbar';
+
+    var __gdUser = JSON.parse(JSON.stringify(data.page));
+    __gdUser.view.scripts     = 'ignored-by-toolbar';
+    __gdUser.view.stylesheets = 'ignored-by-toolbar';
+    __gdUser.view.assets      = assets;
+
+    // #B464 — the per-request CSP nonce rides data.page for the template's
+    // own {{ page.cspNonce }} helper; it is transport state, not page data,
+    // and was never in the payload while the clone ran pre-execute.
+    delete __gdGina.cspNonce;
+    delete __gdUser.cspNonce;
+
+    // Inspector secret redaction (#R7) — strip secret-looking fields from
+    // the Inspector clone before any sink (HTML script tag, engine.io push,
+    // /_gina/agent SSE). The actual template `data` is never touched.
+    // Inject the resolved redact config so the statusbar shim can apply
+    // the same rules to validator `ginaToolbar.update()` calls client-side.
+    var _redactConf = inspectorRedact.getConfig(local.options.conf);
+    __gdGina.inspectorRedact = {
+        patterns    : _redactConf.patterns,
+        types       : _redactConf.types,
+        replacement : _redactConf.replacement
+    };
+    // Expose bundle scope so the Inspector knows whether to offer the
+    // Reveal toggle (only local-scope bundles ship the unredacted snapshot
+    // via /_gina/reveal — see serverInstance._lastGinaDataUnredacted below).
+    if (__gdGina.environment) {
+        __gdGina.environment.scope = process.env.NODE_SCOPE || null;
+    }
+
+    // Template engine identity (name + version) for the Inspector View
+    // badge. Read from the cached resolver decision; fall back to the
+    // package's package.json when the cache is missing (test stubs,
+    // very-early bootstrap). Defensive — never break render.
+    try {
+        var _swigDec   = process.gina && process.gina._swigDecision;
+        var _swigPkg   = (_swigDec && _swigDec['package']) || '@rhinostone/swig';
+        var _swigVer   = (_swigDec && _swigDec.version) || null;
+        if (!_swigVer) {
+            try { _swigVer = require(_swigPkg + '/package.json').version; }
+            catch (e) { _swigVer = null; }
+        }
+        var _engineName = _swigPkg.replace(/^@rhinostone\//, '');
+        if (__gdGina.environment) {
+            __gdGina.environment.templateEngine = { name: _engineName, version: _swigVer };
+        }
+        if (__gdUser.environment) {
+            __gdUser.environment.templateEngine = { name: _engineName, version: _swigVer };
+        }
+    } catch (e) { /* defensive — engine badge falls back to client heuristic */ }
+
+    // Inspector View tab Weight/Load fallback. When the popup's
+    // window.opener is unreachable (Cross-Origin-Opener-Policy on the
+    // host page nulls opener references), the client-side Performance
+    // API path can't compute weight/load. These server-side values let
+    // the Inspector render dual badges (server dimmed | client primary)
+    // and a server-only badge when client is unavailable.
+    //
+    //   serverMs    — best-available server processing duration; updated
+    //                 by the late-bind patch script below with the final
+    //                 total once `response-write` + `total` entries are
+    //                 appended to the timeline.
+    //   weightBytes — null at emit time, late-bound by the patch script
+    //                 from `Buffer.byteLength(htmlContent)` (only known
+    //                 after htmlContent is finalised).
+    var _serverMsInit = null;
+    try {
+        if (local._timeline && local._timeline.entries.length > 0) {
+            var _latestEndMs = local._timeline.requestStart;
+            for (var _mi = 0, _mlen = local._timeline.entries.length; _mi < _mlen; _mi++) {
+                var _mEnt = local._timeline.entries[_mi];
+                if (typeof _mEnt.endMs === 'number' && _mEnt.endMs > _latestEndMs) {
+                    _latestEndMs = _mEnt.endMs;
+                }
+            }
+            if (_latestEndMs > local._timeline.requestStart) {
+                _serverMsInit = _latestEndMs - local._timeline.requestStart;
+            }
+        }
+    } catch (e) { _serverMsInit = null; }
+    if (__gdGina.environment) {
+        __gdGina.environment.metrics = { weightBytes: null, serverMs: _serverMsInit };
+    }
+    if (__gdUser.environment) {
+        __gdUser.environment.metrics = { weightBytes: null, serverMs: _serverMsInit };
+    }
+
+    // #INS8 — expose the standalone Inspector URL so statusbar.html can
+    // prefer it over the embedded /_gina/inspector/ path. Null when
+    // unset = fall back to legacy embedded popup.
+    var _inspUrlConf = null;
+    try {
+        var _confSource = local.options.conf || {};
+        if (_confSource.content && _confSource.content.settings
+            && _confSource.content.settings.inspector
+            && _confSource.content.settings.inspector.url) {
+            _inspUrlConf = _confSource.content.settings.inspector.url;
+        }
+    } catch (e) { /* leave null */ }
+    __gdGina.inspectorUrl = _inspUrlConf;
+    // #CC6 — mirror the events capture gate to the browser: the
+    // statusbar's component-event capture honours the same knob
+    // (settings > inspector.events.captureArgs); metadata always,
+    // detail values only when opted in.
+    __gdGina.inspectorEventsCaptureArgs = !!(process.gina && process.gina._inspectorEventsCaptureArgs);
+
+    var __gdPayload = { gina: __gdGina, user: __gdUser };
+    // Snapshot the unredacted payload BEFORE the redact pass, gated on
+    // bundle scope. Production / beta / testing never store this — the
+    // /_gina/reveal endpoint will 403 with no snapshot to leak.
+    var __gdPayloadUnredacted = (process.env.NODE_SCOPE === 'local')
+        ? JSON.parse(JSON.stringify(__gdPayload)) : null;
+    __gdPayload = inspectorRedact.redact(__gdPayload, {
+        compiledPatterns : _redactConf.compiledPatterns,
+        replacement      : _redactConf.replacement
+    });
+
+    var script = '<script' + _cspNonceAttr + '>window.__ginaData = '
+        // #B451 — the helper escapes '<' itself, so no terminator spelling
+        // survives (the former blocklist matched two spellings and was
+        // bypassable); #B463's brace escape is moot post-execute but harmless.
+        + inlineScript.safeInlineJson(__gdPayload)
+        + ';</script>';
+
+    // Expose last snapshot for engine.io push and /_gina/agent SSE
+    self.serverInstance._lastGinaData = __gdPayload;
+    if (__gdPayloadUnredacted) {
+        self.serverInstance._lastGinaDataUnredacted = __gdPayloadUnredacted;
+    } else {
+        // Defensive: clear any stale unredacted snapshot if scope changed mid-process.
+        self.serverInstance._lastGinaDataUnredacted = null;
+    }
+    process.emit('inspector#data', __gdPayload);
+
+    return { script: script, flowSnapshotCount: flowSnapshotCount };
+}
+
+/**
+ * Resolve the Inspector data marker in the EXECUTED HTML of either cache path:
+ * build and splice this request's script when the Inspector is wanted, drop the
+ * marker when it is not (a persisted layout carries it for every later request
+ * of every view, wanted or not), and leave HTML that never carried it untouched.
+ * A function replacer keeps the JSON verbatim — the serialised page data can
+ * carry `$` sequences a string replacement would expand.
+ *
+ * @inner
+ * @param {string}  htmlContent   - The executed template output
+ * @param {boolean} wanted        - The request's Inspector injection decision
+ * @param {object}  data          - The executed template context
+ * @param {object}  assets        - The `view.assets` placeholder
+ * @param {object}  local         - The per-request closure
+ * @param {object}  self          - The SuperController instance
+ * @param {string}  _cspNonceAttr - Literal nonce fragment, or `''`
+ * @returns {{html: string, flowSnapshotCount: (number|null)}} The resolved HTML, and the
+ *          payload's snapshot count — `null` when no payload was built
+ * @example
+ * var out = spliceInspectorData(html, wanted, data, assets, local, self, nonceAttr);
+ * html = out.html; // the marker is now the script, or gone
+ */
+function spliceInspectorData(htmlContent, wanted, data, assets, local, self, _cspNonceAttr) {
+    if ( typeof htmlContent !== 'string' || htmlContent.indexOf(INSPECTOR_DATA_MARKER) < 0 ) {
+        return { html: htmlContent, flowSnapshotCount: null };
+    }
+    if ( !wanted ) {
+        return { html: htmlContent.replace(INSPECTOR_DATA_MARKER, ''), flowSnapshotCount: null };
+    }
+    var built = buildInspectorDataScript(data, assets, local, self, _cspNonceAttr);
+    return {
+        html              : htmlContent.replace(INSPECTOR_DATA_MARKER, function () { return built.script; }),
+        flowSnapshotCount : built.flowSnapshotCount
+    };
+}
+
+/**
+ * Splice the two XHR hidden inputs — `gina-without-layout-xhr-data` (the page
+ * data) and `gina-without-layout-xhr-view` — into the EXECUTED HTML: before
+ * `</body>` when the document has one, appended otherwise (the popin shape).
+ * Until #B464 they were spliced into the layout pre-compile, which baked a
+ * request's data into the compiled template and, for a layout-bearing render,
+ * into the persisted layout-cache file. The values are RFC 5987 percent-encoded,
+ * so the `</body>` splice can never see a `$`.
+ *
+ * @inner
+ * @param {string} htmlContent - The executed template output
+ * @param {object} data        - The executed template context (`data.page.data`, with flow/queries when injected)
+ * @param {object} viewInfos   - The `data.page.view` clone (+ the assets placeholder for a layout render)
+ * @returns {string} The HTML carrying both inputs
+ * @example
+ * html = spliceXhrInputs(html, data, JSON.clone(data.page.view));
+ */
+function spliceXhrInputs(htmlContent, data, viewInfos) {
+    var xhrData = '\n<input type="hidden" id="gina-without-layout-xhr-data" value="'+ encodeRFC5987ValueChars(JSON.stringify(data.page.data)) +'">';
+    var xhrView = '\n<input type="hidden" id="gina-without-layout-xhr-view" value="'+ encodeRFC5987ValueChars(JSON.stringify(viewInfos)) +'">';
+    if ( /<\/body>/i.test(htmlContent) ) {
+        return htmlContent.replace(/<\/body>/i, function () { return xhrData + xhrView + '\n\t</body>'; });
+    }
+    // Popin case — a fragment without a document shell
+    return htmlContent + xhrData + xhrView + '\n\t';
+}
