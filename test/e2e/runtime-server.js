@@ -46,6 +46,12 @@
  *                                         input — webkit-only spec, #B135 gate)
  *   GET /js/gina.onload.autocomplete.js-> built onload with the acform rules
  *                                         whisper, /ac-sink answers {}
+ *   GET /autofill                      -> fixtures/validator-autofill.html (#B478
+ *                                         autofill-signal harness: a rule-bound form
+ *                                         whose fields get the SERVED
+ *                                         `gina-autofill-start` keyframe through a
+ *                                         harness class; /af-sink answers {})
+ *   GET /js/gina.onload.autofill.js    -> built onload with the afform rules whisper
  *   GET /link-gate                     -> fixtures/link-disabled-gate.html (#B310
  *                                         link disabled-gate harness; same sink)
  *   GET /link-shared                   -> fixtures/link-same-url.html (#B287
@@ -184,6 +190,12 @@ const UPLOAD_FORMS_JSON = JSON.stringify({ rules: { uploadform: { title: { isReq
 // autocomplete="off" in the fixture markup is what routes the field through
 // handleAutoComplete's keydown interception on a REAL-Safari UA.
 const AC_FORMS_JSON = JSON.stringify({ rules: { acform: { ref: { isRequired: true } } } });
+
+// #B478 - a non-empty forms whisper for the autofill-signal fixture. Same reason as
+// AC_FORMS_JSON: core.js only scans + binds forms when gina.forms.rules is non-empty.
+// Two live-checked text-like fields, so the spec can drive a readable fill, an
+// invalid fill and a withheld (Chrome-shaped) fill against the real gate.
+const AF_FORMS_JSON = JSON.stringify({ rules: { afform: { email: { isRequired: true, isEmail: true }, secret: { isRequired: true } } } });
 
 // #B447 — a non-empty forms whisper for the hform-channel fixture. Same reason as
 // AC_FORMS_JSON: core.js only scans + binds forms when gina.forms.rules is non-empty.
@@ -337,6 +349,19 @@ const server = http.createServer(function (req, res) {
                 fs.readFileSync(path.join(FIXTURES, 'validator-autocomplete.html')));
         }
         if (url === '/ac-sink') {
+            return send(res, 200, 'application/json; charset=utf-8', '{}');
+        }
+        // #B478 - same onload with a non-empty forms whisper so the validator binds
+        // the autofill-signal fixture's rule-bound form (the /autofill fixture
+        // references this).
+        if (url === '/js/gina.onload.autofill.js') {
+            return send(res, 200, 'application/javascript; charset=utf-8', renderOnload(AF_FORMS_JSON));
+        }
+        if (url === '/autofill' || url === '/autofill.html') {
+            return send(res, 200, 'text/html; charset=utf-8',
+                fs.readFileSync(path.join(FIXTURES, 'validator-autofill.html')));
+        }
+        if (url === '/af-sink') {
             return send(res, 200, 'application/json; charset=utf-8', '{}');
         }
         // #B447 — the hform-channel fixture. Deliberately a SEPARATE page from

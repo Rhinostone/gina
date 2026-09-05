@@ -1,0 +1,48 @@
+/* ==========================================================================
+   Autofill signal - the hook the form validator listens for (#B478).
+
+   A browser filling saved credentials (or an address) emits no keystroke,
+   and on Chrome no `input`/`change` either until a later user gesture, so
+   the validator's live check had nothing to react to: the submit trigger
+   kept the gated look it was given at bind time while the user looked at a
+   completed form. The one signal every fill produces is the autofill
+   pseudo-class. Giving every autofilled control a 1ms keyframe turns that
+   state into a bubbling `animationstart` event named `gina-autofill-start`,
+   which the validator's form-level proxy routes into the field's live check.
+
+   FUNCTIONAL, so deliberately NOT inside `@layer gina` (contrast with
+   loading-state.scss): an un-layered project rule beats a layered one, and
+   a project reset such as `input { animation: none }` would silently blind
+   the validator. Un-layered, the hook survives generic resets; a project
+   that must override it does so with a rule on the same pseudo-class.
+
+   The keyframe body is NOT empty on purpose: csso (the CSS minifier the
+   build pins) strips an empty `@keyframes` block, leaving `animation-name`
+   pointing at nothing and no event ever firing - measured on csso 5.0.5.
+   `outline-offset: inherit` at both ends is a visual no-op that survives.
+
+   Two rules, one per pseudo-class, never merged into one selector list: an
+   engine that does not know one of the two drops the WHOLE rule it appears
+   in, so merging them would blind the engines that know only one.
+
+   Hosted under its own vendor directory because the build's CSS phase
+   concatenates only the stylesheet whose basename matches its directory.
+   ========================================================================== */
+@keyframes gina-autofill-start {
+    from { outline-offset: inherit; }
+    to   { outline-offset: inherit; }
+}
+
+input:-webkit-autofill,
+textarea:-webkit-autofill,
+select:-webkit-autofill {
+    animation-name: gina-autofill-start;
+    animation-duration: 1ms;
+}
+
+input:autofill,
+textarea:autofill,
+select:autofill {
+    animation-name: gina-autofill-start;
+    animation-duration: 1ms;
+}

@@ -149,6 +149,7 @@ describe('#B348 — extracted revealValidationState behavior', function () {
         var captured = { cb: null, display: null, focused: null, trigger: null };
         var factory = new Function(
             'getFormValidationInfos', 'validate', 'handleErrorsDisplay', 'focusFirstInvalidField', 'updateSubmitTriggerState',
+            'excludeWithheldAutofill', // #B478 - the reveal pass narrows its collection; pass-through here (collection is stubbed)
             'return (' + fnSrc + ');'
         );
         var revealValidationState = factory(
@@ -156,7 +157,8 @@ describe('#B348 — extracted revealValidationState behavior', function () {
             function ($t, f, $f, r, cb) { captured.cb = cb; },
             function ($t, errors, data) { captured.display = { errors: errors, data: data }; },
             function ($t, errors) { captured.focused = errors; return false; },
-            function ($fi, isValid) { captured.trigger = { instance: $fi, isValid: isValid }; }
+            function ($fi, isValid) { captured.trigger = { instance: $fi, isValid: isValid }; },
+            function (info) { return info; }
         );
         var $formInstance = { target: { id: 'parent' }, rules: {} };
         revealValidationState($formInstance);

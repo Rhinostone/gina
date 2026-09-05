@@ -5408,7 +5408,7 @@ function ValidatorPlugin(rules, data, formId, culture) {
 
                                 // Global check required: on all fields
                                 var $gForm = event.target.form, gFields = null, $gFields = null, gRules = null;
-                                var gValidatorInfos = getFormValidationInfos($gForm, rules);
+                                var gValidatorInfos = excludeWithheldAutofill(getFormValidationInfos($gForm, rules)); // #B478
                                 gFields  = gValidatorInfos.fields;
                                 $gFields = gValidatorInfos.$fields;
                                 var formId = $gForm.getAttribute('id');
@@ -7474,7 +7474,7 @@ function ValidatorPlugin(rules, data, formId, culture) {
 
                     // Global check required: on all fields
                     var $gForm = $localForm, gFields = null, $gFields = null, gRules = null;
-                    var gValidatorInfos = getFormValidationInfos($gForm, rules);
+                    var gValidatorInfos = excludeWithheldAutofill(getFormValidationInfos($gForm, rules)); // #B478
                     gFields  = gValidatorInfos.fields;
                     $gFields = gValidatorInfos.$fields;
                     var formId = $gForm.getAttribute('id');
@@ -8377,6 +8377,42 @@ function ValidatorPlugin(rules, data, formId, culture) {
                 }
             }
         };
+        var autofillProxyHandler = function(event) {
+            // #B478 - a browser autofill (saved credentials, an address) lands
+            // without a keystroke, and on Chrome without an `input`/`change`
+            // either until a later user gesture, so the live check had nothing
+            // to react to and the trigger kept its bind-time gated look on a
+            // form the user could see was complete. The default stylesheet
+            // (autofill.scss) gives every autofilled control - `:autofill` /
+            // `:-webkit-autofill` - a 1ms keyframe named `gina-autofill-start`;
+            // the fill therefore surfaces as this bubbling `animationstart`,
+            // the one signal every native fill produces at fill time.
+            //
+            // Readable value: route it into the control's own live check as
+            // the `change.<id>` it already registered - the field renders its
+            // verdict and the whole-form pass syncs the trigger, exactly as a
+            // typed value would. Withheld value (Chrome reads '' until the
+            // gesture, measured on Chrome 152): re-derive the gate SILENTLY
+            // instead - a field pass on '' would record `isRequired` and
+            // render a false "required" error on a field the user can see is
+            // populated.
+            if ( !event || event.animationName !== 'gina-autofill-start' ) {
+                return;
+            }
+            var $el = event.target;
+            if ( !$el || !$el.id || !$el.form ) {
+                return;
+            }
+            var _evt = 'change.' + $el.id;
+            if ( typeof(gina.events[_evt]) == 'undefined' ) {
+                return; // not a live-checked control
+            }
+            if ( isAutofillValueWithheld($el) ) {
+                revalidateSilently( instance.$forms[$el.form.getAttribute('id')] );
+                return;
+            }
+            triggerEvent(gina, $el, _evt, event.detail);
+        };
 
         proceed = function () {
             var subEvent = null;
@@ -8414,6 +8450,7 @@ function ValidatorPlugin(rules, data, formId, culture) {
             addListener(gina, $target, 'focusout', focusoutProxyHandler);
             addListener(gina, $target, 'change', changeProxyHandler);
             addListener(gina, $target, 'click', clickProxyHandler);
+            addListener(gina, $target, 'animationstart', autofillProxyHandler); // #B478
         }
 
         proceed();
@@ -8446,6 +8483,8 @@ function ValidatorPlugin(rules, data, formId, culture) {
                 $form.reassociatedListeners.push({ el: $rEl, evt: 'change', fn: changeProxyHandler });
                 addListener(gina, $rEl, 'click', clickProxyHandler);
                 $form.reassociatedListeners.push({ el: $rEl, evt: 'click', fn: clickProxyHandler });
+                addListener(gina, $rEl, 'animationstart', autofillProxyHandler); // #B478
+                $form.reassociatedListeners.push({ el: $rEl, evt: 'animationstart', fn: autofillProxyHandler });
             }
         }
 
@@ -9039,7 +9078,7 @@ function ValidatorPlugin(rules, data, formId, culture) {
         // was: if ( /^(true)$/i.test($form.target.dataset.ginaFormLiveCheckEnabled && $form.rules.count() > 0) ) {
         if ( /^(true)$/i.test($form.target.dataset.ginaFormLiveCheckEnabled) && $form.rules.count() > 0 ) {
             console.debug('silent validation mode on');
-            var validationInfo  = getFormValidationInfos($form.target, $form.rules);
+            var validationInfo  = excludeWithheldAutofill(getFormValidationInfos($form.target, $form.rules)); // #B478
             var fields          = validationInfo.fields;
             var $fields         = validationInfo.$fields;
             validate($form.target, fields, $fields, $form.rules, function onSilentValidation(result){
@@ -9153,6 +9192,155 @@ function ValidatorPlugin(rules, data, formId, culture) {
             }
         }
     }
+
+    /**
+     * matchesAutofill
+     *
+     * Tells whether a control currently carries the browser's autofill state:
+     * the `:autofill` pseudo-class (Firefox, and recent Chrome/Safari) or its
+     * `:-webkit-autofill` alias (Chrome and Safari). Each selector is tried
+     * under its own try/catch - an engine that does not implement one of them
+     * throws from `matches()`, and that throw must never poison a live pass.
+     *
+     * @param {object} $el - form control (DOMObject)
+     *
+     * @returns {boolean} true when either autofill pseudo-class matches
+     *
+     * @example
+     * matchesAutofill($passwordInput); // true right after the browser filled it
+     *
+     * @inner
+     */
+    var matchesAutofill = function($el) {
+        if ( !$el || typeof($el.matches) != 'function' ) {
+            return false;
+        }
+        var selectors = [':autofill', ':-webkit-autofill'];
+        for (var s = 0; s < selectors.length; ++s) {
+            try {
+                if ( $el.matches(selectors[s]) ) {
+                    return true;
+                }
+            } catch (unsupportedPseudoClassErr) {
+                // this engine does not know that pseudo-class: try the next one
+            }
+        }
+        return false;
+    };
+
+    /**
+     * isAutofillValueWithheld
+     *
+     * #B478 - Chrome fills saved credentials VISIBLY but keeps the values
+     * away from script until a trusted user gesture: the control matches
+     * `:autofill`, the user sees it populated, and `.value` reads `''`
+     * (measured on Chrome 152: both credential fields of a login form read
+     * length 0 with `:-webkit-autofill` matching, until a click on the page
+     * released them and fired a trusted keydown/input/change/keyup burst on
+     * each). Validating such a field records `isRequired` against a value
+     * the user can see is present: a false "required" verdict, and a gated
+     * trigger on a form that is, to the user, complete.
+     *
+     * A field is "withheld" when it carries the autofill state AND reads
+     * empty. Text-like controls only - a checkbox or radio never withholds.
+     *
+     * @param {object} $el - form control (DOMObject)
+     *
+     * @returns {boolean} true when the browser filled the field but has not released its value yet
+     *
+     * @example
+     * isAutofillValueWithheld($passwordInput); // true on Chrome before the first gesture
+     *
+     * @inner
+     */
+    var isAutofillValueWithheld = function($el) {
+        if ( !$el || /^(radio|checkbox|file)$/i.test($el.type) ) {
+            return false;
+        }
+        return ( $el.value === '' && matchesAutofill($el) );
+    };
+
+    /**
+     * excludeWithheldAutofill
+     *
+     * #B478 - narrows a collected field set (the `getFormValidationInfos()`
+     * shape) to the fields the browser has actually released: every control
+     * `isAutofillValueWithheld()` reports is dropped from BOTH maps, so the
+     * live-check layer never adjudicates a value it cannot read, and the
+     * gate reflects what the user sees - a filled form - instead of an
+     * `isRequired` failure on a visibly populated field.
+     *
+     * Used ONLY by the live-check passes: bind-time, the whole-form pass
+     * behind every live event, the select pass, the display-only reveal and
+     * the silent autofill pass. The submit passes keep the FULL collection on
+     * purpose: `isValid()` stays the real send gate, so a value the browser
+     * still withholds at click time fails `isRequired` there and the form
+     * never posts an empty credential.
+     *
+     * @param {object} validationInfo - `{ fields, $fields, rules }` as returned by getFormValidationInfos()
+     *
+     * @returns {object} the same object, mutated in place (withheld fields removed, `_length` recomputed)
+     *
+     * @example
+     * var infos = excludeWithheldAutofill(getFormValidationInfos($form, rules));
+     * validate($form, infos.fields, infos.$fields, rules, onVerdict);
+     *
+     * @inner
+     */
+    var excludeWithheldAutofill = function(validationInfo) {
+        if ( !validationInfo || !validationInfo.$fields || !validationInfo.fields ) {
+            return validationInfo;
+        }
+        var dropped = 0;
+        for (var name in validationInfo.$fields) {
+            if ( isAutofillValueWithheld(validationInfo.$fields[name]) ) {
+                delete validationInfo.$fields[name];
+                delete validationInfo.fields[name];
+                ++dropped;
+            }
+        }
+        if ( dropped > 0 && typeof(validationInfo.fields['_length']) != 'undefined' ) {
+            delete validationInfo.fields['_length'];
+            validationInfo.fields['_length'] = validationInfo.fields.count() || 0;
+        }
+        return validationInfo;
+    };
+
+    /**
+     * revalidateSilently
+     *
+     * #B478 - re-derives a live-checked form's gate from its CURRENT values
+     * without rendering anything: collect (withheld autofill excluded),
+     * validate, sync the submit trigger with the verdict. The bind-time
+     * silent pass made callable, for the autofill signal on a control whose
+     * value the browser has not released yet - there is nothing honest to
+     * display for such a field, but the gate must stop counting it against
+     * the user. A no-op for a form without live checking or without rules.
+     *
+     * @param {object} $formInstance - form instance record (`instance.$forms[id]`)
+     *
+     * @returns {void}
+     *
+     * @example
+     * revalidateSilently(instance.$forms['checkout']);
+     *
+     * @inner
+     */
+    var revalidateSilently = function($formInstance) {
+        if ( !$formInstance || !$formInstance.target || !$formInstance.rules ) {
+            return;
+        }
+        if (
+            !/^(true)$/i.test($formInstance.target.dataset.ginaFormLiveCheckEnabled)
+            || $formInstance.rules.count() == 0
+        ) {
+            return;
+        }
+        var validationInfo = excludeWithheldAutofill(getFormValidationInfos($formInstance.target, $formInstance.rules));
+        validate($formInstance.target, validationInfo.fields, validationInfo.$fields, $formInstance.rules, function onSilentAutofillValidation(result) {
+            updateSubmitTriggerState($formInstance, result.isValid());
+        });
+    };
 
     /**
      * isTriggerDisabled
@@ -9423,7 +9611,7 @@ function ValidatorPlugin(rules, data, formId, culture) {
             return;
         }
         var $target         = $formInstance.target;
-        var validationInfo  = getFormValidationInfos($target, $formInstance.rules);
+        var validationInfo  = excludeWithheldAutofill(getFormValidationInfos($target, $formInstance.rules)); // #B478
 
         var onDisabledTriggerReveal = function(result) {
             var errors = result['fields'] || result['error'];
