@@ -9,7 +9,6 @@
 if ( typeof(module) !== 'undefined' && module.exports) {
 
     var fs          = require('fs');
-    var zlib        = require('zlib');
     var JSZip       = require('./dep/jszip.min.js');
     var Emitter     = require('events').EventEmitter;
     var helpers     = require('../../../helpers/index');
@@ -19,16 +18,8 @@ if ( typeof(module) !== 'undefined' && module.exports) {
 
 /**
  * Archiver
- *  zlib APIs except those that are explicitly synchronous
- *  To prenvent any suprises, you can use this in a child process
- *
- *  Note:
- *      Because libuv's threadpool has a fixed size,
- *      it means that if for whatever reason any of these APIs takes a long time,
- *      other (seemingly unrelated) APIs that run in libuv's threadpool will experience degraded performance.
- *      In order to mitigate this issue, one potential solution is to increase the size of libuv's threadpool
- *      by setting the 'UV_THREADPOOL_SIZE' environment variable to a value greater than 4 (its current default value).
- *      For more information, see the libuv threadpool documentation (http://docs.libuv.org/en/latest/threadpool.html)
+ *  Every form writes a DEFLATE zip through JSZip, in pure JavaScript — nothing
+ *  here touches zlib or libuv's threadpool.
  *
  * @package     Gina.Lib
  * @namespace   Gina.Lib.Archiver
@@ -43,22 +34,14 @@ function Archiver() {
     var merge       = (isGFFCtx) ? require('lib/merge') : require('../../../lib/merge');
 
 
-    // var fs = null, zlib = null, Emitter = null;
-    // // node dependencies - backend use only !
-    // if (!isGFFCtx) {
-    //     fs      = require('fs');
-    //     zlib    = require('zlib');
-    // }
-
-    this.allowedCompressionMethods = ['gzip', 'br', 'deflate'];
+    this.allowedCompressionMethods = ['gzip'];
 
     var defaultCompressionOptions = {
         tmp         : null,
-        method      : 'gzip', // gzip (Gzip/Gunzip) | br (Brotli) | deflate (Deflate/Inflate)
+        method      : 'gzip', // names the completion event (archiver-gzip#complete); no form selects a codec by it
         unlinkSrc   : false,
         name        : 'default',
-        // Zlib class options : https://nodejs.org/api/zlib.html#zlib_class_options
-        level       : 9   // compression level
+        level       : 9   // DEFLATE level handed to JSZip
     };
 
     /**
@@ -150,10 +133,10 @@ function Archiver() {
      * Compress a file, a directory, or a list of files and directories into
      * `<target>/<name>.zip`.
      *
-     * The array form (`src` = `[{ input, output }, …]`) and the directory form
-     * always produce a DEFLATE zip. The single-file form pipes the file through
-     * zlib's gzip and writes the result under the `.zip` name — a documented
-     * asymmetry; `decompress()` does not read it back.
+     * Every form writes a DEFLATE zip that `decompress()` reads back. The array
+     * form takes `[{ input, output }, …]` pairs; the directory form walks the
+     * tree, dotfiles included; the single-file form is the array form with one
+     * entry named by the file's basename, and `<name>` defaults to that basename.
      *
      * Each call settles its own handle exactly once, so overlapping calls in one
      * process are isolated from each other. Errors on every stream the call
@@ -167,13 +150,13 @@ function Archiver() {
      * @param {string|Array<{input: string, output: string}>} src - a filename, a dirname, or a list of
      *  `{ input, output }` pairs where `output` is the entry path inside the archive
      * @param {string} target - output directory, created if missing
-     * @param {object} [options] - merged over the defaults; zlib class options are accepted
-     * @param {string} [options.method='gzip'] - `gzip` (the only method the single-file form implements)
+     * @param {object} [options] - merged over the defaults
+     * @param {string} [options.method='gzip'] - names the completion event (`archiver-gzip#complete`); the only accepted value, and no form selects a codec by it
      * @param {string} [options.name='default'] - archive basename
      * @param {number} [options.level=9] - compression level, `0` (store) to `9` (best)
      * @param {function} [cb] - trailing callback `(err, target)` for `promisify`; may stand in for `options`
      * @returns {{onComplete: function}} completion handle — `onComplete(cb)` attaches `(err, target)` and returns the handle
-     * @throws {Error} synchronously on an unsupported `options.method`
+     * @throws {Error} synchronously on any `options.method` other than `gzip` — `br` and `deflate` were accepted but never implemented
      *
      * @example
      *  lib.archiver.compress([{ input: '/srv/app/package.json', output: 'package.json' }], '/backup/', { name: 'app', level: 9 })
@@ -226,6 +209,21 @@ function Archiver() {
             run.onComplete(cb);
         }
 
+        // #B476 — a single file is the array form with one entry. It used to take its
+        // own branch, which piped the file through a gzip codec and wrote the result
+        // under the `.zip` name (unreadable by decompress()), with an early return on
+        // any dot-prefixed path segment that reported success on the INPUT path and
+        // leaked both streams. The archive keeps its name — `<name>` defaults to the
+        // file's basename, as before — and a missing path stays on the string route
+        // so it still settles the `file not found` error rather than an empty archive.
+        if ( typeof(src) == 'string' && fs.existsSync(src) && fs.statSync(src).isFile() ) {
+            var baseName = src.substring(src.lastIndexOf('/')+1);
+            if ( typeof(options.name) == 'undefined' || options.name == 'default' ) {
+                options.name = baseName;
+            }
+            src = [{ input: src, output: baseName }];
+        }
+
         compress(options.method, src, target, new JSZip(), options, run);
 
         return handle;
@@ -248,34 +246,17 @@ function Archiver() {
 
             var isBatchProcessing = ( typeof(cb) != 'undefined' ) ? true : false;
 
-            if ( stats.isFile() ) { // single file compression
+            if ( stats.isFile() ) { // a file is always an array entry (#B476)
 
-
-                var input   = null;
-                var output  = null;
-
-                if ( isBatchProcessing ) {
-                    input   = src;
-                    output  = target
-                } else {
-                    // targeted filename
-                    if ( typeof(options.name) != 'undefined' && options.name != 'default') {
-                        target += options.name;
-                    } else {
-                        target += src.substring(src.lastIndexOf('/')+1);
-                    }
-
-                    input   = fs.createReadStream(src);
-                    output  = fs.createWriteStream(target +'.zip');
+                if ( !isBatchProcessing ) {
+                    // unreachable: compress() rewrites a file `src` into a one-entry
+                    // array before dispatch — kept loud rather than silent for a refactor
+                    run.settle(new Error('[ lib/archiver ] a single file must reach processSrc as an array entry'), null);
+                    return;
                 }
 
-                compressFile(method, input, output, zipInstance, isBatchProcessing, run, function(err, target, zipInstance) {
-                    if ( isBatchProcessing ) {
-                        cb(err, zipInstance);
-                    } else {
-                        run.settle(err, target)
-                    }
-
+                compressFile(src, target, zipInstance, run, function(err, entry, zipInstance) {
+                    cb(err, zipInstance);
                 });
             } else if ( stats.isDirectory() ) { // might be a fodler
 
@@ -401,73 +382,20 @@ function Archiver() {
 
     }
 
-    var compressFile = function(method, input, output, zipInstance, isBatchProcessing, run, cb, isPackage) {
+    var compressFile = function(input, output, zipInstance, run, cb) {
 
-        var methodObject = null;
-        isPackage = ( typeof(isPackage) == 'undefined' ) ? false: isPackage;
+        // the lib opens this stream, so the lib owns its error: whether JSZip
+        // re-surfaces a read failure on its output stream is a timing race —
+        // measured on the same input, the process crashed on an unhandled
+        // 'error' in about one run in four and the run hung with a partial
+        // archive on disk otherwise (a non-first entry hung every time)
+        var entryInput = run.track(fs.createReadStream(input));
+        entryInput.once('error', function(readErr) {
+            run.settle(readErr, null);
+        });
+        zipInstance.file(output, entryInput);
 
-        if ( isBatchProcessing ) {
-
-            // the lib opens this stream, so the lib owns its error: whether JSZip
-            // re-surfaces a read failure on its output stream is a timing race —
-            // measured on the same input, the process crashed on an unhandled
-            // 'error' in about one run in four and the run hung with a partial
-            // archive on disk otherwise (a non-first entry hung every time)
-            var batchInput = run.track(fs.createReadStream(input));
-            batchInput.once('error', function(readErr) {
-                run.settle(readErr, null);
-            });
-            zipInstance.file(output, batchInput);
-
-            cb(false, output, zipInstance);
-            return
-        }
-
-        switch (method) {
-            case 'gzip':
-                methodObject = zlib.createGzip();
-                break;
-
-            default:
-                methodObject = zlib.createGzip();
-                break;
-        }
-
-
-        if ( /\/\.(.*)$/.test(input.path) ) {
-
-            if (isPackage) {
-                cb(false, input)
-            } else {
-                cb(false, input.path)
-            }
-            return
-        } else {
-            run.track(input).once('error', function(readErr) {
-                run.settle(readErr, null);
-            });
-            run.track(methodObject).once('error', function(zlibErr) {
-                run.settle(zlibErr, null);
-            });
-            run.track(output);
-            input
-                .pipe(methodObject)
-                .pipe(output);
-        }
-
-
-        output
-            .once('error', function onCompressionError(err) {
-                run.settle(err, null);
-            })
-            .once('finish', function onCompressionFinished(){
-                if (isPackage) {
-                    cb(false, this, zipInstance)
-                } else {
-                    cb(false, this.path, zipInstance)
-                }
-            });
-
+        cb(false, output, zipInstance);
     }
 
     var browse = function(method, dir, target, zipInstance, options, files, outFiles, i, mainOutput, isBatchProcessing, cb, run) {
@@ -589,9 +517,8 @@ function Archiver() {
     /**
      * decompress
      *
-     * Inverse of the array and directory forms of `compress()` — extracts a `.zip`
-     * archive into a target directory (the single-file form writes a gzip stream,
-     * which this does not read). Mirrors compress()'s completion contract: each
+     * Inverse of `compress()` — extracts a `.zip` archive into a target directory;
+     * every form of `compress()` writes one. Mirrors compress()'s completion contract: each
      * call settles its own `{ onComplete: fn }` handle exactly once (a trailing
      * callback is also accepted for `promisify`), and the singleton emits
      * `archiver-decompress#complete` `(err, target)` for observers. Uses JSZip 3.x
