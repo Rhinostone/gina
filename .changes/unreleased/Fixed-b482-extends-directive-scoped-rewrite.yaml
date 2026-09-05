@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'A child template that names its layout somewhere ahead of its `{% extends %}` directive — in a leading comment, for instance — no longer loses the layout-cache re-point. The rewrite that sends the directive at its assembled cache copy searched the whole template for the layout''s bare filename and took the first occurrence anywhere, so the comment was rewritten while the directive kept the raw path and the page went on extending the un-assembled layout. The substitution is now spliced inside the matched directive, so a later legitimate mention of the same filename in the child is left untouched. (#B482)'
+time: 2026-09-05T20:26:47+01:00

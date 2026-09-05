@@ -508,11 +508,15 @@ module.exports = async function render(userData, displayInspector, errOptions, d
 
         // subFolder       = path.split(/\//g).slice(0, -1).join('/').replace(localOptions.template.html, '');
         // hasSubFolder    = (subFolder) ? true : false;
-        var extendFound = _templateContent.match(/\{\%(\s+extends|extends)(.*)\%}/);
+        // #B484 - the quantifier is lazy on purpose: a greedy span runs to the
+        // LAST closing tag delimiter on the line, so a one-line extends directive
+        // followed by another quoted tag swallowed them both and the path
+        // extraction below then returned a corrupted, unmatchable path.
+        var extendFound = _templateContent.match(/\{\%(\s+extends|extends)(.*?)\%}/);
         if (extendFound && Array.isArray(extendFound)) {
             try {
                 // localOptions.template.templates +'/'+
-                layoutPath = extendFound[0].match(/(\"|\')(.*)(\"|\')/)[0].replace(/(\"|\')/g, '');
+                layoutPath = extendFound[0].match(/(\"|\')(.*?)(\"|\')/)[0].replace(/(\"|\')/g, '');
 
                 // adding layout
                 // #SPA1 — a layoutless (fragment) render of an extends template
@@ -611,8 +615,11 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                     buffer = null;
                 }
 
-                // updating extends
-                _templateContent = _templateContent.replace(layoutPath, _(cachePath +'/'+ localOptions.bundle +'/'+ newLayoutPath, true) );
+                // updating extends - #B482: confined to the matched directive; a bare
+                // search over the whole template let the first hit anywhere win, so a
+                // child naming its layout in a leading comment had the COMMENT rewritten
+                // while the directive kept pointing at the raw, un-assembled layout.
+                _templateContent = spliceExtendsTarget(_templateContent, extendFound, layoutPath, _(cachePath +'/'+ localOptions.bundle +'/'+ newLayoutPath, true) );
 
                 // override layout path
                 layoutPath = newLayoutPath;
@@ -2360,4 +2367,42 @@ function spliceXhrInputs(htmlContent, data, viewInfos) {
     }
     // Popin case — a fragment without a document shell
     return htmlContent + xhrData + xhrView + '\n\t';
+}
+
+
+// ---- #B482/#B484 - module-scope helper for the extends layout-cache re-point ----
+
+/**
+ * Re-points a template's extends directive at its assembled layout-cache copy,
+ * rewriting ONLY the occurrence that sits inside the matched directive.
+ *
+ * The previous form searched the whole template for the bare layout path, so the
+ * first occurrence anywhere won: a child whose leading comment named its layout
+ * had that comment rewritten while the directive kept the raw path, and the page
+ * then extended the un-assembled layout (#B482). Splicing around the match index
+ * confines the rewrite to the directive and leaves later legitimate mentions of
+ * the same filename untouched.
+ *
+ * A function replacer is used deliberately: the target is a runtime-built path,
+ * and a string replacement would expand any dollar-pattern it happens to carry.
+ *
+ * @inner
+ * @param {string} templateContent - Raw child-template source.
+ * @param {Array}  extendFound     - Result of the non-global directive match; its
+ *   `index` locates the directive inside `templateContent`.
+ * @param {string} layoutPath      - Bare, unquoted layout path taken from that directive.
+ * @param {string} target          - Absolute path of the assembled cache copy.
+ * @returns {string} `templateContent` with the directive's target replaced.
+ *
+ * @example
+ * // Only the directive is re-pointed; a leading comment naming the same file
+ * // keeps its original text.
+ * out = spliceExtendsTarget(childSource, directiveMatch, 'base.html', cachedAbsolutePath);
+ */
+function spliceExtendsTarget(templateContent, extendFound, layoutPath, target) {
+    var at  = extendFound.index;
+    var end = at + extendFound[0].length;
+    return templateContent.slice(0, at)
+         + extendFound[0].replace(layoutPath, function () { return target; })
+         + templateContent.slice(end);
 }
