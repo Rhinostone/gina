@@ -97,7 +97,7 @@ function swallowIfNonCritical(isCritical, err) {
  *   callback    function|undefined
  *   self        EventEmitter-like
  *
- * Returns { action: 'noop'|'retry'|'callback'|'emit'|'swallowed', err? }
+ * Returns { action: 'noop'|'retry'|'callback'|'swallowed', err? }
  */
 function onStreamTimeoutLogic(ctx) {
     if (ctx.isFinished.value) return { action: 'noop' };
@@ -119,19 +119,17 @@ function onStreamTimeoutLogic(ctx) {
 
     if (swallowIfNonCritical(ctx.isCritical, err)) return { action: 'swallowed', err: err };
 
-    if (typeof ctx.callback === 'function') {
-        ctx.callback(err);
-        return { action: 'callback', err: err };
-    }
-    ctx.self.emit('query#complete', { status: 503, error: err });
-    return { action: 'emit', err: err };
+    // #B475 cleanup — the shipped handler has no emitter arm: query() always
+    // supplies a callback (the per-call channel), so delivery is unconditional
+    ctx.callback(err);
+    return { action: 'callback', err: err };
 }
 
 /**
  * onQueryClosed — premature stream-close handler (#H1 fix).
  *
  * ctx fields: same as onStreamTimeoutLogic plus sessions array.
- * Returns { action: 'noop'|'retry'|'callback'|'emit'|'swallowed', err? }
+ * Returns { action: 'noop'|'retry'|'callback'|'swallowed', err? }
  */
 function onQueryClosedLogic(ctx) {
     if (ctx.isFinished.value) return { action: 'noop' };
@@ -152,19 +150,17 @@ function onQueryClosedLogic(ctx) {
 
     if (swallowIfNonCritical(ctx.isCritical, err)) return { action: 'swallowed', err: err };
 
-    if (typeof ctx.callback === 'function') {
-        ctx.callback(err);
-        return { action: 'callback', err: err };
-    }
-    ctx.self.emit('query#complete', { status: 503, error: err });
-    return { action: 'emit', err: err };
+    // #B475 cleanup — the shipped handler has no emitter arm: query() always
+    // supplies a callback (the per-call channel), so delivery is unconditional
+    ctx.callback(err);
+    return { action: 'callback', err: err };
 }
 
 /**
  * onQueryError — stream error handler.
  *
  * ctx fields: same as onQueryClosedLogic plus error object.
- * Returns { action: 'noop'|'retry'|'callback'|'emit'|'swallowed', err? }
+ * Returns { action: 'noop'|'retry'|'callback'|'swallowed', err? }
  */
 function onQueryErrorLogic(ctx) {
     if (ctx.isFinished.value) return { action: 'noop' };
@@ -199,12 +195,10 @@ function onQueryErrorLogic(ctx) {
 
     if (swallowIfNonCritical(ctx.isCritical, ginaErr)) return { action: 'swallowed', err: ginaErr };
 
-    if (typeof ctx.callback !== 'undefined') {
-        ctx.callback(ginaErr);
-        return { action: 'callback', err: ginaErr };
-    }
-    ctx.self.emit('query#complete', { status: ginaStatus, error: ginaErr });
-    return { action: 'emit', err: ginaErr };
+    // #B475 cleanup — the shipped handler has no emitter arm: query() always
+    // supplies a callback (the per-call channel), so delivery is unconditional
+    ctx.callback(ginaErr);
+    return { action: 'callback', err: ginaErr };
 }
 
 /**
@@ -596,18 +590,6 @@ describe('04 - onStreamTimeout handler — stream-level timeout (#H4)', function
         assert.equal(result.err.retryable, false);
     });
 
-    it('retry attempt, no callback: emits query#complete with status 503', function(_, done) {
-        var emitted = null;
-        var self    = makeSelf();
-        self.on('query#complete', function(payload) { emitted = payload; });
-        var ctx = makeCtx({ retryCount: 2, isCritical: true, self: self });
-        var result = onStreamTimeoutLogic(ctx);
-        assert.equal(result.action, 'emit');
-        assert.equal(emitted.status, 503);
-        assert.ok(emitted.error instanceof GinaHttp2Error);
-        done();
-    });
-
     it('non-critical (isCritical=false, retryCount exhausted): swallowed, no callback called', function() {
         var cbCalled = false;
         var ctx = makeCtx({ retryCount: 2, isCritical: false, callback: function() { cbCalled = true; } });
@@ -678,17 +660,6 @@ describe('05 - onQueryClosed handler — GOAWAY / premature stream close (#H1)',
         var ctx = makeCtx({ retryCount: 2, callback: function() {} });
         var result = onQueryClosedLogic(ctx);
         assert.equal(result.err.retriedOnce, true);
-    });
-
-    it('retry attempt, no callback: emits query#complete', function(_, done) {
-        var emitted = null;
-        var self    = makeSelf();
-        self.on('query#complete', function(payload) { emitted = payload; });
-        var ctx = makeCtx({ retryCount: 2, self: self });
-        var result = onQueryClosedLogic(ctx);
-        assert.equal(result.action, 'emit');
-        assert.equal(emitted.status, 503);
-        done();
     });
 
     it('non-critical (isCritical=false): swallowed', function() {
@@ -804,18 +775,6 @@ describe('06 - onQueryError handler — stream error / connection error', functi
         var result = onQueryErrorLogic(ctx);
         assert.equal(result.action, 'swallowed');
         assert.equal(cbCalled, false);
-    });
-
-    it('no callback: emits query#complete on error', function(_, done) {
-        var emitted = null;
-        var self    = makeSelf();
-        self.on('query#complete', function(p) { emitted = p; });
-        var err = Object.assign(new Error('stream'), { code: 'ERR_HTTP2_STREAM_ERROR' });
-        var ctx = makeCtx({ retryCount: 2, error: err, self: self });
-        var result = onQueryErrorLogic(ctx);
-        assert.equal(result.action, 'emit');
-        assert.ok(emitted !== null);
-        done();
     });
 
 });

@@ -62,14 +62,18 @@ describe('01 - source: the breaker gate sits ABOVE the protocol dispatch', funct
             'the whole breaker path must be guarded on enabled');
     });
 
-    it('an open-circuit rejection mirrors the H3 non-critical swallow contract', function() {
+    it('an open-circuit rejection mirrors the H3 non-critical swallow contract and delivers through the per-call channel', function() {
         var rejection = src.indexOf('var _cbErr = new GinaCircuitOpenError(_cbAuthority, _cbGate.retryAfterMs);');
         assert.ok(rejection > -1);
         var blk = src.slice(rejection, rejection + 900);
         assert.match(blk, /if \(!isCritical\) \{/, 'criticality must be checked');
         assert.match(blk, /\[QUERY\]\[circuit-open\]\[non-critical\]/, 'non-critical rejection is log-only');
-        assert.match(blk, /if \(callback\) \{/, 'callback mode must be handled');
-        assert.match(blk, /self\.emit\('query#complete', _cbErr\)/, 'emitter mode must be handled');
+        // #B475 cleanup — query() always supplies a callback, so the rejection is
+        // delivered unconditionally (rejection-owned) and the handle comes back
+        assert.match(blk, /_ownAsyncCbRejection\(callback\(_cbErr\)\);/, 'the rejection reaches the caller, rejection-owned');
+        assert.match(blk, /return _handle;/, 'the fluent handle comes back after a synchronous refusal');
+        var live = blk.split('\n').filter(function (l) { return !/^\s*\/\//.test(l); }).join('\n');
+        assert.equal(live.indexOf("self.emit('query#complete'"), -1, 'no emitter arm left on the refusal');
     });
 
     it('outcomes are recorded once, via a wrapped callback', function() {
@@ -78,11 +82,19 @@ describe('01 - source: the breaker gate sits ABOVE the protocol dispatch', funct
         assert.match(src, /_circuitRecord\(_cbEntry, _cbConf, _cbGate\.probe, err\);/, 'the wrapper must record against the entry');
     });
 
-    it('a probe admitted without a callback releases its slot immediately', function() {
-        var noCb = src.indexOf('} else if (_cbGate.probe) {');
-        assert.ok(noCb > -1, 'the no-callback probe branch must exist');
-        assert.match(src.slice(noCb, noCb + 500), /_cbEntry\.probeInFlight = false;/,
-            'an unobservable probe must not wedge the half-open state');
+    it('every admitted query records its outcome through the wrapper — the no-callback probe-release branch is gone (#B475 cleanup)', function() {
+        // since query() always supplies a callback, a half-open probe is observable in
+        // both forms: the wrapper records, and the release-on-no-callback branch was dead
+        var live = src.split('\n').filter(function (l) { return !/^\s*\/\//.test(l); }).join('\n');
+        assert.equal(live.indexOf('else if (_cbGate.probe)'), -1, 'the probe-release branch must be gone');
+        var rejection = live.indexOf('var _cbErr = new GinaCircuitOpenError(_cbAuthority, _cbGate.retryAfterMs);');
+        var wrapper   = live.indexOf('function onCircuitObservedOutcome(err)', rejection);
+        assert.ok(rejection > -1 && wrapper > rejection, 'the wrapper follows the admission gate');
+        var between = live.slice(rejection, wrapper);
+        assert.equal(between.indexOf("typeof(callback) == 'function'"), -1, 'the wrapper is no longer nested under a callback-type guard');
+        assert.equal(between.indexOf('if (callback) {'), -1, 'nor under a truthiness guard');
+        // control (can-fail): the slot-release token is still live in the admission logic itself
+        assert.ok(live.indexOf('probeInFlight = false;') > -1, 'control: probe-slot release still exists in the breaker logic');
     });
 
     it('only CRITICAL requests may serve as the half-open probe', function() {

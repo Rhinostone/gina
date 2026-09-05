@@ -4597,6 +4597,7 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
      *   `authorization` header wins (#B465).
      * @param {object}   [data]           - Request body / query params
      * @param {function} [callback]       - `callback(err, result)` — omit (or pass `null`) to get the onComplete handle
+     * @fires SuperController#query.complete only from the one-tick fallback, when nothing consumed the outcome (no callback, no `onComplete`) — the two transport handlers never emit
      * @returns {void|object} `undefined` in callback form; the `{onComplete}` handle otherwise — on every path, including the synchronous failures (#B475) and the nested-render refusal (#B479)
      */
     // replaced: arguments object — use named params (#P23)
@@ -4770,17 +4771,12 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
 
         if ( !options.host && !options.hostname ) {
             err = new Error('SuperController::query() needs at least a `host IP` or a `hostname`');
-            if (callback) {
-                try {
-                    _ownAsyncCbRejection(callback(err))
-                } catch (_syncCbErr) {
-                    _ownSyncCbThrow(_syncCbErr);
-                }
-                return _handle;
+            try {
+                _ownAsyncCbRejection(callback(err))
+            } catch (_syncCbErr) {
+                _ownSyncCbThrow(_syncCbErr);
             }
-            // #B404 by-catch — mirror the callback branch's return: without it the
-            // emitter branch fell through and the doomed query kept executing.
-            return self.emit('query#complete', err)
+            return _handle;
         }
 
 
@@ -4979,33 +4975,26 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                         console.warn('[QUERY][circuit-open][non-critical] swallowed '+ (options.method || '') +' '+ (options.path || '') +' to '+ _cbAuthority);
                         return _handle;
                     }
-                    if (callback) {
-                        try {
-                            _ownAsyncCbRejection(callback(_cbErr));
-                        } catch (_syncCbErr) {
-                            _ownSyncCbThrow(_syncCbErr);
-                        }
-                        return _handle;
+                    try {
+                        _ownAsyncCbRejection(callback(_cbErr));
+                    } catch (_syncCbErr) {
+                        _ownSyncCbThrow(_syncCbErr);
                     }
-                    return self.emit('query#complete', _cbErr);
+                    return _handle;
                 }
-                if ( typeof(callback) == 'function' ) {
-                    var _cbOriginalCallback = callback;
-                    var _cbSettled = false;
-                    callback = function onCircuitObservedOutcome(err) {
-                        if (!_cbSettled) { // record once, whatever the terminal
-                            _cbSettled = true;
-                            _circuitRecord(_cbEntry, _cbConf, _cbGate.probe, err);
-                        }
-                        return _cbOriginalCallback.apply(this, arguments);
-                    };
-                } else if (_cbGate.probe) {
-                    // No callback → the outcome is unobservable (the shared
-                    // `query#complete` emitter would misattribute concurrent
-                    // queries) → release the probe slot immediately rather than
-                    // wedge the half-open state.
-                    _cbEntry.probeInFlight = false;
-                }
+                // every admitted query records its outcome: since #B475 `callback` is
+                // always a function here (the fluent form rides the per-call channel),
+                // so a half-open probe is observable in both forms and nothing has to
+                // release the slot early
+                var _cbOriginalCallback = callback;
+                var _cbSettled = false;
+                callback = function onCircuitObservedOutcome(err) {
+                    if (!_cbSettled) { // record once, whatever the terminal
+                        _cbSettled = true;
+                        _circuitRecord(_cbEntry, _cbConf, _cbGate.probe, err);
+                    }
+                    return _cbOriginalCallback.apply(this, arguments);
+                };
             }
 
             browser = require(''+ httpLib);
@@ -5021,15 +5010,12 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
             return _handle;
 
         } catch(err) {
-            if (callback) {
-                try {
-                    _ownAsyncCbRejection(callback(err))
-                } catch (_syncCbErr) {
-                    _ownSyncCbThrow(_syncCbErr);
-                }
-                return _handle;
+            try {
+                _ownAsyncCbRejection(callback(err))
+            } catch (_syncCbErr) {
+                _ownSyncCbThrow(_syncCbErr);
             }
-            self.emit('query#complete', err)
+            return _handle;
         }
     }
 
@@ -5378,6 +5364,22 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
         return SAFE_HTTP_METHODS[ String(method || '').toUpperCase() ] === true;
     };
 
+    /**
+     * HTTP/1.x client request handler with the #B53 idempotency-gated retry.
+     *
+     * Sends an HTTP/1.x request to an upstream (inter-bundle `self.query()`) and
+     * re-sends on a connection failure while `retryCount` stays under
+     * `min(options.maxRetry, 10)` and `isRetryableMethod` allows the replay, with a
+     * linear 500 ms × attempt backoff. Every terminal — transport error, ALPN
+     * mismatch, unparsable body, non-2xx, success — delivers through `callback`;
+     * nothing is emitted here (the `query#complete` fallback belongs to `query()`).
+     *
+     * @inner
+     * @param {object}   browser         - HTTP/1.x client module (node:http or node:https)
+     * @param {object}   options         - Request options (host, port, path, method, headers, …)
+     * @param {function} callback        - Node-style callback — always supplied by `query()` since #B475 (the per-call channel behind the fluent handle)
+     * @param {number}   [retryCount=0]  - Current retry attempt (0 = first try)
+     */
     var handleHTTP1ClientRequest = function(browser, options, callback, retryCount = 0) {
 
 
@@ -5410,15 +5412,11 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                     options.ca = fs.readFileSync(options.ca);
                 }
             } catch(err) {
-                if ( typeof(callback) != 'undefined' ) {
-                    try {
-                        return _ownAsyncCbRejection(callback(err))
-                    } catch (_syncCbErr) {
-                        return _ownSyncCbThrow(_syncCbErr);
-                    }
+                try {
+                    return _ownAsyncCbRejection(callback(err))
+                } catch (_syncCbErr) {
+                    return _ownSyncCbThrow(_syncCbErr);
                 }
-
-                return self.emit('query#complete', err);
             }
         }
         let body = "";
@@ -5461,50 +5459,11 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                         error: new Error(data)
                     };
 
-                    if ( typeof(callback) != 'undefined' ) {
-                        try {
-                            return _ownAsyncCbRejection(callback(err))
-                        } catch (_syncCbErr) {
-                            return _ownSyncCbThrow(_syncCbErr);
-                        }
-                    }
-
-                    return self.emit('query#complete', err)
-                }
-
-                //Only when needed.
-                if ( typeof(callback) != 'undefined' ) {
-                    if ( typeof(data) == 'string' && /^(\{|%7B|\[{)|\[\]/.test(data) ) {
-                        try {
-                            data = JSON.parse(data)
-                        } catch (err) {
-                            data = {
-                                status    : 500,
-                                error     : err
-                            };
-                            console.error(err);
-                        }
-                    }
-
                     try {
-                        if ( data.status && !/^2/.test(data.status) && typeof(local.options.conf.server.coreConfiguration.statusCodes[data.status]) != 'undefined' ) {
-                            // replaced: self.throwError(data) — throwError() bypasses the callback,
-                            // preventing controllers from implementing graceful degradation (e.g. degraded
-                            // mode when a non-critical upstream service fails). Pass the error to the
-                            // callback so the caller decides whether to degrade or surface it. (#Q1)
-                            return _ownAsyncCbRejection(callback(data));
-                        }
-
-                        return _ownAsyncCbRejection(callback( false, data ));
-                    } catch (e) {
-                        var infos = local.options, controllerName = infos.controller.substring(infos.controller.lastIndexOf('/'));
-                        var msg = 'Controller Query Exception while catching back.\nBundle: '+ infos.bundle +'\nController File: /controllers'+ controllerName +'\nControl: this.'+ infos.control +'(...)\n\r' + e.stack;
-                        var exception = new Error(msg);
-                        exception.status = 500;
-
-                        return self.throwError(exception);
+                        return _ownAsyncCbRejection(callback(err))
+                    } catch (_syncCbErr) {
+                        return _ownSyncCbThrow(_syncCbErr);
                     }
-
                 }
 
                 if ( typeof(data) == 'string' && /^(\{|%7B|\[{)|\[\]/.test(data) ) {
@@ -5513,21 +5472,30 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                     } catch (err) {
                         data = {
                             status    : 500,
-                            error     : data
-                        }
-                        return self.emit('query#complete', data)
+                            error     : err
+                        };
+                        console.error(err);
                     }
                 }
 
-                if (
-                    data.status
-                    && !/^2/.test(data.status)
-                    && typeof(local.options.conf.server.coreConfiguration.statusCodes[data.status]) != 'undefined'
-                ) {
-                    return self.emit('query#complete', data)
-                }
+                try {
+                    if ( data.status && !/^2/.test(data.status) && typeof(local.options.conf.server.coreConfiguration.statusCodes[data.status]) != 'undefined' ) {
+                        // replaced: self.throwError(data) — throwError() bypasses the callback,
+                        // preventing controllers from implementing graceful degradation (e.g. degraded
+                        // mode when a non-critical upstream service fails). Pass the error to the
+                        // callback so the caller decides whether to degrade or surface it. (#Q1)
+                        return _ownAsyncCbRejection(callback(data));
+                    }
 
-                return self.emit('query#complete', false, data);
+                    return _ownAsyncCbRejection(callback( false, data ));
+                } catch (e) {
+                    var infos = local.options, controllerName = infos.controller.substring(infos.controller.lastIndexOf('/'));
+                    var msg = 'Controller Query Exception while catching back.\nBundle: '+ infos.bundle +'\nController File: /controllers'+ controllerName +'\nControl: this.'+ infos.control +'(...)\n\r' + e.stack;
+                    var exception = new Error(msg);
+                    exception.status = 500;
+
+                    return self.throwError(exception);
+                }
             })
         });
 
@@ -5562,18 +5530,11 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
             // you can get here if :
             //  - you are trying to query using: `enctype="multipart/form-data"`
             //  -
-            if ( typeof(callback) != 'undefined' ) {
-                try {
-                    return _ownAsyncCbRejection(callback(err))
-                } catch (_syncCbErr) {
-                    return _ownSyncCbThrow(_syncCbErr);
-                }
+            try {
+                return _ownAsyncCbRejection(callback(err))
+            } catch (_syncCbErr) {
+                return _ownSyncCbThrow(_syncCbErr);
             }
-
-            self.emit('query#complete', {
-                status    : 500,
-                error     : err.stack || err.message
-            })
         });
 
         req.setTimeout(parseTimeout(options.requestTimeout), () => {
@@ -5649,11 +5610,9 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
      * @inner
      * @param {object}   browser     - HTTP/2 client module (node:http2)
      * @param {object}   options     - Request options (:authority, :method, :path, :scheme, headers, etc.)
-     * @param {function} [callback]  - Node-style callback; `query()` always supplies one since #B475 (the per-call channel behind the fluent handle)
+     * @param {function} callback    - Node-style callback — always supplied by `query()` since #B475 (the per-call channel behind the fluent handle); every terminal delivers through it and nothing is emitted here
      * @param {number}   [retryCount=0] - Current retry attempt (0 = first try)
      * @param {boolean}  [isCritical=true] - When false, errors are swallowed silently (H3)
-     *
-     * @fires SuperController#query.complete
      */
     var handleHTTP2ClientRequest = function(browser, options, callback, retryCount = 0, isCritical = true) {
 
@@ -5710,15 +5669,11 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                     options.ca = fs.readFileSync(options.ca);
                 }
             } catch(err) {
-                if ( typeof(callback) != 'undefined' ) {
-                    try {
-                        return _ownAsyncCbRejection(callback(err))
-                    } catch (_syncCbErr) {
-                        return _ownSyncCbThrow(_syncCbErr);
-                    }
+                try {
+                    return _ownAsyncCbRejection(callback(err))
+                } catch (_syncCbErr) {
+                    return _ownSyncCbThrow(_syncCbErr);
                 }
-
-                return self.emit('query#complete', err);
             }
         }
 
@@ -6107,14 +6062,10 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
             _finalizeStream();
             // H3: if non-critical, swallow and return
             if (_swallowIfNonCritical(_timeoutErr)) return;
-            if (typeof callback === 'function') {
-                try {
-                    _ownAsyncCbRejection(callback(_timeoutErr));
-                } catch (_syncCbErr) {
-                    _ownSyncCbThrow(_syncCbErr);
-                }
-            } else {
-                self.emit('query#complete', { status: 503, error: _timeoutErr });
+            try {
+                _ownAsyncCbRejection(callback(_timeoutErr));
+            } catch (_syncCbErr) {
+                _ownSyncCbThrow(_syncCbErr);
             }
         });
 
@@ -6197,14 +6148,10 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
             _finalizeStream();
             // H3: if non-critical, swallow and return
             if (_swallowIfNonCritical(_ginaErr)) return;
-            if (typeof callback !== 'undefined') {
-                try {
-                    _ownAsyncCbRejection(callback(_ginaErr));
-                } catch (_syncCbErr) {
-                    _ownSyncCbThrow(_syncCbErr);
-                }
-            } else {
-                self.emit('query#complete', { status: _ginaStatus, error: _ginaErr });
+            try {
+                _ownAsyncCbRejection(callback(_ginaErr));
+            } catch (_syncCbErr) {
+                _ownSyncCbThrow(_syncCbErr);
             }
 
             // Note: The 'client' session remains in the Map so other parallel requests
@@ -6249,14 +6196,10 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
             _finalizeStream();
             // H3: if non-critical, swallow and return
             if (_swallowIfNonCritical(prematureCloseErr)) return;
-            if (typeof callback !== 'undefined') {
-                try {
-                    _ownAsyncCbRejection(callback(prematureCloseErr));
-                } catch (_syncCbErr) {
-                    _ownSyncCbThrow(_syncCbErr);
-                }
-            } else {
-                self.emit('query#complete', { status: 503, error: prematureCloseErr });
+            try {
+                _ownAsyncCbRejection(callback(prematureCloseErr));
+            } catch (_syncCbErr) {
+                _ownSyncCbThrow(_syncCbErr);
             }
         });
 
@@ -6314,156 +6257,116 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                 _finalizeStream();
                 // H3: if non-critical, swallow and return
                 if (_swallowIfNonCritical(_badGatewayErr)) return;
-                if (typeof callback !== 'undefined') {
-                    try {
-                        _ownAsyncCbRejection(callback(_badGatewayErr));
-                    } catch (_syncCbErr) {
-                        _ownSyncCbThrow(_syncCbErr);
-                    }
-                } else {
-                    self.emit('query#complete', { status: 502, error: _badGatewayErr });
+                try {
+                    _ownAsyncCbRejection(callback(_badGatewayErr));
+                } catch (_syncCbErr) {
+                    _ownSyncCbThrow(_syncCbErr);
                 }
                 return;
             }
 
             // #B52 — release the settled stream before the remaining onEnd terminals
-            // (ALPN-mismatch, 5xx callback, throwError, success callback, EventEmitter-mode)
+            // (ALPN-mismatch, non-2xx callback, throwError, success callback)
             _finalizeStream();
 
             // 3. Exception filter for ALPN or protocol mismatches
             if (typeof data === 'string' && /^Unknown ALPN Protocol/.test(data)) {
                 const err = { status: 500, error: new Error(data) };
-                if (typeof callback !== 'undefined') {
-                    try {
-                        return _ownAsyncCbRejection(callback(err));
-                    } catch (_syncCbErr) {
-                        return _ownSyncCbThrow(_syncCbErr);
-                    }
+                try {
+                    return _ownAsyncCbRejection(callback(err));
+                } catch (_syncCbErr) {
+                    return _ownSyncCbThrow(_syncCbErr);
                 }
-                return self.emit('query#complete', err);
             }
 
             // 4. Data Parsing & Validation
-            if (typeof callback !== 'undefined') {
-                if (typeof data === 'string' && /^(\{|%7B|\[{)|\[\]/.test(data)) {
-                    try {
-                        data = JSON.parse(data);
-                        if (typeof data.status === 'undefined') {
-                            const currentRule = local.options.rule || local.req.routing.rule;
-                            console.warn(`[${currentRule}] Response status code is undefined: switching to 200`);
-                            data.status = 200;
-                        }
-                    } catch (err) {
-                        data = { status: 500, error: err };
-                        console.error('[HTTP2] JSON Parse Error:', err);
-                    }
-                } else if (!data && req.aborted && req.destroyed) {
-                    data = { status: 500, error: new Error('Request aborted') };
-                }
-
+            if (typeof data === 'string' && /^(\{|%7B|\[{)|\[\]/.test(data)) {
                 try {
-                    // Intercepting fallback redirect (3xx)
-                    // #B33 — local.res may be null when the response lands after a terminal
-                    // exit released the triplet; skip the intercept and fall through to the
-                    // non-2xx handling (whose throwError no-ops on a released response).
-                    if (local.res != null && data.status && /^3/.test(data.status) && typeof data.headers !== 'undefined') {
-                        local.res.writeHead(data.status, data.headers);
-                        return local.res.end();
+                    data = JSON.parse(data);
+                    if (typeof data.status === 'undefined') {
+                        const currentRule = local.options.rule || local.req.routing.rule;
+                        console.warn(`[${currentRule}] Response status code is undefined: switching to 200`);
+                        data.status = 200;
                     }
-
-                    // Error code handling (non-2xx)
-                    const statusCodes = local.options.conf.server.coreConfiguration.statusCodes;
-                    if (data.status && !/^2/.test(data.status) && typeof statusCodes[data.status] !== 'undefined') {
-                        // #B405 — finishing the #Q1 migration on this transport:
-                        // throwError() bypasses the callback, preventing graceful
-                        // degradation, and left a promisified query permanently
-                        // unsettled on any non-5xx status. Every non-2xx now goes
-                        // to the callback so the caller decides — the HTTP/1.1
-                        // contract (see the #Q1 comment there).
-                        // replaced: if (/^5/.test(data.status)) {
-                        // replaced:     (the same wrapped callback(data) delivery — 5xx-only)
-                        // replaced: } else {
-                        // replaced:     self.throwError(data);
-                        // replaced:     return;
-                        // replaced: }
-                        return _ownAsyncCbRejection(callback(data));
-                    } else {
-                        // Success path
-                        if (self && self.isHaltedRequest() && typeof local.onHaltedRequestResumed !== 'undefined') {
-                            local.onHaltedRequestResumed(false);
-                        }
-                        // #QI — extract upstream query log from the response and
-                        // merge into the current request's log. This surfaces
-                        // upstream-bundle queries in the calling bundle's Inspector automatically.
-                        // #INS10 — extract + strip the upstream query sidecar during a prod window too.
-                        if (((process.gina && process.gina._inspectorWindowUntil > Date.now()) || _isDev) && data && data.__ginaQueries && local._queryLog) {
-                            for (var _qi = 0; _qi < data.__ginaQueries.length; _qi++) {
-                                local._queryLog.push(data.__ginaQueries[_qi]);
-                            }
-                            delete data.__ginaQueries;
-                        }
-                        // #FI — record query call duration and merge upstream timeline
-                        // #INS10 — also during a prod instrumentation window.
-                        if (((process.gina && process.gina._inspectorWindowUntil > Date.now()) || _isDev) && local._timeline) {
-                            if (options._timelineStart) {
-                                local._timeline.entries.push({
-                                    label: options._targetBundle ? ('query \u2192 ' + options._targetBundle) : 'query',
-                                    cat: 'io',
-                                    startMs: options._timelineStart, endMs: Date.now(),
-                                    durationMs: Date.now() - options._timelineStart,
-                                    detail: (options.hostname || '') + (options.path || '')
-                                });
-                            }
-                            if (data && data.__ginaFlow && Array.isArray(data.__ginaFlow)) {
-                                for (var _fi = 0; _fi < data.__ginaFlow.length; _fi++) {
-                                    data.__ginaFlow[_fi].origin = data.__ginaFlow[_fi].origin || (options.hostname || '');
-                                    local._timeline.entries.push(data.__ginaFlow[_fi]);
-                                }
-                                delete data.__ginaFlow;
-                            }
-                        }
-                        return _ownAsyncCbRejection(callback(false, data));
-                    }
-                } catch (e) {
-                    const infos = local.options;
-                    const controllerName = infos.controller.substring(infos.controller.lastIndexOf('/'));
-                    const msg = `Controller Query Exception while catching back.\nBundle: ${infos.bundle}\nController: ${controllerName}\nControl: ${infos.control}\n${e.stack}`;
-                    const exception = new Error(msg);
-                    exception.status = 500;
-                    self.throwError(exception);
-                    return;
+                } catch (err) {
+                    data = { status: 500, error: err };
+                    console.error('[HTTP2] JSON Parse Error:', err);
                 }
-            } else {
-                // Fallback for EventEmitter mode (no callback)
-                if (typeof data === 'string' && /^(\{|%7B|\[{)|\[\]/.test(data)) {
-                    try {
-                        data = JSON.parse(data);
-                    } catch (e) {
-                        data = { status: 500, error: data };
-                        self.emit('query#complete', data);
-                        return;
-                    }
-                }
+            } else if (!data && req.aborted && req.destroyed) {
+                data = { status: 500, error: new Error('Request aborted') };
+            }
 
-                // #B33 — same released-response skip as the callback-mode intercept above.
-                // The intercept answers the redirect and returns: the outcome is not
-                // delivered to the application in either mode (#B475 measured). This
-                // emitter-mode branch is unreachable now that every fluent query rides
-                // the callback path.
+            try {
+                // Intercepting fallback redirect (3xx)
+                // #B33 — local.res may be null when the response lands after a terminal
+                // exit released the triplet; skip the intercept and fall through to the
+                // non-2xx handling (whose throwError no-ops on a released response).
                 if (local.res != null && data.status && /^3/.test(data.status) && typeof data.headers !== 'undefined') {
-                    self.removeAllListeners(['query#complete']);
                     local.res.writeHead(data.status, data.headers);
                     return local.res.end();
                 }
 
-                if (data.status && !/^2/.test(data.status) && typeof local.options.conf.server.coreConfiguration.statusCodes[data.status] !== 'undefined') {
-                    self.emit('query#complete', data);
+                // Error code handling (non-2xx)
+                const statusCodes = local.options.conf.server.coreConfiguration.statusCodes;
+                if (data.status && !/^2/.test(data.status) && typeof statusCodes[data.status] !== 'undefined') {
+                    // #B405 — finishing the #Q1 migration on this transport:
+                    // throwError() bypasses the callback, preventing graceful
+                    // degradation, and left a promisified query permanently
+                    // unsettled on any non-5xx status. Every non-2xx now goes
+                    // to the callback so the caller decides — the HTTP/1.1
+                    // contract (see the #Q1 comment there).
+                    // replaced: if (/^5/.test(data.status)) {
+                    // replaced:     (the same wrapped callback(data) delivery — 5xx-only)
+                    // replaced: } else {
+                    // replaced:     self.throwError(data);
+                    // replaced:     return;
+                    // replaced: }
+                    return _ownAsyncCbRejection(callback(data));
                 } else {
-                    if (self.isHaltedRequest() && typeof local.onHaltedRequestResumed !== 'undefined') {
+                    // Success path
+                    if (self && self.isHaltedRequest() && typeof local.onHaltedRequestResumed !== 'undefined') {
                         local.onHaltedRequestResumed(false);
                     }
-                    self.emit('query#complete', false, data);
+                    // #QI — extract upstream query log from the response and
+                    // merge into the current request's log. This surfaces
+                    // upstream-bundle queries in the calling bundle's Inspector automatically.
+                    // #INS10 — extract + strip the upstream query sidecar during a prod window too.
+                    if (((process.gina && process.gina._inspectorWindowUntil > Date.now()) || _isDev) && data && data.__ginaQueries && local._queryLog) {
+                        for (var _qi = 0; _qi < data.__ginaQueries.length; _qi++) {
+                            local._queryLog.push(data.__ginaQueries[_qi]);
+                        }
+                        delete data.__ginaQueries;
+                    }
+                    // #FI — record query call duration and merge upstream timeline
+                    // #INS10 — also during a prod instrumentation window.
+                    if (((process.gina && process.gina._inspectorWindowUntil > Date.now()) || _isDev) && local._timeline) {
+                        if (options._timelineStart) {
+                            local._timeline.entries.push({
+                                label: options._targetBundle ? ('query \u2192 ' + options._targetBundle) : 'query',
+                                cat: 'io',
+                                startMs: options._timelineStart, endMs: Date.now(),
+                                durationMs: Date.now() - options._timelineStart,
+                                detail: (options.hostname || '') + (options.path || '')
+                            });
+                        }
+                        if (data && data.__ginaFlow && Array.isArray(data.__ginaFlow)) {
+                            for (var _fi = 0; _fi < data.__ginaFlow.length; _fi++) {
+                                data.__ginaFlow[_fi].origin = data.__ginaFlow[_fi].origin || (options.hostname || '');
+                                local._timeline.entries.push(data.__ginaFlow[_fi]);
+                            }
+                            delete data.__ginaFlow;
+                        }
+                    }
+                    return _ownAsyncCbRejection(callback(false, data));
                 }
+            } catch (e) {
+                const infos = local.options;
+                const controllerName = infos.controller.substring(infos.controller.lastIndexOf('/'));
+                const msg = `Controller Query Exception while catching back.\nBundle: ${infos.bundle}\nController: ${controllerName}\nControl: ${infos.control}\n${e.stack}`;
+                const exception = new Error(msg);
+                exception.status = 500;
+                self.throwError(exception);
+                return;
             }
 
             // IMPORTANT: client (session) is NOT closed here to allow multiplexing
@@ -6626,14 +6529,11 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                     code: 'PREFLIGHT_TIMEOUT', retryable: false, status: 503, retryCount: retryCount
                 });
                 if (_swallowIfNonCritical(_pfErr)) return;
-                if (typeof callback === 'function') {
-                    try {
-                        return _ownAsyncCbRejection(callback(_pfErr));
-                    } catch (_syncCbErr) {
-                        return _ownSyncCbThrow(_syncCbErr);
-                    }
+                try {
+                    return _ownAsyncCbRejection(callback(_pfErr));
+                } catch (_syncCbErr) {
+                    return _ownSyncCbThrow(_syncCbErr);
                 }
-                self.emit('query#complete', { status: 503, error: _pfErr });
             }, HTTP2_PREFLIGHT_DEADLINE_MS);
 
             client.ping(function onPreflightPong(err) {
@@ -6660,15 +6560,11 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                         code: 'PREFLIGHT_FAILED', retryable: false, status: 503, retryCount: retryCount
                     });
                     if (_swallowIfNonCritical(_pfErr2)) return;
-                    if (typeof callback === 'function') {
-                        try {
-                            return _ownAsyncCbRejection(callback(_pfErr2));
-                        } catch (_syncCbErr) {
-                            return _ownSyncCbThrow(_syncCbErr);
-                        }
+                    try {
+                        return _ownAsyncCbRejection(callback(_pfErr2));
+                    } catch (_syncCbErr) {
+                        return _ownSyncCbThrow(_syncCbErr);
                     }
-                    self.emit('query#complete', { status: 503, error: _pfErr2 });
-                    return;
                 }
                 // PONG received — session confirmed alive
                 client._lastPongAt = Date.now();

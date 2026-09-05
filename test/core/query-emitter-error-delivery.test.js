@@ -74,13 +74,16 @@ describe('01 - #B404 source pins: the fluent delivery adapter guards the single-
         assert.ok(block.indexOf('#B404') > -1, 'the guard is annotated in place');
     });
 
-    it('the host-missing emitter branch returns like its callback twin (#B404 by-catch)', function() {
+    it('the host-missing gate delivers through the per-call channel and returns the handle (#B404 by-catch, closed by the #B475 cleanup)', function() {
         var anchor = 'if ( !options.host && !options.hostname ) {';
         assert.equal(countOf(src, anchor), 1, 'the host-missing gate anchor must be unique');
         var block = src.slice(src.indexOf(anchor), src.indexOf(anchor) + 700);
         assert.ok(block.indexOf('needs at least a') > -1, 'control: the sliced block is the host-missing gate');
-        assert.match(block, /return self\.emit\('query#complete', err\)/,
-            'pre-fix the emit fell through and the doomed query kept executing');
+        assert.ok(block.indexOf('_ownAsyncCbRejection(callback(err))') > -1, 'the error reaches the caller, rejection-owned');
+        assert.ok(block.indexOf('return _handle;') > -1, 'the handle comes back');
+        var live = block.split('\n').filter(function (l) { return !/^\s*\/\//.test(l); }).join('\n');
+        assert.equal(live.indexOf("self.emit('query#complete'"), -1,
+            'no emitter arm: since query() always supplies a callback the #B404 fall-through cannot recur');
     });
 });
 

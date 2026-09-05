@@ -2790,10 +2790,10 @@ describe('23 - query retry/response handlers on a released response (#B33)', fun
             'getSession must early-return null when local.req was released');
     });
 
-    it('both 3xx redirect intercepts skip a released response', function() {
+    it('the 3xx redirect intercept skips a released response (one intercept since the #B475 cleanup removed the emitter-mode twin)', function() {
         var count = src.split("local.res != null && data.status && /^3/.test(data.status)").length - 1;
-        assert.strictEqual(count, 2,
-            'both the callback-mode and emitter-mode 3xx intercepts must be local.res-guarded');
+        assert.strictEqual(count, 1,
+            'the callback-mode 3xx intercept — the only one left — must be local.res-guarded');
     });
 
     // ---- pure-logic replicas (mirror the shipped guard shapes) ----
@@ -2932,14 +2932,16 @@ describe('24 - query: exhausted 502 retries surface a BAD_GATEWAY error, not suc
         assert.match(blk, /retryable\s*:\s*false/, 'exhausted error is not retryable');
     });
 
-    it('the exhausted-502 branch dispatches via callback (callback mode) and query#complete (emitter mode)', function() {
+    it('the exhausted-502 branch dispatches through the callback — the per-call channel; its emitter arm is gone (#B475 cleanup)', function() {
         var exhausted = src.indexOf('} else if (httpStatus === 502) {');
         var blk = src.slice(exhausted, src.indexOf('// 3. Exception filter', exhausted));
         assert.match(blk, /if \(_swallowIfNonCritical\(_badGatewayErr\)\) return;/,
             'must respect the non-critical swallow, like the sibling exhaustion paths');
-        assert.match(blk, /callback\(_badGatewayErr\)/, 'callback mode surfaces the error to the caller');
-        assert.match(blk, /self\.emit\('query#complete', \{ status: 502, error: _badGatewayErr \}\)/,
-            'emitter mode surfaces { status: 502, error }');
+        assert.match(blk, /_ownAsyncCbRejection\(callback\(_badGatewayErr\)\)/, 'the callback surfaces the error to the caller, rejection-owned');
+        // #B475 cleanup — query() always supplies a callback, so the block has no
+        // emitter arm left (line-comment-stripped so a prose mention cannot trip it)
+        var live = blk.split('\n').filter(function (l) { return !/^\s*\/\//.test(l); }).join('\n');
+        assert.equal(live.indexOf("self.emit('query#complete'"), -1, 'no emitter arm in the exhausted-502 block');
     });
 
     // ---- pure-logic replica (mirrors the onEnd 502 decision: retry guard, the new

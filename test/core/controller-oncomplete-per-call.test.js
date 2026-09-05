@@ -289,3 +289,45 @@ describe('03 - #B475 (d): the handle comes back on every path and outlives the s
         assert.deepStrictEqual(got, [{ cb: 'late', err: false, echo: '/fast' }], 'pre-fix: a listener registered after the emit never fired');
     });
 });
+
+describe('04 - #B475 cleanup: the emitter arms are gone — source pins', function() {
+    // Since cdda2ea3d query() always supplies a callback, so every `else self.emit(...)`
+    // arm in the two transport handlers, the three query-scope emitter returns and the
+    // #MS5 no-callback probe-release branch were unreachable; the cleanup commit removed
+    // them. Censuses are line-comment-stripped: the file keeps commented-out legacy query
+    // blocks carrying the same tokens, which double as the can-fail control for the strip.
+    var src  = fs.readFileSync(SOURCE, 'utf8');
+    var live = src.split('\n').filter(function (l) { return !/^\s*\/\//.test(l); }).join('\n');
+    function countOf(hay, needle) { return hay.split(needle).length - 1; }
+    var EMIT = "self.emit('query#complete'";
+
+    it('exactly TWO live query#complete emits remain — the one-tick fallback pair inside the minting block', function() {
+        assert.equal(countOf(live, EMIT), 2, 'the 20 emitter arms are gone; only the fallback pair emits');
+        assert.ok(countOf(src, EMIT) > 2, 'control: the commented-out legacy blocks still carry the token, so the strip is load-bearing');
+        var mint  = live.indexOf("if ( typeof(callback) != 'function' ) {");
+        var guard = live.indexOf("err.code = 'NESTED_RENDER';");
+        var first = live.indexOf(EMIT), last = live.lastIndexOf(EMIT);
+        assert.ok(mint > -1 && guard > mint, 'structural anchors: the minting guard precedes the nested-render refusal');
+        assert.ok(first > mint && last < guard, 'both survivors sit inside the minting block, above the nested-render guard');
+    });
+
+    it('the no-callback probe-release branch and the array-key listener eviction are gone', function() {
+        assert.equal(live.indexOf('else if (_cbGate.probe)'), -1, 'the probe-release branch must be gone');
+        assert.ok(live.indexOf('function onCircuitObservedOutcome(err)') > -1, 'control: the outcome-recording wrapper survives');
+        assert.equal(countOf(live, "removeAllListeners(['query#complete'])"), 0, 'the emitter-mode 3xx intercept and its eviction are gone');
+        assert.ok(countOf(src, "removeAllListeners(['query#complete'])") >= 1, 'control: the commented-out legacy onEnd still carries the token');
+    });
+
+    it('no callback-presence guard is left in query() or its two transport handlers — the minting guard is the only callback type check', function() {
+        var from = live.indexOf('this.query = function(options, data, callback)');
+        var to   = live.indexOf('this.push = function(payload, option, callback)');
+        assert.ok(from > -1 && to > from, 'structural anchors: query() … the two handlers … push()');
+        var region = live.slice(from, to);
+        ['if (callback) {', "typeof(callback) != 'undefined'", "typeof callback !== 'undefined'", "typeof callback === 'function'", "typeof(callback) == 'function'"].forEach(function (g) {
+            assert.equal(countOf(region, g), 0, 'no guard spelled `' + g + '` between query() and push()');
+        });
+        assert.equal(countOf(region, "typeof(callback) != 'function'"), 1, 'the minting guard is the one callback type check');
+        // control (can-fail): push() keeps its own optional-callback guard OUTSIDE the region
+        assert.equal(countOf(live, "typeof(callback) == 'function'"), 1, 'control: the spelling still exists in the file (push), so a zero above is not a broken needle');
+    });
+});
