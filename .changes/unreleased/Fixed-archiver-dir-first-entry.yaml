@@ -1,3 +1,0 @@
-kind: Fixed
-body: '`lib.archiver.compress()` no longer drops the first entry of the top-level directory in its directory form. The walk seeded its work list from index 1 — the author evidently expected `.` to come first, which node''s `readdir` never returns — so a directory holding a single file archived to an empty zip, and every directory-form archive silently lacked one file. The in-tree `project:backup` command uses the array form and was never affected; only direct callers of the directory form are. No configuration change; pickup is a bundle restart.'
-time: 2026-09-04T22:02:52+01:00
