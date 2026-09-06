@@ -228,10 +228,15 @@ describe('05 - #B496 behavioural replay of the prefix builder', function () {
 
     it('applies the webroot prefix only when the url lacks it', function () {
         // The framework's join is literal — `webroot + url.substring(1)`, with NO
-        // separator inserted — so it assumes a trailing-slash webroot. Pinned as the
-        // real rule rather than the intuitive one: `/web` + `a.css` is `/weba.css`,
-        // and this replica must keep agreeing with getNodeRes whatever that rule is.
-        // In practice the branch rarely fires — built asset urls already carry the
+        // separator inserted — because `webroot` is guaranteed to END in one:
+        // config.js normalises it at load ("formating wroot to have /mywebroot/",
+        // config.js:1728-1729 forces both a leading and a trailing slash), which is
+        // also why config.js:2188 can strip a trailing char unconditionally. So the
+        // first case below is the real runtime shape. The second pins the raw rule
+        // for a webroot lacking the trailing slash: unreachable through config, kept
+        // only so a future reader who sees `/weba.css` in a probe knows it means the
+        // value bypassed normalisation rather than that the join is broken.
+        // The branch itself rarely fires at all — built asset urls already carry the
         // webroot, so the startsWith guard skips them (measured on a live prod h2 boot).
         assert.equal(
             build({ stylesheets: [{ url: '/a.css' }, { url: '/web/b.css' }] }, { webroot: '/web/' }),
