@@ -30070,6 +30070,158 @@ if ( typeof(window['gina']) == 'undefined' ) { // could have be defined by loade
     window['gina'] = gina;
 }
 
+// #B483 — the `ginaloaded` listener is attached HERE, at parse time, ABOVE the
+// `core` module definition. The `require([...])` below is deferred by the loader
+// (RequireJS `nextTick` = setTimeout 4 ms) and the `core` factory is what constructs
+// gina and dispatches `ginaloaded`, so a listener attached at file scope precedes
+// the dispatch by construction. It used to be attached inside getDependencies'
+// completion callback — only after the async routing.json fetch resolved — and on
+// a light page the 4 ms timer beat the fetch: the event fired with no listener,
+// the loader was never invoked against the constructed instance, `isFrameworkLoaded`
+// never flipped, and the plugin boot pollers gave up (a permanently half-booted
+// client, measured by a consumer's instrumented timeline). The loader is resolved
+// LAZILY at dispatch: `window['onGinaLoaded']` is whispered server-side before this
+// script executes; `_ginaFallbackOnLoaded` covers a page without the whisper.
+function _ginaFallbackOnLoaded(gina) {
+
+    if (!gina) {
+        return false
+    }
+
+    if ( gina["isFrameworkLoaded"] ) {
+        return true
+    }
+
+    // var options = gina['config'] = {
+    var options = {
+        /**@js_externs env*/
+        env                 : '{{ page.environment.env }}',
+        /**@js_externs envIsDev*/
+        envIsDev            : ( /^true$/.test('{{ page.environment.envIsDev }}') ) ? true : false,
+        /**@js_externs scope*/
+        scope               : '{{ page.environment.scope }}',
+        /**@js_externs scopeIsLocal*/
+        scopeIsLocal        : ( /^true$/.test('{{ page.environment.scopeIsLocal }}') ) ? true : false,
+        /**@js_externs scopeIsProduction*/
+        scopeIsProduction   : ( /^true$/.test('{{ page.environment.scopeIsProduction }}') ) ? true : false,
+        /**@js_externs version*/
+        //version           : '{{ page.environment.version }}',
+        /**@js_externs webroot*/
+        'webroot'           : '{{ page.environment.webroot }}'
+        // /**@js_externs routing*/
+        // 'routing': JSON.parse(decodeURIComponent('{{ page.environment.routing }}')),
+        // /**@js_externs reverseRouting*/
+        // 'reverseRouting': JSON.parse(decodeURIComponent('{{ page.environment.reverseRouting }}'))
+    };
+
+
+
+    // Overriding in case of already defined config
+    if ( typeof(gina['config']) != 'undefined' ) {
+        for (let prop in gina['config'] ) {
+            options[prop] = gina['config'][prop];
+        }
+    }
+    gina['config'] = options;
+
+    if ( typeof(getTimeout) == 'undefined' ) {
+        /**
+         * getTimeout
+         * Get session timeout
+         *
+         * @param {object} _this - `gina.session`
+         *
+         * @returns {date} extpiresAt
+        */
+        var getTimeout = function(_this) {
+            if (!_this['lastModified']) {
+                return null;
+            }
+            if ( _this['lastModified'] && typeof(_this['lastModified']) == 'string' ) {
+                _this['lastModified'] = new Date(_this['lastModified']);
+            }
+            if ( _this['createdAt'] && typeof(_this['createdAt']) == 'string' ) {
+                _this['createdAt'] = new Date(_this['createdAt']);
+            }
+            if ( _this['originalTimeout'] && typeof(_this['originalTimeout']) == 'string' ) {
+                _this['originalTimeout'] = parseInt(_this['originalTimeout']);
+            }
+            _this['expiresAt'] = new Date(new Date(_this['lastModified']).getTime() + _this['originalTimeout'])
+
+            return _this['expiresAt'] - new Date();
+        }
+    }
+
+    if ( !gina['session'] ) {
+
+        gina['session'] = {
+            /**@js_externs id*/
+            'id'                    : '{{ page.data.session.id }}' || null,
+            /**@js_externs originalTimeout*/
+            'originalTimeout'       : '{{ page.data.session.timeout }}' || (1000 * 60 * 5),
+            /**@js_externs createdAt*/
+            'createdAt'             : '{{ page.data.session.createdAt }}' || null,
+            /**@js_externs lastModified*/
+            'lastModified'          : '{{ page.data.session.lastModified }}' || null,
+            /**@js_externs expiresAt*/
+            'expiresAt'             : null
+        };
+
+        gina['session'].__defineGetter__("timeout", function () {
+            return getTimeout(this);
+        });
+        // Trigger timeout assignment - will trigger a compilation warning
+        gina['session'].timeout;
+    }
+
+
+
+    // Globals
+    window['GINA_ENV']          = '{{ page.environment.env }}';
+    window['GINA_ENV_IS_DEV']   = /^true$/i.test('{{ page.environment.envIsDev }}') ? true : false;
+    if ( typeof(location.search) != 'undefined' && /debug\=/i.test(window.location.search) ) {
+        var search = (' ' + window.location.search).slice(1);
+        if (!search && /\?/.test(window.location.href) ) {
+            search = window.location.href.match(/\?.*/);
+            if (Array.isArray(search) && search.length > 0) {
+                search = search[0]
+            }
+        }
+        var matched = search.match(/debug=(true|false)/);
+        if (matched)
+            window['GINA_ENV_IS_DEV'] = gina['config']['envIsDev'] = options['envIsDev'] = /^true$/i.test(matched[0].split(/\=/)[1]) ? true: false;
+    }
+
+    window['GINA_SCOPE']                = '{{ page.environment.scope }}';
+    window['GINA_SCOPE_IS_LOCAL']       = /^true$/i.test('{{ page.environment.scopeIsLocal }}') ? true : false;
+    window['GINA_SCOPE_IS_PRODUCTION']  = /^true$/i.test('{{ page.environment.scopeIsProduction }}') ? true : false;
+
+
+    gina["setOptions"](options);
+    gina["isFrameworkLoaded"]       = true;
+
+    // Cooking css into the head
+    var link    = null;
+    link        = document.createElement('link');
+    link.href   = options.webroot + "css/vendor/gina/gina.min.css";
+    link.media  = "screen";
+    link.rel    = "stylesheet";
+    link.type   = "text/css";
+    document.getElementsByTagName('head')[0].appendChild(link);
+    link = null;
+
+    return true;
+}
+function _onGinaLoadedEvent(event) {
+    window['gina'] = event.detail;
+    (window['onGinaLoaded'] || _ginaFallbackOnLoaded)(event.detail);
+}
+if (document.addEventListener) {
+    document.addEventListener("ginaloaded", _onGinaLoadedEvent);
+} else if (document.attachEvent) {
+    document.attachEvent("ginaloaded", _onGinaLoadedEvent);
+}
+
 
 define('core', ['require', 'gina'], function (require) {
     require('gina')(window['gina']); // passing core required lib through parameters
@@ -30364,6 +30516,8 @@ function getDependencies(gina, cb) {
 }
 
 // catching gina script load event
+// NOTE — immediately invoked (the trailing `}();`): getDependencies runs at PARSE, and
+// `onload` receives the call's undefined return value; it is not an onload handler.
 var tags = document.getElementsByTagName('script');
 for (var t = 0, len = tags.length; t < len; ++t) {
     if ( /(gina\.min\.js|gina\.js)/.test( tags[t].getAttribute('src') ) ) {
@@ -30371,160 +30525,11 @@ for (var t = 0, len = tags.length; t < len; ++t) {
 
             console.debug('Core Gina loaded !');
             getDependencies(gina, function onDepsReady() {
-                if (window['onGinaLoaded']) {
-                    var onGinaLoaded = window['onGinaLoaded']
-                } else {
-                    // TODO - get the version number from the response ?? console.log('tag ', tags[t].getAttribute('data-gina-config'));
-                    // var req = new XMLHttpRequest();
-                    // req.open('GET', document.location, false);
-                    // req.send(null);
-                    // var version = req.getAllResponseHeaders().match(/X-Powered-By:(.*)/)[0].replace('X-Powered-By: ', '');
-                    function onGinaLoaded(gina) {
-
-                        if (!gina) {
-                            return false
-                        }
-
-                        if ( gina["isFrameworkLoaded"] ) {
-                            return true
-                        }
-
-                        // var options = gina['config'] = {
-                        var options = {
-                            /**@js_externs env*/
-                            env                 : '{{ page.environment.env }}',
-                            /**@js_externs envIsDev*/
-                            envIsDev            : ( /^true$/.test('{{ page.environment.envIsDev }}') ) ? true : false,
-                            /**@js_externs scope*/
-                            scope               : '{{ page.environment.scope }}',
-                            /**@js_externs scopeIsLocal*/
-                            scopeIsLocal        : ( /^true$/.test('{{ page.environment.scopeIsLocal }}') ) ? true : false,
-                            /**@js_externs scopeIsProduction*/
-                            scopeIsProduction   : ( /^true$/.test('{{ page.environment.scopeIsProduction }}') ) ? true : false,
-                            /**@js_externs version*/
-                            //version           : '{{ page.environment.version }}',
-                            /**@js_externs webroot*/
-                            'webroot'           : '{{ page.environment.webroot }}'
-                            // /**@js_externs routing*/
-                            // 'routing': JSON.parse(decodeURIComponent('{{ page.environment.routing }}')),
-                            // /**@js_externs reverseRouting*/
-                            // 'reverseRouting': JSON.parse(decodeURIComponent('{{ page.environment.reverseRouting }}'))
-                        };
-
-
-
-                        // Overriding in case of already defined config
-                        if ( typeof(gina['config']) != 'undefined' ) {
-                            for (let prop in gina['config'] ) {
-                                options[prop] = gina['config'][prop];
-                            }
-                        }
-                        gina['config'] = options;
-
-                        if ( typeof(getTimeout) == 'undefined' ) {
-                            /**
-                             * getTimeout
-                             * Get session timeout
-                             *
-                             * @param {object} _this - `gina.session`
-                             *
-                             * @returns {date} extpiresAt
-                            */
-                            var getTimeout = function(_this) {
-                                if (!_this['lastModified']) {
-                                    return null;
-                                }
-                                if ( _this['lastModified'] && typeof(_this['lastModified']) == 'string' ) {
-                                    _this['lastModified'] = new Date(_this['lastModified']);
-                                }
-                                if ( _this['createdAt'] && typeof(_this['createdAt']) == 'string' ) {
-                                    _this['createdAt'] = new Date(_this['createdAt']);
-                                }
-                                if ( _this['originalTimeout'] && typeof(_this['originalTimeout']) == 'string' ) {
-                                    _this['originalTimeout'] = parseInt(_this['originalTimeout']);
-                                }
-                                _this['expiresAt'] = new Date(new Date(_this['lastModified']).getTime() + _this['originalTimeout'])
-
-                                return _this['expiresAt'] - new Date();
-                            }
-                        }
-
-                        if ( !gina['session'] ) {
-
-                            gina['session'] = {
-                                /**@js_externs id*/
-                                'id'                    : '{{ page.data.session.id }}' || null,
-                                /**@js_externs originalTimeout*/
-                                'originalTimeout'       : '{{ page.data.session.timeout }}' || (1000 * 60 * 5),
-                                /**@js_externs createdAt*/
-                                'createdAt'             : '{{ page.data.session.createdAt }}' || null,
-                                /**@js_externs lastModified*/
-                                'lastModified'          : '{{ page.data.session.lastModified }}' || null,
-                                /**@js_externs expiresAt*/
-                                'expiresAt'             : null
-                            };
-
-                            gina['session'].__defineGetter__("timeout", function () {
-                                return getTimeout(this);
-                            });
-                            // Trigger timeout assignment - will trigger a compilation warning
-                            gina['session'].timeout;
-                        }
-
-
-
-                        // Globals
-                        window['GINA_ENV']          = '{{ page.environment.env }}';
-                        window['GINA_ENV_IS_DEV']   = /^true$/i.test('{{ page.environment.envIsDev }}') ? true : false;
-                        if ( typeof(location.search) != 'undefined' && /debug\=/i.test(window.location.search) ) {
-                            var search = (' ' + window.location.search).slice(1);
-                            if (!search && /\?/.test(window.location.href) ) {
-                                search = window.location.href.match(/\?.*/);
-                                if (Array.isArray(search) && search.length > 0) {
-                                    search = search[0]
-                                }
-                            }
-                            var matched = search.match(/debug=(true|false)/);
-                            if (matched)
-                                window['GINA_ENV_IS_DEV'] = gina['config']['envIsDev'] = options['envIsDev'] = /^true$/i.test(matched[0].split(/\=/)[1]) ? true: false;
-                        }
-
-                        window['GINA_SCOPE']                = '{{ page.environment.scope }}';
-                        window['GINA_SCOPE_IS_LOCAL']       = /^true$/i.test('{{ page.environment.scopeIsLocal }}') ? true : false;
-                        window['GINA_SCOPE_IS_PRODUCTION']  = /^true$/i.test('{{ page.environment.scopeIsProduction }}') ? true : false;
-
-
-                        gina["setOptions"](options);
-                        gina["isFrameworkLoaded"]       = true;
-
-                        // Cooking css into the head
-                        var link    = null;
-                        link        = document.createElement('link');
-                        link.href   = options.webroot + "css/vendor/gina/gina.min.css";
-                        link.media  = "screen";
-                        link.rel    = "stylesheet";
-                        link.type   = "text/css";
-                        document.getElementsByTagName('head')[0].appendChild(link);
-                        link = null;
-
-                        return true;
-                    }
-                } // EO if (window['onGinaLoaded'])
-
-
-                if (document.addEventListener) {
-                    document.addEventListener("ginaloaded", function(event){
-                        // console.debug('[addEventListener] Gina Framework is ready !');
-                        window['gina'] = event.detail;
-                        onGinaLoaded(event.detail)
-                    });
-                } else if (document.attachEvent) {
-                    document.attachEvent("ginaloaded", function(event){
-                        // console.debug('[attachEvent] Gina Framework is ready !');
-                        window['gina'] = event.detail;
-                        onGinaLoaded(event.detail)
-                    });
-                }
+                // #B483 — nothing left to do here: the `ginaloaded` listener is
+                // attached at PARSE TIME (file scope, above `define('core')`) and
+                // resolves the loader lazily. This continuation is kept so that
+                // getDependencies' settle order — `_settleDeps(); cb()` — stays
+                // byte-identical (#B414).
             }); // EO await getDependencies
         }();
 
