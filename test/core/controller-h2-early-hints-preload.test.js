@@ -228,10 +228,12 @@ describe('05 - #B496 behavioural replay of the prefix builder', function () {
 
     it('applies the webroot prefix only when the url lacks it', function () {
         // The framework's join is literal — `webroot + url.substring(1)`, with NO
-        // separator inserted — because `webroot` is guaranteed to END in one:
-        // config.js normalises it at load ("formating wroot to have /mywebroot/",
-        // config.js:1728-1729 forces both a leading and a trailing slash), which is
-        // also why config.js:2188 can strip a trailing char unconditionally. So the
+        // separator inserted — because `webroot` is guaranteed to END in one, at
+        // BOTH of config.js's assignment sites (checked across all of them, not just
+        // the obvious one): :1740 writes the value forced by :1728-1729, and :2271
+        // writes `localWroot`, which is either that same value (:2258) or another
+        // bundle's re-forced through the identical pair at :2263-2264. Which is also
+        // why config.js:2188 can strip a trailing char unconditionally. So the
         // first case below is the real runtime shape. The second pins the raw rule
         // for a webroot lacking the trailing slash: unreachable through config, kept
         // only so a future reader who sees `/weba.css` in a probe knows it means the
