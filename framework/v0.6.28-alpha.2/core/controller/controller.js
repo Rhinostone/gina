@@ -4612,6 +4612,14 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
             var _fluentCbs = [], _settledArgs = null;
             _handle = {
                 onComplete: function(cb) {
+                    // #B485 — fail fast at the caller's line, mirroring store()'s
+                    // registration guard (#B480): a non-function used to be minted
+                    // into a deliverer whose call threw inside _fluentDelivery's own
+                    // try/catch and came back as a "Query Exception while catching
+                    // back" 500 blaming the application callback.
+                    if ( typeof(cb) != 'function' ) {
+                        throw new TypeError('Controller::query — onComplete expects a function, got ' + ( cb === null ? 'null' : typeof(cb) ));
+                    }
                     var deliver = _fluentDelivery(cb);
                     _fluentCbs.push(deliver);
                     if (_settledArgs) { // registered after the call settled
