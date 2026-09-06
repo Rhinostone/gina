@@ -43,12 +43,13 @@ function PathHelper() {
     var _this = this;
 
     /**
-     * Normalise a path string or construct a PathObject for a directory.
+     * Normalise a path string, or construct a PathObject.
      *
-     * When called with a plain string it resolves platform separators and optional
-     * `$HOME` / `~` expansion and returns a normalised string.  When called without
-     * `force` on a directory path it returns a PathObject with helpers like
-     * `existsSync()`, `mkdirSync()`, `cp()`, etc.
+     * The return type is decided by `new`, not by the path and not by `force`.
+     * Called as a plain function, `_(path)` resolves platform separators and
+     * optional `$HOME` / `~` expansion and returns a normalised **string**.
+     * Called with `new`, `new _(path)` returns a **PathObject** carrying the file
+     * helpers (`existsSync()`, `mkdirSync()`, `mkdir()`, `cp()`, `mv()`, `rm()`).
      *
      * Injected as a global by `PathHelper` — do not import directly.
      *
@@ -56,9 +57,14 @@ function PathHelper() {
      * @function _
      *
      * @param {string}  path    - Path to convert
-     * @param {boolean} [force] - Force string conversion (bypasses PathObject construction)
+     * @param {boolean} [force] - Windows only, and only for the string form:
+     *                              keep back-slashes instead of normalising to
+     *                              forward slashes. It does NOT bypass PathObject
+     *                              construction — `new _(p, true)` still returns a
+     *                              PathObject, which ignores the flag.
      *
-     * @returns {string|object} Normalised path string, or a PathObject instance
+     * @returns {string|object} A normalised string when called as a function; a
+     *                          PathObject when called with `new`
      *
      * @see PathHelper
      */
@@ -1941,10 +1947,17 @@ function PathHelper() {
      * @returns {Promise<*>} Resolves with the operation result, rejects on error
      *
      * @example
-     * // In an async controller action:
+     * // In an async controller action. PathObject ops are callback-style and
+     * // return `undefined`, so they are promisified rather than passed to
+     * // onCompleteCall, which needs an object exposing `.onComplete(cb)`:
      * Controller.prototype.upload = async function(req, res, next) {
      *     var self = this;
-     *     await onCompleteCall( _(self.uploadDir).mkdir() );
+     *     await new Promise(function(resolve, reject) {
+     *         new _(self.uploadDir).mkdir(function(err) {
+     *             if (err) return reject(err);
+     *             resolve();
+     *         });
+     *     });
      *     self.renderJSON({ ok: true });
      * };
      */

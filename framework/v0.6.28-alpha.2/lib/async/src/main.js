@@ -10,10 +10,14 @@
  * @module lib/async
  * @description Async bridging utilities for Gina's EventEmitter-based callback patterns.
  *
- * Gina's PathObject file operations (`mkdir`, `cp`, `mv`, `rm`), Shell commands,
- * and any user-defined class that adopts the `.onComplete(cb)` convention return
- * EventEmitter instances. These utilities wrap the callback into a native Promise
- * so callers can use `async/await`.
+ * Shell commands (`Shell::run`), the `run()` global, and any user-defined class
+ * that adopts the `.onComplete(cb)` convention return EventEmitter instances.
+ * These utilities wrap the callback into a native Promise so callers can use
+ * `async/await`.
+ *
+ * PathObject file operations (`mkdir`, `cp`, `mv`, `rm`) are NOT part of that
+ * set: they are Node-style callback methods that return `undefined`, so they
+ * cannot be wrapped by `onCompleteCall` — promisify their callback instead.
  *
  * @package    gina.framework
  * @namespace  lib.async
@@ -25,10 +29,10 @@
 /**
  * Wrap an `.onComplete(cb)` emitter into a Promise.
  *
- * Accepts any object that exposes an `onComplete(callback)` method — PathObject
- * file operations, Shell commands, or any user-defined class that follows the
- * same convention. The callback signature is `(err, result)`: on error, the
- * Promise rejects with `err`; on success, it resolves with `result`.
+ * Accepts any object that exposes an `onComplete(callback)` method — a `Shell`
+ * command, the `run()` global, or any user-defined class that follows the same
+ * convention. The callback signature is `(err, result)`: on error, the Promise
+ * rejects with `err`; on success, it resolves with `result`.
  *
  * @memberof module:lib/async
  * @param {object} emitter - An object with an `onComplete(cb)` method
@@ -36,20 +40,30 @@
  * @throws {TypeError} If `emitter` is falsy or lacks an `onComplete` method
  *
  * @example
- * // Await a PathObject directory creation:
- * var dir = await onCompleteCall( _(self.uploadDir).mkdir() );
+ * // Await a Shell command — `Shell::run` returns the emitter:
+ * var output = await onCompleteCall( new lib.Shell().run('ls -la', true) );
  *
  * @example
- * // Await a Shell command:
- * var output = await onCompleteCall( lib.Shell('ls -la') );
+ * // Await the `run()` global (also exported as `gna.run`):
+ * var output = await onCompleteCall( run([ 'ls', '-la' ], { cwd: self.uploadDir }) );
+ *
+ * @example
+ * // PathObject ops are callback-style and return `undefined`, so onCompleteCall
+ * // cannot wrap them — promisify the callback:
+ * var dir = await new Promise(function(resolve, reject) {
+ *     new _(self.uploadDir).mkdir(function(err, path) {
+ *         if (err) return reject(err);
+ *         resolve(path);
+ *     });
+ * });
  *
  * @example
  * // In an async controller action:
  * Controller.prototype.upload = async function(req, res, next) {
  *     var self = this;
  *     try {
- *         await onCompleteCall( _(self.uploadDir).mkdir() );
- *         self.renderJSON({ ok: true });
+ *         var output = await onCompleteCall( new lib.Shell().run('ls -la', true) );
+ *         self.renderJSON({ ok: true, output: output });
  *     } catch (err) {
  *         self.throwError(res, 500, err);
  *     }

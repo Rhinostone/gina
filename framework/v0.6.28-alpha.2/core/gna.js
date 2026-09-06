@@ -2568,12 +2568,14 @@ gna.setPaths = setPaths;
 gna.getPaths = getPaths;
 
 /**
- * Promisify an `.onComplete(cb)` EventEmitter from PathObject / Shell ops.
+ * Promisify an `.onComplete(cb)` EventEmitter, as returned by `Shell::run` or
+ * the `run()` global. PathObject ops are callback-style and return `undefined`,
+ * so they are promisified directly rather than passed here.
  *
  * @param {EventEmitter} emitter - Any object exposing `.onComplete(cb)`
  * @returns {Promise<*>} Resolves with the operation result
  * @example
- *   await onCompleteCall( _(dir).mkdir() );
+ *   var output = await onCompleteCall( new lib.Shell().run('ls -la', true) );
  */
 gna.onCompleteCall = onCompleteCall;
 
