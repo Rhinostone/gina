@@ -265,3 +265,147 @@ describe('02 - #B488 behaviour, forward() compiled from the source', function() 
         assert.strictEqual(f.calls.query[0].opt.ca, 'CA');
     });
 });
+
+
+// ── 03 — #B489: a parsed multipart request is relayed AS multipart ───────────
+// Own fixtures on purpose: §02's helpers are left byte-unchanged, and the REAL
+// encoder is wired in (not a stub) so these arms exercise forward() + lib/multipart
+// together — the seam #B489 actually adds.
+
+describe('03 - #B489 multipart relay, forward() compiled from the source', function() {
+
+    var os        = require('os');
+    var multipart = require(path.join(FW, 'lib', 'multipart', 'src', 'main.js'));
+
+    function fakes3(over) {
+        over = over || {};
+        var calls = { query: [], throwError: [], renderJSON: [], renderTEXT: [], getRoute: [] };
+        var self = {
+            throwError  : function() { calls.throwError.push([].slice.call(arguments)); },
+            getConfig   : function() { return { server: { credentials: {} } }; },
+            isCacheless : function() { return false; },
+            isLocalScope: function() { return false; },
+            query       : function(opt, data, cb) { calls.query.push({ opt: opt, data: data }); if (over.deliver) over.deliver(cb); },
+            renderJSON  : function(d) { calls.renderJSON.push(d); },
+            renderTEXT  : function(d) { calls.renderTEXT.push(d); }
+        };
+        var local = { options: { conf: { projectName: 'proj', bundle: 'front', env: 'dev' } } };
+        var lib   = {
+            multipart: multipart,
+            routing  : { getRoute: function(rule, params, urlIndex) {
+                calls.getRoute.push({ rule: rule, params: params, urlIndex: urlIndex });
+                return { url: '/api/receive' };
+            } }
+        };
+        var getContext = function() { return { config: { envConf: {} } }; };
+        return { self: self, local: local, lib: lib, getContext: getContext, calls: calls };
+    }
+    function build3(f) {
+        var src = region().replace('this.forward = function', 'var forward = function');
+        return new Function('self', 'local', 'lib', 'getContext', src + '\nreturn forward;')(f.self, f.local, f.lib, f.getContext);
+    }
+    // A real staged part on disk — the encoder stats it and reads it, exactly as it
+    // does for a live `req.files` record.
+    function staged(bytes, name) {
+        var p = path.join(os.tmpdir(), 'gina-b489-' + Date.now() + '-' + Math.random().toString(16).slice(2) + '.part');
+        fs.writeFileSync(p, bytes);
+        return { name: name || 'doc', group: 'untagged', originalFilename: 'a.bin', encoding: '7bit', type: 'application/octet-stream', size: bytes.length, path: p };
+    }
+    function mreq(files, over) {
+        return Object.assign({
+            method: 'POST', params: {}, post: { tag: 'x', nested: { k: 'v' } }, files: files,
+            routing: { rule: 'up', param: { control: 'forward', url: 'upload-receive@api' } }
+        }, over || {});
+    }
+
+    it('a multipart request is re-encoded: query() gets a Buffer body, the multipart content-type and empty data', function() {
+        var rec = staged(Buffer.from([1, 2, 3, 4, 5]));
+        try {
+            var f = fakes3();
+            build3(f)(mreq([rec]), {}, function() {});
+            assert.strictEqual(f.calls.throwError.length, 0, JSON.stringify(f.calls.throwError));
+            assert.strictEqual(f.calls.query.length, 1);
+            var q = f.calls.query[0];
+            assert.ok(Buffer.isBuffer(q.opt.body), 'the body is a Buffer handed to query()');
+            assert.ok(/^multipart\/form-data; boundary=/.test(q.opt.headers['content-type']), 'multipart content-type: ' + q.opt.headers['content-type']);
+            assert.deepStrictEqual(q.data, {}, 'the fields moved into the body; data must be empty or query() refuses it');
+            var b = q.opt.body.toString('latin1');
+            assert.ok(b.indexOf('name="tag"') > -1, 'a flat text field is in the body');
+            assert.ok(b.indexOf('name="nested[k]"') > -1, 'a nested text field is re-flattened to bracket notation');
+            assert.ok(b.indexOf('filename="a.bin"') > -1, 'the file part carries its original filename');
+            assert.ok(b.indexOf('group="untagged"') > -1, 'the resolved upload group travels');
+            assert.ok(fs.existsSync(rec.path), 'the staged file is READ, never deleted — the source owns it');
+        } finally { try { fs.unlinkSync(rec.path); } catch (e) {} }
+    });
+
+    it('files under a method that carries no body are refused with 400, before any upstream call', function() {
+        var rec = staged(Buffer.from([9]));
+        try {
+            var f = fakes3();
+            build3(f)(mreq([rec], { method: 'GET', get: {}, routing: { rule: 'up', param: { control: 'forward', url: 'upload-receive@api', method: 'GET' } } }), {}, function() {});
+            assert.strictEqual(f.calls.query.length, 0, 'upstream never contacted');
+            assert.strictEqual(f.calls.throwError.length, 1);
+            assert.strictEqual(f.calls.throwError[0][0], 400);
+            assert.ok(/method `get`/.test(String(f.calls.throwError[0][1].message)), 'the message names the method: ' + f.calls.throwError[0][1].message);
+        } finally { try { fs.unlinkSync(rec.path); } catch (e) {} }
+    });
+
+    it('a body over the source cap is refused with 413, naming both numbers', function() {
+        var rec = staged(Buffer.alloc(4096, 7));
+        try {
+            var f = fakes3();
+            build3(f)(mreq([rec], { uploadMaxSize: 512 }), {}, function() {});
+            assert.strictEqual(f.calls.query.length, 0, 'nothing is sent upstream');
+            assert.strictEqual(f.calls.throwError.length, 1);
+            assert.strictEqual(f.calls.throwError[0][0], 413);
+            assert.strictEqual(f.calls.throwError[0][1].code, 'MULTIPART_TOO_LARGE');
+            assert.ok(/512/.test(String(f.calls.throwError[0][1].message)), 'the limit is named');
+        } finally { try { fs.unlinkSync(rec.path); } catch (e) {} }
+    });
+
+    it('a staged file that is gone is answered as a 500 naming the path, never an escaped throw', function() {
+        var rec = staged(Buffer.from([1]));
+        fs.unlinkSync(rec.path); // the cleanup timer got there first
+        var f = fakes3();
+        build3(f)(mreq([rec]), {}, function() {});
+        assert.strictEqual(f.calls.query.length, 0);
+        assert.strictEqual(f.calls.throwError.length, 1);
+        assert.strictEqual(f.calls.throwError[0][0], 500);
+        assert.strictEqual(f.calls.throwError[0][1].code, 'MULTIPART_FILE_UNREADABLE');
+        assert.ok(String(f.calls.throwError[0][1].message).indexOf(rec.path) > -1, 'the message names the staged path');
+    });
+
+    it('the parser cap is used when it is usable, and the 16MB default when it is not', function() {
+        // 4096 bytes of payload: passes under the default, refused under a 512-byte cap,
+        // and passes again when the parser stamped a disabled cap (0 / NaN).
+        [undefined, 0, NaN].forEach(function(stamp) {
+            var rec = staged(Buffer.alloc(4096, 3));
+            try {
+                var f = fakes3();
+                build3(f)(mreq([rec], { uploadMaxSize: stamp }), {}, function() {});
+                assert.strictEqual(f.calls.throwError.length, 0, 'cap stamp ' + String(stamp) + ' must fall back to the default: ' + JSON.stringify(f.calls.throwError));
+                assert.strictEqual(f.calls.query.length, 1, 'cap stamp ' + String(stamp) + ' relays');
+                assert.ok(Buffer.isBuffer(f.calls.query[0].opt.body), 'and relays it AS multipart — without this the arm cannot fail on the pre-#B489 bytes');
+            } finally { try { fs.unlinkSync(rec.path); } catch (e) {} }
+        });
+    });
+
+    it('CONTROL - no files: the JSON path is untouched, no body option, data still travels', function() {
+        var f = fakes3();
+        build3(f)(mreq([]), {}, function() {});
+        assert.strictEqual(f.calls.throwError.length, 0);
+        assert.strictEqual(f.calls.query.length, 1);
+        assert.strictEqual(f.calls.query[0].opt.body, undefined, 'no raw body on the non-multipart path');
+        assert.strictEqual(f.calls.query[0].data.tag, 'x', 'the incoming data still travels as data');
+    });
+
+    it('CONTROL - a request with no files property at all behaves exactly as before', function() {
+        var f = fakes3();
+        var r = mreq(undefined);
+        delete r.files;
+        build3(f)(r, {}, function() {});
+        assert.strictEqual(f.calls.throwError.length, 0);
+        assert.strictEqual(f.calls.query.length, 1);
+        assert.strictEqual(f.calls.query[0].opt.body, undefined);
+    });
+});

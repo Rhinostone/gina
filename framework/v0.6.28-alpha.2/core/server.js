@@ -5917,6 +5917,10 @@ function Server(options) {
                         }
                     };
                     var maxSize     = parseSize(opt.maxFieldsSize);                     // bytes
+                    // #B489 — publish the resolved cap so a relay (Controller::forward())
+                    // can bound the multipart body it re-encodes from req.files. NaN or 0
+                    // means the cap is disabled; the relay falls back to its own default.
+                    request.uploadMaxSize = maxSize;
                     var fileSize    = parseInt(request.headers["content-length"], 10);  // bytes
                     var hasAutoTmpCleanupTimeout = (
                         typeof(opt.autoTmpCleanupTimeout) != 'undefined'

@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'A retried HTTP/1 request no longer goes out without its body. The handler deleted `options.queryData` after writing the first attempt and the retry re-entered with the same options object, so the second attempt was sent with `content-length: 0` and an empty body, and whatever the upstream made of that was reported back as the result. It affected any body, but only with `retryUnsafe` enabled, since the methods that auto-retry by default carry none. The body is now stashed on the options the way the HTTP/2 handler already stashed it, and restored on re-entry. Server-side only; pickup is a bundle restart. (#B494)'
+time: 2026-09-06T04:52:01+01:00

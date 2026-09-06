@@ -6755,8 +6755,14 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
      * upstream body is never re-encoded. A non-2xx status, a transport failure
      * or an unknown target route is answered through `throwError()`.
      *
-     * Not relayed: `multipart/form-data` — `query()` has no multipart encoder,
-     * so `req.files` never reach the target.
+     * `multipart/form-data` IS relayed (#B489): the parsed text fields and the
+     * staged `req.files` are re-encoded into one multipart body under a fresh
+     * boundary and sent verbatim, so uploads reach the target. The body is
+     * buffered, hence bounded — by the source bundle's `upload.maxFieldsSize`
+     * when that cap is configured, else by a 16 MB default; a breach answers
+     * 413. Files need a body-carrying method: relaying them under a method that
+     * carries no body answers 400. Staged files are read, never deleted — the
+     * source's own cleanup timer still owns them.
      *
      * Reserved `param` keys (never forwarded as placeholders): `url`,
      * `urlIndex`, `control`, `file`, `title`, `bundle`, `project`, `hostname`,
@@ -6781,6 +6787,15 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
      * "invoice-relay": {
      *   "url": "/legacy/invoice/:id",
      *   "param": { "control": "forward", "url": "invoice-get@api", "id": ":id" }
+     * }
+     *
+     * @example
+     * // routing.json — an upload POSTed here is re-encoded and relayed to the
+     * // sibling bundle, files included (#B489)
+     * "upload-relay": {
+     *   "url": "/upload",
+     *   "method": "POST",
+     *   "param": { "control": "forward", "url": "upload-receive@api" }
      * }
      */
     this.forward = function(req, res, next) {
@@ -6854,6 +6869,37 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
         }
 
         var obj = req[ req.method.toLowerCase() ];
+
+        // #B489 — relay a parsed multipart request AS multipart. Without this, query()
+        // JSON-encodes `data`, so the target received the nested text fields as JSON and
+        // `req.files` never travelled at all.
+        if ( Array.isArray(req.files) && req.files.length > 0 ) {
+            if ( !/^(post|put|patch)$/.test(opt.method) ) {
+                self.throwError(400, new Error('forward: cannot relay '+ req.files.length +' uploaded file(s) with method `'+ opt.method +'` — files need a body-carrying method (post, put or patch)'));
+                return;
+            }
+            // The source's own cap when the parser stamped a usable one, else a hard
+            // default: `upload.maxFieldsSize` is disabled when unset / 0 / invalid, and
+            // even when set it compares a content-length header a chunked request never
+            // sends — so it cannot be relied on to bound what we are about to buffer.
+            var relayCap = ( typeof(req.uploadMaxSize) == 'number' && isFinite(req.uploadMaxSize) && req.uploadMaxSize > 0 )
+                ? req.uploadMaxSize
+                : (16 * 1024 * 1024);
+            var enc = null;
+            try {
+                enc = lib.multipart.encode({ fields: obj, files: req.files }, { maxSize: relayCap });
+            } catch (encErr) {
+                // Over the cap is the caller's problem; a staged file we cannot read
+                // (already swept, never flushed) is ours. Neither may escape the action.
+                self.throwError(( encErr && encErr.code == 'MULTIPART_TOO_LARGE' ) ? 413 : 500, encErr);
+                return;
+            }
+            opt.headers = opt.headers || {};
+            opt.headers['content-type'] = enc.contentType;
+            opt.body = enc.body;   // #B489 — query()'s raw-body pass-through
+            obj = {};              // the fields are in the body now; a non-empty data would be refused
+        }
+
         self.query(opt, obj, function onForward(err, result) {
             if (err) {
                 self.throwError(err);
