@@ -4582,6 +4582,12 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
      *   `options.auth` (`"user:password"`) is minted into an `Authorization: Basic`
      *   header on both transports before dispatch; a caller-supplied
      *   `authorization` header wins (#B465).
+     *   `options.body` (Buffer | string, #B489) is sent verbatim under the caller's
+     *   own `headers['content-type']` (defaulting to `application/octet-stream`) on
+     *   both transports — the json labelling and the HTTP/2 incoming content-type
+     *   relabel are both skipped. `data` must then be empty (`BODY_AND_DATA`); any
+     *   other body type is refused (`BODY_TYPE`). Both refusals are synchronous and
+     *   the upstream is never contacted.
      * @param {object}   [data]           - Request body / query params
      * @param {function} [callback]       - `callback(err, result)` — omit (or pass `null`) to get the onComplete handle
      * @fires SuperController#query.complete only from the one-tick fallback, when nothing consumed the outcome (no callback, no `onComplete`) — the two transport handlers never emit
@@ -4690,6 +4696,28 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
         var isCritical = typeof options.critical === 'boolean' ? options.critical : true;
         delete options.critical; // not an HTTP option — remove before merge/clean
 
+        // #B489 — raw-body pass-through: a Buffer or string sent as-is under the caller's
+        // own content-type. Extracted HERE, before the clone/merge below, for the same
+        // reason `critical` is: JSON.clone() recurses into any object, so a Buffer left on
+        // `options` would come out of the clone as a plain object of bytes.
+        var rawBody    = options.body;
+        var hasRawBody = ( typeof(rawBody) != 'undefined' && rawBody !== null );
+        // Whether the CALLER labelled it: defaultOptions below fills content-type with the
+        // json mime, so after the merge an unlabelled raw body is indistinguishable from a
+        // deliberately json-labelled one. Decided here, while options is still the caller's.
+        var hasRawBodyCT = !!( hasRawBody && options.headers && options.headers['content-type'] );
+        delete options.body;
+        if ( hasRawBody && !Buffer.isBuffer(rawBody) && typeof(rawBody) != 'string' ) {
+            err = new Error('SuperController::query() `body` must be a Buffer or a string, got ' + typeof(rawBody));
+            err.code = 'BODY_TYPE';
+            try {
+                _ownAsyncCbRejection(callback(err))
+            } catch (_syncCbErr) {
+                _ownSyncCbThrow(_syncCbErr);
+            }
+            return _handle;
+        }
+
         var queryData           = {}
             , defaultOptions    = local.query.options
             , path              = options.path
@@ -4776,7 +4804,24 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
 
 
         
-        if ( typeof(data) != 'undefined' &&  data.count() > 0) {
+        if ( hasRawBody ) {
+            // #B489 — the raw body travels verbatim; data beside it has no wire form and is
+            // refused rather than silently dropped.
+            if ( data && typeof(data) == 'object' && Object.keys(data).length > 0 ) {
+                err = new Error('SuperController::query() refused: `body` and a non-empty `data` were both given');
+                err.code = 'BODY_AND_DATA';
+                try {
+                    _ownAsyncCbRejection(callback(err))
+                } catch (_syncCbErr) {
+                    _ownSyncCbThrow(_syncCbErr);
+                }
+                return _handle;
+            }
+            queryData = rawBody;
+            // read by the HTTP/2 request prep (skips the incoming content-type relabel);
+            // listed in _NON_HTTP_OPTS so it never becomes a header
+            options._rawBody = true;
+        } else if ( typeof(data) != 'undefined' &&  data.count() > 0) {
 
             queryData = '?';
             // TODO - if 'application/json' && method == (put|post)
@@ -4814,11 +4859,17 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
         }
 
 
-        // Internet Explorer override
-        if ( local.req != null && /msie/i.test(local.req.headers['user-agent']) ) {
-            options.headers['content-type'] = 'text/plain';
-        } else {
-            options.headers['content-type'] = local.options.conf.server.coreConfiguration.mime['json'];
+        // #B489 — a raw body keeps the caller's own label; the forcing below belongs to
+        // the data-encoded path, whose wire form really is json (or the MSIE text/plain).
+        if ( !hasRawBody ) {
+            // Internet Explorer override
+            if ( local.req != null && /msie/i.test(local.req.headers['user-agent']) ) {
+                options.headers['content-type'] = 'text/plain';
+            } else {
+                options.headers['content-type'] = local.options.conf.server.coreConfiguration.mime['json'];
+            }
+        } else if ( !hasRawBodyCT ) {
+            options.headers['content-type'] = 'application/octet-stream'; // #B489 — unlabelled raw bytes
         }
 
         // if ( typeof(local.req.headers.cookie) == 'undefined' && typeof(local.res._headers['set-cookie']) != 'undefined' ) { // useful for CORS : forward cookies from the original request
@@ -5414,6 +5465,9 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                 }
             }
         }
+        if ( retryCount > 0 && typeof(options.queryData) == 'undefined' && Buffer.isBuffer(options._body) ) {
+            options.queryData = options._body; // #B494 — restore the stashed body: the first attempt deleted queryData
+        }
         let body = "";
         if (options.queryData) {
             // Convert into Buffer to properly handle UTF-8
@@ -5423,6 +5477,7 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
 
             options.headers['content-length'] = body.length;
             options.queryData = body;
+            options._body = body; // #B494 — stash (mirrors the HTTP/2 handler) so a retry re-sends the same body
         } else {
             options.headers['content-length'] = 0;
         }
@@ -5902,7 +5957,7 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
         // receiving bundle's urlencoded parse then corrupts `+`/`%XX` inside JSON string
         // values (same corruption #FORMCT fixed in the browser validator). The forward is
         // kept for non-JSON outbound bodies (e.g. the MSIE text/plain override).
-        if ( local.req != null && typeof(local.req.headers['content-type']) != 'undefined' && local.req.headers['content-type'] != options.headers['content-type'] && !/application\/json/i.test(options.headers['content-type']) ) {
+        if ( local.req != null && typeof(local.req.headers['content-type']) != 'undefined' && local.req.headers['content-type'] != options.headers['content-type'] && !/application\/json/i.test(options.headers['content-type']) && !options._rawBody ) {
             options.headers['content-type'] = local.req.headers['content-type']
         }
 
@@ -5956,7 +6011,7 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
         //   - Remove undefined/null values
         var _NON_HTTP_OPTS = new Set([
             'auth', // #B465 belt — minted into Authorization pre-dispatch, never a header itself
-            '_body', '_comment', 'ca', 'hostname', 'host', 'port',
+            '_body', '_rawBody', '_comment', 'ca', 'hostname', 'host', 'port',
             'requestTimeout', 'keepAlive', 'maxSockets', 'keepAliveMsecs', 'maxFreeSockets',
             'rejectUnauthorized', 'maxRetry', 'retryUnsafe', 'agent', 'protocol', 'scheme',
             'nameservers', 'settings', 'webroot', 'queryData', 'method', 'path'
