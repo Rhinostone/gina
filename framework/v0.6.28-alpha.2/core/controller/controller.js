@@ -7850,6 +7850,12 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
      * Stamps `res.statusCode` from the error's `status` — when it is a known
      * status code — before dispatching, so every render delegate serves the
      * custom page with the real HTTP status (#B190).
+     * Points `errOptions.template` at the request's own template object and
+     * re-seeds its per-response accumulators (`h2Links`, `externalPlugins`)
+     * before dispatching, so the error page's `link` preload header and its
+     * external-plugin tags are built from the object `getNodeRes()` writes
+     * to, and are never doubled by a failure that struck after the failing
+     * route's assets were already resolved (#B497).
      *
      * @param {object}   req  - Incoming request (reads `req.routing.param`)
      * @param {object}   res  - Server response
@@ -7928,6 +7934,36 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                 file: req.routing.param.file,
                 path: null
             }, local.options);
+        }
+        // #B497 — the render delegates resolve their view config as
+        // `errOptions || local.options` and build the final-200 `link` preload
+        // header from `localOptions.template.h2Links`, while getNodeRes()
+        // accumulates into `local.options.template.h2Links`. lib/merge grafts
+        // `template` onto errOptions as a NEW shallow copy (nested arrays
+        // shared, scalars copied at merge time), so on a custom-error render
+        // the writer and the reader held different objects and the
+        // config-declared preloads never reached the error page's header.
+        // One request, one response, one template-state object: point the
+        // error render at the request's own — exactly what a normal render
+        // (errOptions null) already sees.
+        if ( errOptions && local.options.template ) {
+            errOptions.template = local.options.template;
+        }
+        // A custom-error render is a SECOND top-level render on the same
+        // response, so re-seed the per-response accumulators the router seeds
+        // per request (router.js — `h2Links = ''` under http/2,
+        // `externalPlugins = []`): an error that strikes AFTER the failing
+        // route's setResources() ran (a template compilation error) would
+        // otherwise make getNodeRes() append a second copy of every preload
+        // to the 200 header and splice every external plugin into the head
+        // twice. Under http/1 h2Links is never seeded and stays undefined.
+        if ( local.options.template ) {
+            if ( typeof(local.options.template.h2Links) == 'string' ) {
+                local.options.template.h2Links = '';
+            }
+            if ( Array.isArray(local.options.template.externalPlugins) ) {
+                local.options.template.externalPlugins = [];
+            }
         }
         // #B190 — stamp the HTTP status on the response before the render
         // dispatch. The swig and v1 delegates recompute it downstream from
