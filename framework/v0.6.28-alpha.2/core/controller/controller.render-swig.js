@@ -307,6 +307,9 @@ module.exports = async function render(userData, displayInspector, errOptions, d
         , htmlContent       = null
         , cacheKey          = null
         , cacheObject       = null
+        // #B495 — the assembled http/2 `link` preload header, built on the compile
+        // path and memoised on the compiled-template cache entry for the hit path
+        , _h2PreloadLinks   = null
         , plugin            = null
         // By default
         , isWithoutLayout   = (localOptions.isWithoutLayout) ? true : false
@@ -1078,6 +1081,17 @@ module.exports = async function render(userData, displayInspector, errOptions, d
             && cache.has(cacheKey)
         ) {
             compiledTemplate = cache.get(cacheKey).template;
+            // #B495 — the entry carries what the compile path left behind: the
+            // assembled `link` preload header (emitted below under the compile
+            // path's own gates) and the parsed getAssets() map, restored onto this
+            // request's template clone — the router clones options per request,
+            // so the map a compile wrote to localOptions.template died with that
+            // request and a hit resolved `view.assets` to nothing (#B490's hit-path
+            // gap).
+            var _swigEntry = cache.get(cacheKey);
+            if ( localOptions.template && _swigEntry.assets && typeof(localOptions.template.assets) == 'undefined' ) {
+                localOptions.template.assets = _swigEntry.assets;
+            }
 
             // #FI — inject flow data before template execution on the cache-hit path.
             // The cached compiled template includes the __ginaData script (from the
@@ -1167,6 +1181,10 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                     });
                 }
                 res.setHeader('content-type', localOptions.conf.server.coreConfiguration.mime['html'] + '; charset='+ localOptions.conf.encoding );
+                // #B495 — the memoised preload header, under the compile path's gates
+                if ( _swigEntry.h2Link && !self.isXMLRequest() && !self.isCacheless() ) {
+                    res.setHeader('link', _swigEntry.h2Link);
+                }
 
                 if (
                     !self.isCacheless()
@@ -1700,7 +1718,17 @@ module.exports = async function render(userData, displayInspector, errOptions, d
 
 
             // Only available for http/2.0 for now
-            if ( !self.isXMLRequest() && /http\/2/.test(localOptions.conf.server.protocol) ) {
+            // #B495 — an XHR request skips this block unless the compiled-template
+            // cache is on: the entry written below memoises the map and the header
+            // for EVERY later render of the view, navigation renders included, so a
+            // view whose first request is XHR must not leave it empty (measured — an
+            // XHR render populates the same entry). With the cache off there is no
+            // entry to fill and XHR skips the block as before. The emission keeps its
+            // own gates on both paths.
+            if (
+                /http\/2/.test(localOptions.conf.server.protocol)
+                && ( !self.isXMLRequest() || String(self.serverInstance._cacheIsEnabled).toLowerCase() === 'true' )
+            ) {
                 var assets = null;
                 try {
                     // TODO - button in toolbar to empty url assets cache
@@ -1711,37 +1739,13 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                         localOptions.template.assets = JSON.parse(assets);
                     }
 
-                    if ( !self.isCacheless() ) {
-                        var links = localOptions.template.h2Links;
-                        for (let l in localOptions.template.assets) {
-                            let link = localOptions.template.assets[l]
-                            if (
-                                /^_/.test(l)
-                                || typeof(link.as) == 'undefined'
-                                || typeof(link.as) != 'undefined'
-                                    && link.as != 'null'
-                                    && !link.isAvailable
-                                || !link.as
-                            ) {
-                                // ignoring
-                                continue;
-                            }
-
-                            links += '<'+ l +'>; as='+ link.as +'; '
-                            if ( link.imagesrcset) {
-                                links += 'imagesrcset='+ link.imagesrcset +'; ';
-                            }
-                            if ( link.imagesizes) {
-                                links += 'imagesizes='+ link.imagesizes +'; ';
-                            }
-                            links += 'rel=preload,'
-
-                        }
-                        if ( /\,$/.test(links) ) {
-                            links = links.substring(0, links.length-1);
-                        }
-                        res.setHeader('link', links);
-                        links = null;
+                    // #B495 — assembled once per compile by a module-scope helper
+                    // (parameters only), memoised on the cache entry below so a hit
+                    // re-emits it without a layout parse; '' when nothing qualifies,
+                    // and an empty header is no longer sent.
+                    _h2PreloadLinks = buildH2PreloadLinks(localOptions.template.h2Links, localOptions.template.assets);
+                    if ( !self.isXMLRequest() && !self.isCacheless() && _h2PreloadLinks ) {
+                        res.setHeader('link', _h2PreloadLinks);
                     }
 
                     assets = null;
@@ -1809,7 +1813,12 @@ module.exports = async function render(userData, displayInspector, errOptions, d
             ) {
                 // Caching template
                 cacheObject = {
-                    template: compiledTemplate
+                    template : compiledTemplate,
+                    // #B495 — memoised for the hit path: the assembled `link` preload
+                    // header (null when the http/2 block never ran, '' when nothing
+                    // qualified) and the parsed preload map (`view.assets` on hits).
+                    h2Link   : _h2PreloadLinks,
+                    assets   : ( localOptions.template && localOptions.template.assets && typeof(localOptions.template.assets) == 'object' ) ? localOptions.template.assets : null
                 };
                 cache.set(cacheKey, cacheObject);
             }
@@ -2401,4 +2410,64 @@ function spliceExtendsTarget(templateContent, extendFound, layoutPath, target) {
     return templateContent.slice(0, at)
          + extendFound[0].replace(layoutPath, function () { return target; })
          + templateContent.slice(end);
+}
+
+/**
+ * #B495 — assemble the http/2 `link` preload header for a compiled view: the
+ * per-request `h2Links` prefix (the config-declared stylesheets and scripts
+ * `getNodeRes()` appended, `rel=preload,`-terminated) followed by one entry per
+ * qualifying asset of the parsed `getAssets()` map, trailing comma trimmed.
+ * The loop is the compile path's former inline loop, lifted verbatim: a key
+ * starting with `_` is metadata and is skipped; so is an entry with no (or a
+ * falsy) `as`, and one whose `as` is anything but the string `'null'` while
+ * `isAvailable` is false; `imagesrcset` / `imagesizes` ride along when present.
+ *
+ * Pure — parameters only, the #B60 / #B61 shape: in prod this module is a
+ * singleton shared by concurrent renders, so nothing here may read `self`,
+ * `local` or `localOptions` from an enclosing scope. The compile path calls it
+ * once per view and memoises the result on the compiled-template cache entry
+ * (`cacheObject.h2Link`), which is what the cache-hit path emits.
+ *
+ * @param {string|undefined} h2Links - The per-request `localOptions.template.h2Links` prefix (`''` under http/2, `undefined` otherwise)
+ * @param {object|undefined} assets  - The parsed `getAssets()` map: asset URL → `{ as, isAvailable, imagesrcset?, imagesizes? }` plus `_`-prefixed metadata keys
+ * @returns {string} The `link` header value — `''` when nothing qualifies (callers send no header then)
+ *
+ * @example
+ * buildH2PreloadLinks('</css/app.css>; as=style; rel=preload,', {
+ *     '/js/app.js' : { as: 'script', isAvailable: true },
+ *     '_classes'   : ['x']
+ * });
+ * // → '</css/app.css>; as=style; rel=preload,</js/app.js>; as=script; rel=preload'
+ */
+function buildH2PreloadLinks(h2Links, assets) {
+    var links = h2Links || '';
+    if ( assets && typeof(assets) == 'object' ) {
+        for (let l in assets) {
+            let link = assets[l]
+            if (
+                /^_/.test(l)
+                || typeof(link.as) == 'undefined'
+                || typeof(link.as) != 'undefined'
+                    && link.as != 'null'
+                    && !link.isAvailable
+                || !link.as
+            ) {
+                // ignoring
+                continue;
+            }
+
+            links += '<'+ l +'>; as='+ link.as +'; '
+            if ( link.imagesrcset) {
+                links += 'imagesrcset='+ link.imagesrcset +'; ';
+            }
+            if ( link.imagesizes) {
+                links += 'imagesizes='+ link.imagesizes +'; ';
+            }
+            links += 'rel=preload,'
+        }
+    }
+    if ( /\,$/.test(links) ) {
+        links = links.substring(0, links.length-1);
+    }
+    return links;
 }
