@@ -10113,10 +10113,19 @@ define('gina', [ 'require', 'lib/merge', 'lib/uuid', 'lib/routing', 'lib/money',
             'money'             : money
         };
 
-        // iframe case
-        if ( typeof(parent.window['gina']) != 'undefined' ) {
-            // inheriting from parent frame instance
-            window['gina'] = merge((window['gina'] || {}), parent.window['gina']);
+        // iframe case — inherit the parent frame's instance when there is one.
+        // #B486 — under a CROSS-ORIGIN parent the named-property read on its
+        // WindowProxy throws SecurityError; construct() is async, so that throw
+        // became an unobserved rejection (core.js discards the promise) and
+        // `ginaloaded` was never dispatched — a silently half-booted client.
+        // Inheritance is optional: skip it, never let it stop the boot.
+        try {
+            if ( typeof(parent.window['gina']) != 'undefined' ) {
+                // inheriting from parent frame instance
+                window['gina'] = merge((window['gina'] || {}), parent.window['gina']);
+            }
+        } catch (crossOriginErr) {
+            // cross-origin parent: no inheritance
         }
         $instance = merge( (window['gina'] || {}), $instance);
 

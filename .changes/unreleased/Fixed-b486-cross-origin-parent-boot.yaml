@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'The client boots inside a cross-origin iframe. `construct()` read `parent.window[''gina'']` unconditionally to inherit a parent frame''s instance; under a cross-origin parent that named-property read throws `SecurityError`, and because `construct()` is `async` the throw became an unobserved rejection — `ginaloaded` was never dispatched and the page stayed silently half-booted, with nothing in the console beyond the rejection. The inheritance is optional and is now attempted inside a try/catch: a same-origin parent still shares its instance, a cross-origin one is skipped and the boot proceeds. Measured before and after in a two-origin browser repro. Browser-bundled: pickup is a bundle restart and a re-bake. (#B486)'
+time: 2026-09-06T03:41:20+01:00
