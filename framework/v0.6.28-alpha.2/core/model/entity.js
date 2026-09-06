@@ -580,9 +580,6 @@ function EntitySuper(conn, caller, injected) {
 
                 }(events[i].shortName, f, i, fSource));
 
-                // just for display purpose: will be overriden by the previous code
-                entity[f].onComplete = function (cb) {}
-
             }
         }
 
