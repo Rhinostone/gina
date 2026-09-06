@@ -6673,89 +6673,136 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
     }
 
     /**
-     * Forward request
-     * Allowing x-bundle forward
-     * Attention: this is a work in progres, do not use it yet
+     * Forwards the current request to another route — on this bundle or on a
+     * sibling bundle of the same project — and relays the answer.
      *
-     * @param {object} req
-     * @param {object} res
-     * @param {callback} next
-     * @returns
+     * Declarative: a route names `forward` as its `control` and the target in
+     * `param.url`, as `<rule>` for the current bundle or `<rule>@<bundle>` for a
+     * sibling (the reference form `redirect()` and `getRoute()` accept; a
+     * `/<env>` suffix is honoured). Every other non-reserved key of `param` is a
+     * placeholder value for the target route, read from the captured URL
+     * parameters when the incoming URL provided it and taken as a static value
+     * otherwise.
+     *
+     * The upstream call goes through `query()`: a `<bundle>@…` hostname is
+     * resolved from the environment configuration (host, port, protocol,
+     * scheme), and the incoming request's data (`req[method]`) travels as the
+     * body or the query string. An object answer is relayed with `renderJSON()`;
+     * a string answer is relayed verbatim with `renderTEXT()`, so a non-JSON
+     * upstream body is never re-encoded. A non-2xx status, a transport failure
+     * or an unknown target route is answered through `throwError()`.
+     *
+     * Not relayed: `multipart/form-data` — `query()` has no multipart encoder,
+     * so `req.files` never reach the target.
+     *
+     * Reserved `param` keys (never forwarded as placeholders): `url`,
+     * `urlIndex`, `control`, `file`, `title`, `bundle`, `project`, `hostname`,
+     * `port`, `path`, `method`. `hostname`/`port`/`path` address a raw host
+     * instead of a bundle; `method` overrides the forwarded HTTP method.
+     *
+     * @param {object}   req
+     * @param {object}   res
+     * @param {function} next
+     * @returns {void}
+     *
+     * @example
+     * // routing.json — POST /upload on this bundle relays to a sibling bundle
+     * "upload-relay": {
+     *   "url": "/upload",
+     *   "method": "POST",
+     *   "param": { "control": "forward", "url": "upload-to-tmp@api" }
+     * }
+     *
+     * @example
+     * // routing.json — the captured :id feeds the target route's :id
+     * "invoice-relay": {
+     *   "url": "/legacy/invoice/:id",
+     *   "param": { "control": "forward", "url": "invoice-get@api", "id": ":id" }
+     * }
      */
     this.forward = function(req, res, next) {
-        var route   = req.routing;
+        var route = req.routing;
         if ( typeof(route.param.url) == 'undefined' || /^(null|\s*)$/.test(route.param.url) ) {
-            self.throwError( new Error('`route.param.url` must be defiend in your route: `'+ route.rule +'`') );
+            self.throwError( new Error('`route.param.url` must be defined in your route: `'+ route.rule +'`') );
             return;
         }
 
+        // #B488 — placeholder VALUES come from the incoming request; the routing
+        // declaration only says which keys exist.
         var param = {};
         for (let p in route.param) {
             if ( /^(url|urlIndex|control|file|title|bundle|project|hostname|port|path|method)$/.test(p) ) {
                 continue;
             }
-            param[p] = route.param[p]
+            param[p] = ( req.params && typeof(req.params[p]) != 'undefined' ) ? req.params[p] : route.param[p];
         }
+
+        // #B488 — an unknown rule or bundle throws inside the routing helper;
+        // answer it as a framework error instead of letting it escape the action.
         var routeObj = null;
-        if ( typeof(route.param.urlIndex) != 'undefined' ) {
-            routeObj = lib.routing.getRoute(route.param.url, param, route.param.urlIndex);
-        } else {
-            routeObj = lib.routing.getRoute(route.param.url, param);
+        try {
+            routeObj = ( typeof(route.param.urlIndex) != 'undefined' )
+                ? lib.routing.getRoute(route.param.url, param, route.param.urlIndex)
+                : lib.routing.getRoute(route.param.url, param);
+        } catch (routeErr) {
+            self.throwError(routeErr);
+            return;
         }
-        var ca = self.getConfig('settings').server.credentials.ca;
-        var hostname = null, port = null, path = null;
-        // by default
+        if ( !routeObj || typeof(routeObj.url) != 'string' ) {
+            self.throwError( new Error('forward: no url resolved for target route `'+ route.param.url +'`') );
+            return;
+        }
+
         var project = local.options.conf.projectName;
-        if ( typeof(route.param.project) != 'undefined' && /^(null|\s*)$/.test(route.param.project) ) {
+        if ( typeof(route.param.project) != 'undefined' && !/^(null|\s*)$/.test(route.param.project) ) {
             project = route.param.project;
-        } // TODO - add support for project pointer : getContext('gina').projects[project]
-        if (/\@(.*)$/.test(route.param.url)) {
-            var targetedBundle = route.param.url.substring(route.param.url.lastIndexOf('@')+1);
-            hostname    = targetedBundle +'@'+ project;
-            port        = hostname;
-            var webroot = getContext('gina').config.envConf[targetedBundle][local.options.conf.env].server.webroot;
-            path        = (/\/$/.test(webroot)) ? webroot.substring(0, webroot.length-1) : webroot;
-        } else {
-            hostname    = route.param.hostname;
-            port        = route.param.port;
-            path        = route.param.port;
         }
 
-        var method = null;
-        if ( typeof(route.param.method) != 'undefined' ) {
-            method = route.param.method.toLowerCase();
+        var opt = {};
+        if ( /\@/.test(route.param.url) || typeof(route.param.hostname) == 'undefined' ) {
+            // `<rule>@<bundle>[/<env>]`, or a bare `<rule>` of this bundle. query()
+            // resolves a `<bundle>@…` hostname from the environment configuration,
+            // port included, and the resolved route url already carries the
+            // target's webroot — it IS the path (#B488: it used to be discarded).
+            var targetedBundle = ( /\@/.test(route.param.url) )
+                ? route.param.url.substring(route.param.url.lastIndexOf('@') + 1).replace(/\/.*$/, '')
+                : local.options.conf.bundle;
+            opt.hostname = targetedBundle +'@'+ project;
+            opt.path     = routeObj.url;
         } else {
-            method = req.method.toLowerCase();
+            // a raw host declared in the route
+            opt.hostname = route.param.hostname;
+            if ( typeof(route.param.port) != 'undefined' ) {
+                opt.port = route.param.port;
+            }
+            opt.path     = route.param.path || routeObj.url;
         }
 
-        var opt = {
-            ca: ca,
-            hostname: hostname,
-            port: port,
-            path: path,
-            method: method
+        opt.method = ( typeof(route.param.method) != 'undefined' )
+            ? route.param.method.toLowerCase()
+            : req.method.toLowerCase();
+
+        var settings = self.getConfig('settings');
+        if ( settings && settings.server && settings.server.credentials && settings.server.credentials.ca ) {
+            opt.ca = settings.server.credentials.ca;
         }
-        if (self.isCacheless() || self.isLocalScope() ) {
+        if ( self.isCacheless() || self.isLocalScope() ) {
             opt.rejectUnauthorized = false;
         }
 
         var obj = req[ req.method.toLowerCase() ];
-        // if ( req.files != 'undefined' ) {
-        //     obj.files = req.files;
-        // }
-        self.query(opt, obj, function onForward(err, result){
+        self.query(opt, obj, function onForward(err, result) {
             if (err) {
                 self.throwError(err);
                 return;
             }
-
-            // TODO - filter : redirect & location
-
-            // if ( self.isXMLRequest() || !hasViews() || !local.options.isUsingTemplate && !hasViews() || hasViews() && !local.options.isUsingTemplate ) {
-                self.renderJSON(result)
-            // } else {
-            //     self.render(result)
-            // }
+            // #B488 — a string is a non-JSON upstream body: relay the bytes as
+            // they are rather than re-encoding them as a JSON string.
+            if ( typeof(result) == 'string' ) {
+                self.renderTEXT(result);
+                return;
+            }
+            self.renderJSON(result);
         });
     }
 
