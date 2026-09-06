@@ -299,10 +299,20 @@ function Router(env, scope) {
         // to process.gina._proxyRequireForwarded by server.js) disables the
         // port-less-Host heuristic — only an explicit X-Forwarded-Host
         // classifies as proxied. Keep in sync with the server.isaac.js twin.
+        // #B502 — on isaac, request._ginaIsProxyHost is already stamped from the
+        // ORIGINAL Host/:authority (the #B65 block runs before isaac's h1 port
+        // strip); the heuristic below re-classified every direct h1 request as
+        // proxied from the port-stripped Host and rewrote the worker-globals from
+        // it, so an existing isaac stamp decides here too. A slot-less engine
+        // (Express) keeps the #B152 heuristic — its Host is never stripped.
         var proxyReqIsProxied = (
-            ( proxyReqHost && !/\:[0-9]+$/.test(proxyReqHost)
-                && process.gina._proxyRequireForwarded !== true )
-            || _xfh
+            ( typeof(request._ginaIsProxyHost) != 'undefined' )
+                ? ( request._ginaIsProxyHost === true )
+                : (
+                    ( proxyReqHost && !/\:[0-9]+$/.test(proxyReqHost)
+                        && process.gina._proxyRequireForwarded !== true )
+                    || _xfh
+                )
         ) ? true : false;
         if ( proxyReqIsProxied ) {
             var proxyReqScheme = _safeXfProto
