@@ -6706,11 +6706,11 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
      * @returns {void}
      *
      * @example
-     * // routing.json — POST /upload on this bundle relays to a sibling bundle
-     * "upload-relay": {
-     *   "url": "/upload",
-     *   "method": "POST",
-     *   "param": { "control": "forward", "url": "upload-to-tmp@api" }
+     * // routing.json — GET /v1/orders on this bundle serves a sibling bundle's answer
+     * "orders-facade": {
+     *   "url": "/v1/orders",
+     *   "method": "GET",
+     *   "param": { "control": "forward", "url": "orders-list@api" }
      * }
      *
      * @example
