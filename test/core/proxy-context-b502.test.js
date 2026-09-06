@@ -28,7 +28,7 @@ var fs     = require('fs');
 var path   = require('path');
 var { AsyncLocalStorage } = require('async_hooks');
 
-var FW      = path.resolve(__dirname, '../../framework/v0.6.28-alpha.2');
+var FW      = require('../fw');
 var SERVER  = fs.readFileSync(path.join(FW, 'core/server.js'), 'utf8');
 var ROUTER  = fs.readFileSync(path.join(FW, 'core/router.js'), 'utf8');
 var ISAAC   = fs.readFileSync(path.join(FW, 'core/server.isaac.js'), 'utf8');
