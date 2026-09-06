@@ -25,8 +25,9 @@
  *
  * §40a/§40b (controller.test.js) own the async-guard pins (the direct-site
  * wrap count and the sync-catch census) — deliberately NOT duplicated here.
- * The census here is 15 since #B479: the 14 formerly-bare #B402 deliveries
- * plus the nested-render refusal at the top of query(), which was born wrapped.
+ * The census here is 17 since #B489: the 14 formerly-bare #B402 deliveries,
+ * the #B479 nested-render refusal at the top of query(), and the two #B489
+ * raw-body refusals (BODY_TYPE, BODY_AND_DATA) — all born wrapped.
  */
 
 'use strict';
@@ -51,7 +52,7 @@ var ASYNC_MARK = 'Controller Query Exception on async callback rejection.';
 
 function countOf(hay, needle) { return hay.split(needle).length - 1; }
 
-describe('01 - #B402 source pins: one sync-throw helper, 15 wrapped error-path deliveries (14 #B402 + the #B479 refusal)', function() {
+describe('01 - #B402 source pins: one sync-throw helper, 17 wrapped error-path deliveries (14 #B402 + the #B479 refusal + the 2 #B489 body refusals)', function() {
 
     var src = fs.readFileSync(SOURCE, 'utf8');
 
@@ -74,14 +75,14 @@ describe('01 - #B402 source pins: one sync-throw helper, 15 wrapped error-path d
         assert.equal(countOf(src, SYNC_MARK), 1);
     });
 
-    it('exact census: 15 sync-throw catches, each routing to the helper', function() {
-        assert.equal(countOf(src, 'catch (_syncCbErr)'), 15,
+    it('exact census: 17 sync-throw catches, each routing to the helper', function() {
+        assert.equal(countOf(src, 'catch (_syncCbErr)'), 17,
             'the 14 formerly-bare error-path deliveries + the #B479 nested-render refusal — a count landing HIGH means an un-enumerated new delivery site: classify it before touching this pin');
-        assert.equal(countOf(src, '_ownSyncCbThrow(_syncCbErr);'), 15,
+        assert.equal(countOf(src, '_ownSyncCbThrow(_syncCbErr);'), 17,
             'every catch routes to the shared helper');
     });
 
-    it('each catch pairs with a try wrapping an app-callback delivery (structural, 15/15)', function() {
+    it('each catch pairs with a try wrapping an app-callback delivery (structural, 17/17)', function() {
         var from = 0, verified = 0;
         for (;;) {
             var c = src.indexOf('catch (_syncCbErr)', from);
@@ -93,7 +94,7 @@ describe('01 - #B402 source pins: one sync-throw helper, 15 wrapped error-path d
             verified++;
             from = c + 1;
         }
-        assert.equal(verified, 15, 'all 15 catches verified structurally');
+        assert.equal(verified, 17, 'all 17 catches verified structurally');
     });
 });
 

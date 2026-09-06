@@ -4743,11 +4743,11 @@ describe('40a - #B399 query delivery seams own an async callback rejection: sour
         assert.ok(b.indexOf('self.throwError(exception);') > -1, 'routes to throwError');
     });
 
-    it("the adapter's 3 cb sites and all 19 direct callback sites are wrapped", function() {
+    it("the adapter's 3 cb sites and all 21 direct callback sites are wrapped", function() {
         // #B475 — the two per-transport facades collapsed into ONE per-call adapter
         assert.equal(countOf(src, '_ownAsyncCbRejection(cb(data))'), 1, 'adapter data-status branch');
         assert.equal(countOf(src, '_ownAsyncCbRejection(cb(err, data))'), 1, 'adapter success branch');
-        assert.equal(countOf(src, '_ownAsyncCbRejection(callback('), 19, 'every direct delivery expression (query prep incl. the #B479 nested-render refusal + both transport bodies)');
+        assert.equal(countOf(src, '_ownAsyncCbRejection(callback('), 21, 'every direct delivery expression (query prep incl. the #B479 nested-render refusal and the two #B489 body refusals + both transport bodies)');
     });
 
     it('the ONE fluent delivery adapter registers the guard inside the sync-guard try (#B475: both per-transport facades are gone)', function() {

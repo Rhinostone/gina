@@ -112,10 +112,10 @@ describe('03 - #B223 pins: the callback settles exactly once', function () {
 // 04 — store() propagates the real move error; the empty case keeps its message
 // ---------------------------------------------------------------------------
 describe('04 - #B223 pins: real error propagation in store()', function () {
-    it("keeps 'No file to upload' for the genuinely-empty case ONLY (2 sites, was 4)", function () {
+    it("keeps 'No file to upload' for the genuinely-empty case ONLY (1 site: was 4, then 2 — the emit form went with #B480)", function () {
         var n = ST.split("'No file to upload'").length - 1;
-        assert.equal(n, 2,
-            'the fabricated message must not shadow real move errors (cb + emit forms of the empty case remain)');
+        assert.equal(n, 1,
+            'the fabricated message must not shadow real move errors (only the cb form of the empty case remains)');
     });
 });
 

@@ -1,0 +1,17 @@
+{
+  "name": "gina-lib-multipart",
+  "version": "1.0.0",
+  "description": "multipart/form-data body encoder: the request parser's nested fields and staged file records back onto the wire, for query() and forward()",
+
+  "author": {
+    "name": "Martin Luther ETOUMAN NDAMBWE",
+    "email": "contact@gina.io"
+  },
+  "copyright": "Copyright (c) 2009-2026 Rhinostone <contact@gina.io>",
+  "engines": {
+    "node": ">=22"
+  },
+  "main": "src/main",
+  "license": "MIT",
+  "readmeFilename": "README.md"
+}

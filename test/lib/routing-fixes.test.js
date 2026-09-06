@@ -925,10 +925,13 @@ describe('10 - #B168 getRoute: proxied-context degrade when no proxy hostname is
     }
 
     function runProxyBlock(block, opts) {
-        var fn = new Function('route', 'isProxyHost', 'isGFFCtx', 'config', 'process', 'console', '_proxyHostDegradeWarned',
+        // #B502 added `_stProxy` (the request-store proxy slot) to the block's free
+        // variables; null is the req-less caller shape these arms model, so the
+        // fallback chain short-circuits to the worker global exactly as before.
+        var fn = new Function('route', 'isProxyHost', 'isGFFCtx', 'config', 'process', 'console', '_proxyHostDegradeWarned', '_stProxy',
             block + '\nreturn route;');
         return fn(opts.route, opts.isProxyHost, false, opts.config,
-            { gina: opts.gina }, { warn: function () {}, debug: function () {} }, false);
+            { gina: opts.gina }, { warn: function () {}, debug: function () {} }, false, opts.stProxy || null);
     }
 
     it('extracted shipped block: proxied latch + both sources unset degrades without throwing', function() {
