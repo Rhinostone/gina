@@ -56,14 +56,18 @@ function Shell () {
 
     /**
      * Run a command line, optionally forcing local execution.
-     * Results are delivered via `.onComplete(cb)` on the returned EventEmitter.
+     * Results are delivered via `.onComplete(cb)` on the returned EventEmitter;
+     * streamed output via `.onData(cb)`. Both refuse a non-function callback.
      *
      * @param {string|Array<string>} cmdline  - Command string or argument array
      * @param {boolean} [runLocal]            - Force local execution (bypass SSH config)
-     * @returns {EventEmitter} Emits `shell#run` with `(err, result)`
+     * @throws {TypeError} When `.onData(cb)` or `.onComplete(cb)` is given a non-function
+     * @returns {EventEmitter} Emits `run#data`, `run#err`, and `run#complete` with `(err, result)`
      *
      * @example
-     * shell.run('ls -la').onComplete(function(err, output) {
+     * var shell = new lib.Shell();
+     * shell.setOptions({ chdir: '/tmp' });
+     * shell.run('ls -la', true).onComplete(function(err, output) {
      *     if (err) throw err;
      *     console.log(output);
      * });
@@ -172,6 +176,15 @@ function Shell () {
 
         e.onData = function(callback) {
 
+            // #B491: both handles wrap the callback inside their listener, so a
+            // non-function registered without complaint and surfaced only as a
+            // logged `callback is not a function` from the close handler's own
+            // try/catch above — the caller's delivery never arrived. Fail fast
+            // at the caller's line instead.
+            if ( typeof(callback) != 'function' ) {
+                throw new TypeError('Shell::run — onData expects a function, got ' + ( callback === null ? 'null' : typeof(callback) ));
+            }
+
             e.once('run#data', function(data) {
                 callback(data)
             });
@@ -182,6 +195,11 @@ function Shell () {
         };
 
         e.onComplete = function(callback) {
+
+            if ( typeof(callback) != 'function' ) {
+                throw new TypeError('Shell::run — onComplete expects a function, got ' + ( callback === null ? 'null' : typeof(callback) ));
+            }
+
             e.once('run#complete', function(err, data) {
                 callback(err, data)
             })
