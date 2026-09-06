@@ -1031,12 +1031,16 @@ module.exports = async function render(userData, displayInspector, errOptions, d
 
 
         var isLoadingPartial = false;
-        assets  = {assets:"${assets}"};
-        // #B464 — the placeholder object the Inspector payload carries as
-        // `view.assets`, captured here because the http/2 preload block below
-        // re-uses the `assets` binding for the getAssets() string and nulls it,
-        // and the payload is now built AFTER that block ran.
-        var _inspectorAssets = assets;
+        // #B490 — the Inspector's `view.assets` is the parsed http/2 preload map
+        // that getAssets() leaves on localOptions.template.assets (per-template,
+        // filled by the first compile-path request, so cache hits see it too).
+        // Read at splice time: the http/2 block runs after the payload sites on
+        // the hit path. Absent when the block never ran (http/1.1, XHR).
+        var _inspectorAssetsMap = function() {
+            return ( localOptions.template && localOptions.template.assets && typeof(localOptions.template.assets) == 'object' )
+                ? localOptions.template.assets
+                : undefined;
+        };
         // replaced: fs.readFileSync — async read (#P29)
         layout = await fs.promises.readFile(layoutPath, 'utf8');
         // #B130 upgrade path — in cached mode the layout-cache file persists the
@@ -1134,7 +1138,7 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                 // hidden inputs. The payload's snapshot count supersedes the
                 // pre-execute one so the late-bind patch below appends only
                 // the entries pushed after the payload was built.
-                var _cacheInspSplice = spliceInspectorData(htmlContent, _inspectorWanted, data, _inspectorAssets, local, self, _cspNonceAttr);
+                var _cacheInspSplice = spliceInspectorData(htmlContent, _inspectorWanted, data, _inspectorAssetsMap(), local, self, _cspNonceAttr);
                 htmlContent = _cacheInspSplice.html;
                 if ( _cacheInspSplice.flowSnapshotCount !== null ) {
                     _cacheFlowSnapshot = _cacheInspSplice.flowSnapshotCount;
@@ -1147,7 +1151,7 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                     if (data.page.queries) { data.page.data.queries = data.page.queries; }
                     var _cacheViewInfos = JSON.clone(data.page.view);
                     if ( !isWithoutLayout ) {
-                        _cacheViewInfos.assets = _inspectorAssets;
+                        _cacheViewInfos.assets = _inspectorAssetsMap();
                     }
                     htmlContent = spliceXhrInputs(htmlContent, data, _cacheViewInfos);
                 }
@@ -1408,8 +1412,6 @@ module.exports = async function render(userData, displayInspector, errOptions, d
         // Adding plugins
         // Means that we don't want GFF context or we already have it loaded
         viewInfos = JSON.clone(data.page.view);
-        if ( !isWithoutLayout )
-                viewInfos.assets = assets;
 
         // #B464 — the predicate is _inspectorWanted (decided above, once).
         if ( _inspectorWanted ) {
@@ -1709,15 +1711,6 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                         localOptions.template.assets = JSON.parse(assets);
                     }
 
-                    //  only for toolbar - TODO hasToolbar()
-                    if (
-                        self.isCacheless() && hasViews() && !isWithoutLayout
-                        || hasViews() && localOptions.debugMode
-                        || self.isCacheless() && hasViews() && self.isXMLRequest()
-                    ) {
-                        layout = layout.replace('{"assets":"${assets}"}', assets );
-                    }
-
                     if ( !self.isCacheless() ) {
                         var links = localOptions.template.h2Links;
                         for (let l in localOptions.template.assets) {
@@ -1836,12 +1829,15 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                 // script replaces the marker (or the marker goes), then the XHR
                 // hidden inputs are spliced; the snapshot count supersedes the
                 // pre-compile one taken in the compile branch.
-                var _inspSplice = spliceInspectorData(htmlContent, _inspectorWanted, data, _inspectorAssets, local, self, _cspNonceAttr);
+                var _inspSplice = spliceInspectorData(htmlContent, _inspectorWanted, data, _inspectorAssetsMap(), local, self, _cspNonceAttr);
                 htmlContent = _inspSplice.html;
                 if ( _inspSplice.flowSnapshotCount !== null ) {
                     _flowSnapshotCount = _inspSplice.flowSnapshotCount;
                 }
                 if ( _xhrInputsWanted ) {
+                    if ( !isWithoutLayout ) {
+                        viewInfos.assets = _inspectorAssetsMap();
+                    }
                     htmlContent = spliceXhrInputs(htmlContent, data, viewInfos);
                 }
                 // #RWATCH S3 — stale-release banner before writeCache (rides cache
@@ -2150,7 +2146,7 @@ function healPersistedInspectorData(layout) {
  *
  * @inner
  * @param {object} data          - The executed template context (`data.page` populated)
- * @param {object} assets        - The `view.assets` placeholder the payload carries
+ * @param {object} assets        - The parsed http/2 preload map the payload carries as `view.assets` — resolved by the caller at splice time, `undefined` when the preload block never ran (#B490)
  * @param {object} local         - The per-request closure (`_timeline`, `options.conf`)
  * @param {object} self          - The SuperController instance (`serverInstance` sinks)
  * @param {string} _cspNonceAttr - Literal ` nonce="..."` fragment, or `''`
@@ -2318,7 +2314,7 @@ function buildInspectorDataScript(data, assets, local, self, _cspNonceAttr) {
  * @param {string}  htmlContent   - The executed template output
  * @param {boolean} wanted        - The request's Inspector injection decision
  * @param {object}  data          - The executed template context
- * @param {object}  assets        - The `view.assets` placeholder
+ * @param {object}  assets        - The parsed http/2 preload map for `view.assets`, or `undefined` (#B490)
  * @param {object}  local         - The per-request closure
  * @param {object}  self          - The SuperController instance
  * @param {string}  _cspNonceAttr - Literal nonce fragment, or `''`
@@ -2354,7 +2350,7 @@ function spliceInspectorData(htmlContent, wanted, data, assets, local, self, _cs
  * @inner
  * @param {string} htmlContent - The executed template output
  * @param {object} data        - The executed template context (`data.page.data`, with flow/queries when injected)
- * @param {object} viewInfos   - The `data.page.view` clone (+ the assets placeholder for a layout render)
+ * @param {object} viewInfos   - The `data.page.view` clone (+ the resolved http/2 assets map for a layout render, when one was resolved — #B490)
  * @returns {string} The HTML carrying both inputs
  * @example
  * html = spliceXhrInputs(html, data, JSON.clone(data.page.view));
