@@ -4051,14 +4051,13 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
      *    store)
      *  @param {array} files
      *
-     * @event
-     *  @param {object} error
-     *  @param {array} files
-     *
      * @returns {{onComplete: function}|undefined} the fluent handle when `cb`
-     *   is omitted — `store(target).onComplete(cb)`, delivering to that call's
-     *   callback alone (#B475) — or `undefined` when
-     *   `cb` is provided
+     *   is omitted OR is not a function (`null` included, #B480) —
+     *   `store(target).onComplete(cb)`, delivering to that call's callback
+     *   alone (#B475) — or `undefined` when a function `cb` is provided.
+     *   `onComplete()` throws a `TypeError` synchronously when given a
+     *   non-function (#B480): fail fast at the caller's line rather than
+     *   inside an fs callback.
      *
      * @example
      * // store the request's uploaded files, surfacing the real failure cause
@@ -4190,11 +4189,11 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
             // `store(target).onComplete(cb)` form calls start() SYNCHRONOUSLY from the
             // returned wrapper, OUTSIDE the store() body, so on a released request
             // (the per-request refs nulled by a terminal exit) this is a SIGTERM bundle
-            // kill — not the non-fatal async class. Notify through the same cb / 'uploaded'
-            // channel the empty-upload path uses, then bail.
+            // kill — not the non-fatal async class. Notify through cb, then bail.
+            // #B480 — cb is always a function here; the former `else { self.emit('uploaded', …) }` arm is gone.
             if ( local.req == null ) {
                 var _releasedErr = new Error('Controller::store — response already released');
-                if (cb) { cb(_releasedErr); } else { self.emit('uploaded', _releasedErr); }
+                cb(_releasedErr);
                 return;
             }
 
@@ -4205,11 +4204,7 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
             var uploadedFiles = [];
 
             if ( typeof(files) == 'undefined' || files.count() == 0 ) {
-                if (cb) {
-                    cb(new Error('No file to upload'))
-                } else {
-                    self.emit('uploaded', new Error('No file to upload'))
-                }
+                cb(new Error('No file to upload'))
             } else {
                 // saving files
                 var uploadDir   = null
@@ -4251,11 +4246,7 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                     // #STO1 — an all-routed call may omit the target; a call
                     // with files on the move path cannot
                     var _targetErr = new Error('Controller::store — a target directory is required: `'+ unrouted[0].fileName +'` (group `'+ (( unrouted[0].record.group ) ? unrouted[0].record.group : 'untagged') +'`) is not routed to a storage driver');
-                    if (cb) {
-                        cb(_targetErr)
-                    } else {
-                        self.emit('uploaded', _targetErr)
-                    }
+                    cb(_targetErr)
                     return;
                 }
 
@@ -4265,11 +4256,7 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                 }
 
                 if (folder instanceof Error) {
-                    if (cb) {
-                        cb(folder)
-                    } else {
-                        self.emit('uploaded', folder)
-                    }
+                    cb(folder)
                 } else {
                     // files list
                     for (var u = 0, uLen = unrouted.length; u < uLen; ++u ){
@@ -4296,11 +4283,7 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                             // masking the actual filesystem diagnostics (ENOSPC,
                             // EACCES, a vanished source, ...)
                             var _moveErr = ( err instanceof Error ) ? err : new Error(String(err));
-                            if (cb) {
-                                cb(_moveErr)
-                            } else {
-                                self.emit('uploaded', _moveErr)
-                            }
+                            cb(_moveErr)
                         } else {
                             // #STO1 — then the driver-routed files; abort on the
                             // first failure, keep already-published objects (the
@@ -4308,17 +4291,9 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                             putfiles(routed, function (putErr) {
                                 if (putErr) {
                                     var _putErr = ( putErr instanceof Error ) ? putErr : new Error(String(putErr));
-                                    if (cb) {
-                                        cb(_putErr)
-                                    } else {
-                                        self.emit('uploaded', _putErr)
-                                    }
+                                    cb(_putErr)
                                 } else {
-                                    if (cb) {
-                                        cb(false, uploadedFiles)
-                                    } else {
-                                        self.emit('uploaded', false, uploadedFiles)
-                                    }
+                                    cb(false, uploadedFiles)
                                 }
                             })
                         }
@@ -4327,10 +4302,22 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
             }
         }
 
-        if ( typeof(cb) == 'undefined' ) {
+        // #B480 — mint the handle for ANY non-function cb, `null` included, mirroring
+        // query()'s guard: `store(target, files, null)` used to fall into the callback
+        // branch and lose its outcome to an event nobody listened to. start() is
+        // therefore only ever entered with a function, so its seven former
+        // `else { emit('uploaded', …) }` arms are gone — nothing in-tree ever
+        // listened to that event and it was never a documented @fires.
+        if ( typeof(cb) != 'function' ) {
 
             return {
                 onComplete : function(cb){
+                    // #B480 — fail fast at the caller's line: a non-function would otherwise
+                    // reach start()'s delivery sites inside fs callbacks, where the TypeError
+                    // is an uncaughtException, not a caught error.
+                    if ( typeof(cb) != 'function' ) {
+                        throw new TypeError('Controller::store — onComplete expects a function, got ' + ( cb === null ? 'null' : typeof(cb) ));
+                    }
                     // #B475 — deliver through the callback path: a per-call channel,
                     // no listener left on the shared instance emitter (the .on() this
                     // used to register was never removed, so a later store() on the
