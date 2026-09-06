@@ -79,6 +79,10 @@ function Lib() {
         // Pure stateless functions, no singleton, no adopted fds: _require so a
         // dev-mode edit hot-reloads like math/routing.
         money           : _require('./money'),
+        // #B489 — multipart/form-data body encoder (the request parser's inverse,
+        // for query()'s `body` option / forward()'s upload relay). Pure stateless
+        // functions over fs reads, no singleton, no adopted fds: _require like money.
+        multipart       : _require('./multipart'),
         routing         : _require('./routing'),
         // #B32-residual — plain require: archiver is a `new Archiver()` EventEmitter
         // SINGLETON (`module.exports = new Archiver()` at the tail of archiver/src/main.js;

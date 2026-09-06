@@ -932,6 +932,23 @@ declare namespace gina {
             /** Minor-unit count as a JSON-safe decimal string. */
             toMinor(a: object): string;
         };
+        /**
+         * `multipart/form-data` body encoder (#B489) — the request parser's
+         * inverse: nested text fields plus `req.files` staging records become
+         * one body under a fresh boundary, for `self.query()`'s `body` option
+         * (what `self.forward()` relays uploads with). Server-side only.
+         */
+        multipart: {
+            /**
+             * Encode fields + files into a Buffer body. `options.maxSize` (bytes) is
+             * checked against field bytes + on-disk file sizes BEFORE any read.
+             * Throws coded Errors: `MULTIPART_BAD_INPUT`, `MULTIPART_TOO_LARGE`
+             * (`.size`, `.limit`), `MULTIPART_FILE_UNREADABLE` (`.path`), `MULTIPART_BOUNDARY`.
+             */
+            encode(input?: { fields?: object; files?: object[] }, options?: { maxSize?: number; boundary?: string }): { contentType: string; body: Buffer; length: number; boundary: string };
+            /** Flatten a nested fields object to ordered `[name, value]` pairs in bracket notation — the inverse of the parser's nesting. */
+            flatten(fields?: object): Array<[string, string]>;
+        };
         /** Prometheus metrics primitive behind `/_gina/metrics`. */
         metrics: any;
         /** Control-plane dial-host resolution — `bind_host` vs `host_v4` locality (#B160). */
