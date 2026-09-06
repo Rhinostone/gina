@@ -88,6 +88,7 @@ define(key, value)           // Property definition helper
 getEnvVar(key)               // Read env variable
 setEnvVar(key, val, protect) // Write env variable
 onCompleteCall(emitter)          // Wraps an EventEmitter .onComplete(cb) into a native Promise — lib/async/src/main.js, also available as global and via lib.async
+run(cmdline[, opt][, cb])        // Run a local command (helpers/task.js; also gna.run) — returns an emitter with .onData(cb) / .onComplete(cb), chainable; opt.cwd (the process chdirs to it), opt.tmp. The positional cb and .onComplete(cb) throw a TypeError at the caller's line for a non-function since 0.6.28 (#B491) — a wrong argument used to be caught by the close handler and only logged, never delivered
 ```
 
 ## Bare-module require — `require('lib/<name>')`

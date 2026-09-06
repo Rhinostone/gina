@@ -8,18 +8,37 @@ var console         = require('../lib/logger');
 module.exports = function () {
 
 	 /**
-     * Run commande on local cli
+     * Run a command on the local cli.
      *
      * Could also be used to open an url but need some tweaking
      * // sample of a cross platform `open` command
      *  e.g.: var openCmd = (process.platform == 'darwin'? 'open': process.platform == 'win32'? 'start': 'xdg-open');
      *
-     * @param cmdLine {array|string}
-     * @param opt {object}
+     * Delivery is either the positional `cb` or the fluent `.onComplete(cb)` on
+     * the returned emitter; both are type-checked at the caller's line (#B491):
+     * a non-function used to be accepted, the command ran to completion, and the
+     * resulting `callback is not a function` was caught by the close handler's
+     * try/catch and only logged — the caller never heard back.
      *
+     * @param {array|string} cmdline - Command and arguments (a string is split on spaces)
+     * @param {object} [opt] - `cwd` (the process chdirs to it), `tmp` (log-file dir), `verbose`
+     * @param {function} [cb] - Positional completion callback `(err, output)`; `null`/`undefined` = use `.onComplete()`
+     * @returns {EventEmitter} The run emitter — `.onData(cb)`, `.onComplete(cb)`, both chainable
+     * @throws {TypeError} When `cb` is neither a function nor `null`/`undefined`
      *
+     * @example
+     * run('ls -la', { cwd: process.cwd() }).onComplete(function(err, out) {
+     *     if (err) return console.error(err);
+     *     console.log(out);
+     * });
      * */
 	run = function(cmdline, opt, cb) {
+        // #B491 — fail fast at the caller's line, before the chdir, the log
+        // files and the spawn: a truthy non-function reached `cb(error, result)`
+        // inside the close handler's try/catch and was merely logged.
+        if ( cb != null && typeof(cb) != 'function' ) {
+            throw new TypeError('run — callback expects a function, got ' + typeof(cb));
+        }
 
 		var pathArr = (new _(__dirname).toUnixStyle().split(/\//g));
 		var root =  pathArr.splice(0, pathArr.length-6).join('/');
@@ -55,6 +74,13 @@ module.exports = function () {
         }
 
         e.onComplete = function(callback) {
+            // #B491 — fail fast at the caller's line, mirroring Controller::store
+            // (#B480) and Controller::query (#B485): a non-function used to register
+            // a listener whose call threw inside the close handler's try/catch and
+            // came out as a logged `callback is not a function` — never delivered.
+            if ( typeof(callback) != 'function' ) {
+                throw new TypeError('run — onComplete expects a function, got ' + ( callback === null ? 'null' : typeof(callback) ));
+            }
             e.once('run#complete', function(err, data) {
                 callback(err, data);
             });

@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'The `run()` helper (the framework global, also `gna.run`) now throws a `TypeError` at the caller''s line when its fluent `.onComplete()` or its positional callback is given anything but a function — `run — onComplete expects a function, got string`. A wrong argument used to be accepted silently: the command ran to completion, the resulting `callback is not a function` was caught by the command''s close handler and only logged, and the caller''s completion never arrived. `null`/`undefined` as the positional callback still mean "use `.onComplete()`"; `.onData()` already failed fast through Node''s own listener check and is unchanged. (#B491)'
+time: 2026-09-06T14:47:31+01:00
