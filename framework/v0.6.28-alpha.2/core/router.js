@@ -345,6 +345,27 @@ function Router(env, scope) {
         }
 
 
+        // #B502 — per-request proxy truth for the req-less readers. lib/routing
+        // getRoute()/toUrl() has no request in scope and resolved its proxied
+        // classification from getContext('isProxyHost') + process.gina.PROXY_HOSTNAME
+        // alone — worker-globals shared by every request on the worker, and the
+        // latch is monotonic once any port-less-Host request has written the
+        // hostname — so a DIRECT request following one built its absolute URLs
+        // from that other request's host (port lost on h1; the last port-less
+        // client's host on h2). server.js handle() now runs the dispatch inside
+        // process.gina._reqALS on every request; fill its proxy slot from THIS
+        // request's stamps (isaac's, or the fill-when-absent block above) so the
+        // resolution is per request, and only a req-less caller (boot, CLI, cron)
+        // still falls back to the latch + worker-global.
+        var _reqStore = ( process.gina._reqALS ) ? process.gina._reqALS.getStore() : null;
+        if ( _reqStore ) {
+            _reqStore.proxy = {
+                isProxyHost   : ( request._ginaIsProxyHost === true ),
+                proxyHostname : request._ginaProxyHostname || null,
+                proxyHost     : request._ginaProxyHost || null
+            };
+        }
+
         /**
         * ExpressJS modules + HTTP2 fix
         * Hack required until `express-<plugin>` get support for http2 `express-session`

@@ -944,6 +944,9 @@ describe('MS2 — /_gina/health/check liveness (express-engine mirror + isaac pa
 // have made an audit record's correlation key depend on GINA_LOG_FORMAT. Slice 1 hoists
 // the id stamp out of that gate (always-on, first-seer-guarded) while leaving the ALS
 // .run() and the durationMs startMs stamp gated exactly as #M12b shipped them.
+// (#B502 has since lifted the .run() gate — every request enters the store so the
+// router can stamp its proxied classification for lib/routing; the startMs stamp and
+// the logger's readers stay JSON-gated. The pin further down asserts the lifted shape.)
 
 describe('#COMPLY2 slice 1 — always-on request id (audit correlation key)', function () {
 
@@ -988,13 +991,19 @@ describe('#COMPLY2 slice 1 — always-on request id (audit correlation key)', fu
             "is the logger's durationMs; an audit record stamps its own ts at write time");
     });
 
-    it('#M12b is preserved: the ALS .run() stays JSON-gated', function () {
-        // The hoist must not have leaked the ALS into text mode — that is the
-        // un-measured #M12b always-on-throughput PoC, deliberately untouched here.
-        var runIdx  = src.indexOf('process.gina._reqALS.run(_reqStore,');
-        var gateIdx = src.lastIndexOf('if ( _reqCtxLogging ) {', runIdx);
-        assert.ok(runIdx > -1, '_reqALS.run() must still exist');
-        assert.ok(gateIdx > -1 && gateIdx < runIdx, '_reqALS.run() must still sit under a _reqCtxLogging gate');
+    it('#B502: the ALS .run() is entered on EVERY request — no longer under the JSON-logging gate', function () {
+        // #M12b shipped the store JSON-gated; #B502 lifts the gate so the store can
+        // carry the request's proxied classification for the req-less lib/routing
+        // getRoute(). Bound the read to handle()'s own body: the previous pin used
+        // lastIndexOf() over the WHOLE file and would have found an unrelated earlier
+        // gate (onInstance's startMs gate) and passed vacuously once the gate moved.
+        var start = src.indexOf('var handle = async function(req, res, next, bundle, pathname, config) {');
+        var end   = src.indexOf('var _handleDispatch', start);
+        assert.ok(start > -1 && end > start, 'handle() body not found');
+        var body = src.slice(start, end);
+        assert.ok(body.indexOf('process.gina._reqALS.run(_reqStore,') > -1, '_reqALS.run() must still exist in handle()');
+        assert.strictEqual(body.indexOf('if ( _reqCtxLogging ) {'), -1, 'the JSON-logging gate must not wrap the .run()');
+        assert.ok(body.indexOf('proxy') > -1, 'the store carries the proxy slot core/router.js fills');
     });
 
     // ---- behavioural replica + subtract control ----

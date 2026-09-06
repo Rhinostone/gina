@@ -7721,24 +7721,29 @@ function Server(options) {
     // durationMs propagate through the WHOLE await chain (router, controller, render,
     // connectors). Established here — not at onInstance — because the request.on('end')
     // boundary between them loses the async context, whereas handle()'s awaits preserve
-    // it. The store carries {requestId, startMs} stamped at onInstance entry. Gated on
-    // JSON logging; in text mode handle === the dispatch with zero ALS overhead.
+    // it. The store carries {requestId, startMs} stamped at onInstance entry.
+    // #B502 — the store is entered on EVERY request, in every log mode: it also carries
+    // the request's proxied classification (`proxy`, filled by core/router.js after the
+    // engine-agnostic slot fill) so the req-less lib/routing getRoute()/toUrl() resolves
+    // THIS request's context instead of the worker-global latch — which is monotonic
+    // once any port-less-Host request has written process.gina.PROXY_HOSTNAME, and so
+    // made a later DIRECT request build its absolute URLs from another request's host.
+    // The logger readers stay JSON-gated (lib/logger main.js + containers/default), so
+    // text mode gains only the ALS enter; requestId/startMs are read there as before.
     var handle = async function(req, res, next, bundle, pathname, config) {
-        if ( _reqCtxLogging ) {
-            if ( !process.gina ) { process.gina = {}; }
-            if ( !process.gina._reqALS ) {
-                var { AsyncLocalStorage } = require('async_hooks');
-                process.gina._reqALS = new AsyncLocalStorage();
-            }
-            var _reqStore = {
-                requestId : req._ginaReqId || _resolveRequestId(req),
-                startMs   : (typeof req._ginaReqStartMs === 'number') ? req._ginaReqStartMs : Date.now()
-            };
-            return process.gina._reqALS.run(_reqStore, function() {
-                return _handleDispatch(req, res, next, bundle, pathname, config);
-            });
+        if ( !process.gina ) { process.gina = {}; }
+        if ( !process.gina._reqALS ) {
+            var { AsyncLocalStorage } = require('async_hooks');
+            process.gina._reqALS = new AsyncLocalStorage();
         }
-        return _handleDispatch(req, res, next, bundle, pathname, config);
+        var _reqStore = {
+            requestId : req._ginaReqId || _resolveRequestId(req),
+            startMs   : (typeof req._ginaReqStartMs === 'number') ? req._ginaReqStartMs : Date.now(),
+            proxy     : null
+        };
+        return process.gina._reqALS.run(_reqStore, function() {
+            return _handleDispatch(req, res, next, bundle, pathname, config);
+        });
     };
 
     var _handleDispatch = async function(req, res, next, bundle, pathname, config) {

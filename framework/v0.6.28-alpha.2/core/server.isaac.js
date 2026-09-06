@@ -2194,12 +2194,18 @@ function ServerEngineClass(options) {
             if ( _thisReqProxied ) {
                 // this request's proxied host/hostname — X-Forwarded-Host wins (multi-hop:
                 // TLS-terminating ingress -> inner proxy -> bundle), else the port-less
-                // Host (single-hop: reverse proxy -> bundle).
+                // Host (single-hop: reverse proxy -> bundle). Scheme: X-Forwarded-Proto,
+                // then PROXY_SCHEME, then the bundle's own — the same chain as the
+                // core/router.js twin (#B502: this arm read PROXY_SCHEME alone and
+                // ignored an X-Forwarded-Proto the twin honours). PROXY_SCHEME is the
+                // PROJECT's def_scheme (gna.js), so with no X-Forwarded-Proto an https
+                // bundle in an http-default project still stamps `http://` here and in
+                // the twin alike — measured on an isolated h2 scene; tracked as #B506.
                 if ( _xfh ) {
                     request._ginaProxyHostname = ( _safeScheme || process.gina.PROXY_SCHEME ) +'://'+ _xfh;
                     request._ginaProxyHost     = _xfh;
                 } else {
-                    request._ginaProxyHostname = process.gina.PROXY_SCHEME +'://'+ _safeRequestHost;
+                    request._ginaProxyHostname = ( _safeScheme || process.gina.PROXY_SCHEME || options.scheme ) +'://'+ _safeRequestHost;
                     request._ginaProxyHost     = _safeRequestHost;
                 }
                 // Refresh the worker-global on EVERY proxied request (freeze fix) — the

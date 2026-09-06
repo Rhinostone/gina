@@ -1051,10 +1051,15 @@ function Routing() {
     /**
      * @function getRoute
      *
-     * On the server, a proxied-context call resolves the route's proxy hostname
-     * from the worker global with an envConf fallback; when neither holds a value
-     * the route degrades to its direct hostname (route.isProxyHost is flipped
-     * false) instead of failing, and a once-per-process warning is emitted.
+     * On the server, the proxied classification and proxy hostname come from the
+     * REQUEST first (#B502): core/router.js fills `proxy` on the process.gina._reqALS
+     * store that server.js handle() establishes for every request, so a direct
+     * request builds direct URLs even after a port-less-Host request has written
+     * the worker global. Only a req-less caller (boot, CLI, cron — no store) falls
+     * back to the getContext('isProxyHost') latch and the worker global with an
+     * envConf fallback; when neither holds a value the route degrades to its direct
+     * hostname (route.isProxyHost is flipped false) instead of failing, and a
+     * once-per-process warning is emitted.
      *
      * @param {string} rule e.g.: [ <scheme>:// ]<name>[ @<bundle> ][ /<environment> ]
      * @param {object} params - substituted into the route's `:placeholders`; on a GET route, leftover keys that are neither reserved nor declared in the rule's `requirements` are appended to `route.url` as query parameters (a rule with no `requirements` block is safe — the block is optional)
@@ -1064,7 +1069,7 @@ function Routing() {
      * */
     self.getRoute = function(rule, params, urlIndex) {
 
-        var config = null, isProxyHost = false;
+        var config = null, isProxyHost = false, _stProxy = null;
         if (isGFFCtx) {
             if (
                 !window.location.port
@@ -1081,7 +1086,16 @@ function Routing() {
                 config.getRouting = getContext('gina').Config.instance.getRouting;
             }
 
-            isProxyHost = getContext('isProxyHost');
+            // #B502 — the request's own proxied classification first: core/router.js
+            // fills `proxy` on the process.gina._reqALS store server.js handle()
+            // establishes for every request. The worker-global latch below is the
+            // fallback for req-less callers only (boot, CLI, cron) — it is monotonic
+            // once any request has written process.gina.PROXY_HOSTNAME, so reading
+            // it for a DIRECT request classified it as proxied and built its URLs
+            // from another request's host.
+            var _reqStore = ( process.gina && process.gina._reqALS ) ? process.gina._reqALS.getStore() : null;
+            _stProxy    = ( _reqStore && _reqStore.proxy ) ? _reqStore.proxy : null;
+            isProxyHost = ( _stProxy ) ? _stProxy.isProxyHost : getContext('isProxyHost');
         }
 
         var env         = config.env || GINA_ENV  // by default, takes the current bundle
@@ -1152,7 +1166,7 @@ function Routing() {
             if (isGFFCtx) {
                 route.proxy_hostname  = window.location.protocol +'//'+ document.location.hostname;
             } else {
-                route.proxy_hostname  = process.gina.PROXY_HOSTNAME || config.envConf._proxyHostname;
+                route.proxy_hostname  = ( _stProxy && _stProxy.proxyHostname ) || process.gina.PROXY_HOSTNAME || config.envConf._proxyHostname;
                 // console.debug("[getRoute#1]["+isProxyHost+"] process.gina.PROXY_HOSTNAME ("+ process.gina.PROXY_HOSTNAME  +") VS config.envConf._proxyHostname ("+ config.envConf._proxyHostname +")");
             }
             // #B168 — on the server, BOTH sources above are framework-produced falsy
