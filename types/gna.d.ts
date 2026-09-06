@@ -51,7 +51,7 @@ interface GinaExports {
     setPaths: typeof globalThis.setPaths;
     /** Read the full paths registry. */
     getPaths: typeof globalThis.getPaths;
-    /** Promisify an `.onComplete(cb)` EventEmitter from PathObject / Shell ops. */
+    /** Promisify an `.onComplete(cb)` EventEmitter, as returned by `Shell::run` or the `run()` global. */
     onCompleteCall: typeof globalThis.onCompleteCall;
 
     // Model helpers
