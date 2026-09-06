@@ -1637,6 +1637,76 @@ function SuperController(options) {
     }
 
     /**
+     * #B496 — build the config-declared CSS/JS preload prefix for the 103 Early
+     * Hints response, as a PURE read: it allocates its own string and never
+     * touches `local.options.template.h2Links`, the asset objects, or anything
+     * else the render path shares.
+     *
+     * Why this exists at all rather than reusing what `getNodeRes()` accumulates:
+     * `getNodeRes()` runs from `setResources()`, which every render delegate calls
+     * AFTER `render()` has dispatched to it — so at hint time `h2Links` is still
+     * the `''` the router seeded (`router.js`), and the automatic 103 could never
+     * fire. Recomputing here keeps the final-200 `link` header's producer entirely
+     * untouched, which bounds this whole feature's blast radius to the 103.
+     *
+     * The URL rule is deliberately duplicated from `getNodeRes()` instead of being
+     * extracted into a shared helper: extracting would edit the 200 header's hot
+     * path, and the worst case of drift here is a slightly inaccurate HINT, never a
+     * wrong page. Extract it once this has been proven live if you want the two
+     * kept in lockstep.
+     *
+     * Mirrors `getNodeRes()`: same `Collection.orderBy({route:'asc'})` ordering,
+     * same webroot rewrite, same #OW3 rule that an SRI'd asset gets no preload
+     * hint (the hint carries no integrity metadata).
+     *
+     * @param {object} viewConf - The resolved template config (`stylesheets` / `javascripts`)
+     * @returns {string} `'<url>; as=style; rel=preload,'`-joined prefix, `''` when nothing qualifies
+     *
+     * @example
+     * computeH2PreloadPrefix({ stylesheets: [{ url: '/css/app.css' }] });
+     * // -> '</css/app.css>; as=style; rel=preload,'
+     *
+     * @private
+     */
+    var computeH2PreloadPrefix = function(viewConf) {
+        if ( !viewConf ) {
+            return '';
+        }
+
+        var _webroot    = local.options.conf.server.webroot;
+        var useWebroot  = ( _webroot !== '/' && _webroot.length > 0 ) ? true : false;
+        var sriEnabled  = ( local.options.template && local.options.template.sriEnabled ) ? true : false;
+        var links       = '';
+
+        var appendAll = function(as, resArr) {
+            if ( !resArr ) {
+                return;
+            }
+            var coll = new Collection(resArr).orderBy({route: 'asc'});
+            for (var r = 0, rLen = coll.length; r < rLen; ++r) {
+                var obj = coll[r];
+                if ( !obj || !obj.url ) {
+                    continue;
+                }
+                var url = ( useWebroot && !obj.url.startsWith(_webroot) )
+                    ? _webroot + obj.url.substring(1)
+                    : obj.url;
+                // #OW3 — an SRI'd asset is never hinted (see getNodeRes)
+                if ( sriEnabled && lib.sri.getIntegrityAttributes(url, local.options.conf, _webroot) ) {
+                    continue;
+                }
+                links += '<'+ url +'>; as='+ as +'; rel=preload,';
+            }
+            coll = null;
+        };
+
+        appendAll('style', viewConf.stylesheets);
+        appendAll('script', viewConf.javascripts);
+
+        return links;
+    }
+
+    /**
      * TODO -  SuperController.setMeta()
      * */
     // this.setMeta = function(metaName, metacontent) {
@@ -1750,18 +1820,6 @@ function SuperController(options) {
             });
             local._timeline._renderStart = _renderStart;
         }
-        // #EH1 — auto-send 103 Early Hints from accumulated h2Links (CSS/JS preloads).
-        // h2Links is populated by getNodeRes() for HTTP/2 non-dev requests only.
-        // Firing here — before getAssets() and Swig compilation — gives the browser
-        // the CSS/JS hints during the largest available latency window.
-        // The Link header on the final 200 is preserved (render-swig sets it separately).
-        var _h2Links = local.options && local.options.template && local.options.template.h2Links;
-        if (_h2Links) {
-            // trim trailing comma inserted by getNodeRes()
-            var _hints = /,$/.test(_h2Links) ? _h2Links.slice(0, -1) : _h2Links;
-            if (_hints) self.setEarlyHints(_hints);
-        }
-
         // Dispatch to the render delegate matching the bundle's configured
         // template engine. `settings.json > render.engine` defaults to "swig"
         // so existing bundles see zero change; "nunjucks" routes through
@@ -1907,6 +1965,81 @@ function SuperController(options) {
             try {
                 delete require.cache[require.resolve( _(__dirname + '/controller.render-nunjucks-async', true))];
             } catch (e) { /* async delegate may not exist on older framework dirs */ }
+        }
+
+        // #B496 — populate the CSS/JS preload prefix for the Early Hints block below.
+        //
+        // Placement is load-bearing and bounded on both sides. It must run after the
+        // #SPA1 negotiation block, because that is what resolves isWithoutLayout for a
+        // fragment request and every delegate filters its asset list to common-only
+        // under that flag — computing earlier would hint the full list on fragments and
+        // disagree with the 200 header. It must run before the dispatch below, which is
+        // what keeps the hint engine-agnostic and ahead of getAssets() and compilation.
+        // Within that window it sits here, at the far end rather than up against #SPA1,
+        // for a test-mechanical reason worth knowing before you move it: the negotiation
+        // block owns a 4000-character negative-invariant window (spa-content-negotiation
+        // .test.js § 04 asserts nothing inside it reads isXMLRequest) and the gate below
+        // legitimately does. Nothing between #SPA1 and here writes isWithoutLayout, the
+        // template config or errOptions — measured — so the state read here is the same
+        // state #SPA1 left.
+        //
+        // The delegates resolve their own view config as `errOptions || local.options`
+        // (all five of them), so this mirrors that rather than reading local.options
+        // directly — otherwise a custom-error render would hint the failing route's
+        // assets instead of the error page's.
+        //
+        // `_ehPopulated` is a PER-CALL local, deliberately not request state: a nested
+        // render (a required controller) re-enters render() while the OUTER delegate's
+        // getNodeRes() may have already accumulated into the same h2Links, and a
+        // request-scoped flag would let the restore below wipe it.
+        var _ehPopulated = false;
+        try {
+            if (
+                hasViews()
+                && !self.isXMLRequest()
+                && !self.isCacheless()
+                && /http\/2/.test(local.options.conf.server.protocol)
+                && local.options.template
+                && local.options.template.h2Links === ''
+            ) {
+                var _ehOptions  = (errOptions) ? errOptions : local.options;
+                var _ehViewConf = _ehOptions.template;
+                if ( _ehOptions.isWithoutLayout && _ehViewConf ) {
+                    _ehViewConf = JSON.clone(_ehViewConf);
+                    if ( Collection && Array.isArray(_ehViewConf.javascripts) ) {
+                        _ehViewConf.javascripts = new Collection(_ehViewConf.javascripts)
+                            .find({ isCommon: false }, { isCommon: true, name: 'gina' });
+                    }
+                    if ( Collection && Array.isArray(_ehViewConf.stylesheets) ) {
+                        _ehViewConf.stylesheets = new Collection(_ehViewConf.stylesheets)
+                            .find({ isCommon: false }, { isCommon: true, name: 'gina' });
+                    }
+                }
+                local.options.template.h2Links = computeH2PreloadPrefix(_ehViewConf);
+                _ehPopulated = true;
+            }
+        } catch (earlyHintsErr) {
+            // A preload hint is an enhancement — it must never break a render.
+            console.warn('[#B496] early-hints preload skipped: '+ (earlyHintsErr.message || earlyHintsErr));
+        }
+
+        // #EH1 — auto-send 103 Early Hints from the accumulated h2Links (CSS/JS preloads).
+        // Populated immediately above since #B496; before that it read the router's
+        // '' seed here and the hint never fired. Sending before the delegate compiles
+        // the template gives the browser the CSS/JS hints during the largest available
+        // latency window. The Link header on the final 200 is unaffected — the delegate
+        // rebuilds it from a clean h2Links (restored below) exactly as before.
+        var _h2Links = local.options && local.options.template && local.options.template.h2Links;
+        if (_h2Links) {
+            // trim trailing comma inserted by computeH2PreloadPrefix()
+            var _hints = /,$/.test(_h2Links) ? _h2Links.slice(0, -1) : _h2Links;
+            if (_hints) self.setEarlyHints(_hints);
+        }
+        // #B496 — restore the router's seed so the delegate's getNodeRes() accumulates
+        // the 200's prefix from clean, byte-identically to before this block existed.
+        // Guarded on the per-call flag: only the call that populated may restore.
+        if ( _ehPopulated ) {
+            local.options.template.h2Links = '';
         }
 
         return require( _(__dirname + _delegate, true) )(userData, displayInspector, errOptions, {
