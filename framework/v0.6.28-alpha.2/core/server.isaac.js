@@ -1686,6 +1686,20 @@ function ServerEngineClass(options) {
                         return _mtSend(400, { error: 'bad_request', message: '/_gina/maintenance: body must be {"enable":true|false[,"ttlSeconds":N,"retryAfter":N,"message":"…"]}' });
                     }
 
+                    // #B498 — a PRESENT `ttlSeconds` must be an integer in 1..86400. Anything
+                    // else used to be silently ignored, which armed an UNBOUNDED window when the
+                    // caller had asked for a bounded one: fail-open on the dead-man switch, with
+                    // `until: null` in the response as the only tell. Absent (or null) is still
+                    // legal — it means "no timer" and is the documented default. Refused rather
+                    // than clamped: a shorter-than-asked window reopens a site mid-deploy, so
+                    // unlike the instrument window there is no safe direction to round toward.
+                    if ( typeof(_mbBody.ttlSeconds) != 'undefined' && _mbBody.ttlSeconds !== null
+                            && !( typeof(_mbBody.ttlSeconds) == 'number' && isFinite(_mbBody.ttlSeconds)
+                                && Math.floor(_mbBody.ttlSeconds) === _mbBody.ttlSeconds
+                                && _mbBody.ttlSeconds >= 1 && _mbBody.ttlSeconds <= 86400 ) ) {
+                        return _mtSend(400, { error: 'bad_request', message: '/_gina/maintenance: `ttlSeconds` must be an integer from 1 to 86400 (24h) — for a window that must outlive a day or a restart, set settings.json > server.maintenance.enabled: true' });
+                    }
+
                     var _rtNew = { active: _mbBody.enable === true, until: null };
                     if ( typeof(_mbBody.ttlSeconds) == 'number' && isFinite(_mbBody.ttlSeconds)
                             && Math.floor(_mbBody.ttlSeconds) === _mbBody.ttlSeconds

@@ -5238,7 +5238,9 @@ function Server(options) {
             // The runtime override is NOT persisted: a restart returns the bundle to
             // its configured state. `ttlSeconds` is a dead-man switch — when it
             // expires the bundle reverts to CONFIG (not to "off"), so a forgotten
-            // timer can never re-open a site settings.json says is closed.
+            // timer can never re-open a site settings.json says is closed. A PRESENT
+            // `ttlSeconds` must be an integer in 1..86400 or the request is refused 400
+            // (#B498) — it is never silently dropped or clamped.
             //
             // Keep in sync with the core/server.isaac.js twin.
             if (
@@ -5289,6 +5291,21 @@ function Server(options) {
                     if ( !_mbBody || ( _mbBody.enable !== true && _mbBody.enable !== false ) ) {
                         response.statusCode = 400;
                         return response.end(JSON.stringify({ error: 'bad_request', message: '/_gina/maintenance: body must be {"enable":true|false[,"ttlSeconds":N,"retryAfter":N,"message":"…"]}' }));
+                    }
+
+                    // #B498 — a PRESENT `ttlSeconds` must be an integer in 1..86400. Anything
+                    // else used to be silently ignored, which armed an UNBOUNDED window when the
+                    // caller had asked for a bounded one: fail-open on the dead-man switch, with
+                    // `until: null` in the response as the only tell. Absent (or null) is still
+                    // legal — it means "no timer" and is the documented default. Refused rather
+                    // than clamped: a shorter-than-asked window reopens a site mid-deploy, so
+                    // unlike the instrument window there is no safe direction to round toward.
+                    if ( typeof(_mbBody.ttlSeconds) != 'undefined' && _mbBody.ttlSeconds !== null
+                            && !( typeof(_mbBody.ttlSeconds) == 'number' && isFinite(_mbBody.ttlSeconds)
+                                && Math.floor(_mbBody.ttlSeconds) === _mbBody.ttlSeconds
+                                && _mbBody.ttlSeconds >= 1 && _mbBody.ttlSeconds <= 86400 ) ) {
+                        response.statusCode = 400;
+                        return response.end(JSON.stringify({ error: 'bad_request', message: '/_gina/maintenance: `ttlSeconds` must be an integer from 1 to 86400 (24h) — for a window that must outlive a day or a restart, set settings.json > server.maintenance.enabled: true' }));
                     }
 
                     var _rtNew = { active: _mbBody.enable === true, until: null };
