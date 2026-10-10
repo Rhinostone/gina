@@ -6939,7 +6939,21 @@ function Server(options) {
                         // is a reference assignment, not a copy. The multipart branch above
                         // uses Busboy and never reaches here, so uploads are unaffected.
                         request.rawBody = (typeof request.body === 'string') ? request.body : '';
-                        processRequestData(request, response, next);
+                        // #B793 — the request data is parsed on this stack, and nothing has
+                        // been answered yet. An exception thrown in there used to reach the
+                        // process as an uncaughtException, which ends the bundle: the GET,
+                        // HEAD and DELETE branches hold no try, nor does the tail of the PUT
+                        // one, nor the hand-off that follows the parse. It is now answered as
+                        // a 500, as the POST, PUT and PATCH body branches already answer
+                        // theirs, with its stack on the pairing line throwError() logs.
+                        // This is a net under the parse, never a substitute for fixing what
+                        // throws: each catch is logged at error level under its own ref.
+                        // throwError() writes only while the headers are unsent.
+                        try {
+                            processRequestData(request, response, next);
+                        } catch (parseErr) {
+                            throwError(response, 500, 'Could not evaluate '+ request.method +' request data.\n'+ ( (parseErr && parseErr.stack) ? parseErr.stack : String(parseErr) ), next);
+                        }
                     });
 
                     if (request.end) request.end();
@@ -6987,9 +7001,15 @@ function Server(options) {
     }
 
     /**
-     * Parses and normalises the request body for POST/PUT/PATCH/DELETE methods.
-     * Handles `application/json`, `application/x-www-form-urlencoded`, and
-     * `multipart/form-data` (via Busboy). Calls `next` when done.
+     * Parses and normalises the request data once the body is complete: the
+     * query string for GET, HEAD and DELETE, the body for POST, PUT and PATCH
+     * (`application/json`, `application/x-www-form-urlencoded`). A
+     * `multipart/form-data` request never runs it: Busboy's listeners build its
+     * fields. It then loads the bundle configuration and hands the request to
+     * the dispatch.
+     *
+     * A throw from here is caught by its one caller, the request's `'end'`
+     * listener, and answered as a 500 (#B793).
      *
      * @inner
      * @private
