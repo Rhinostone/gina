@@ -6433,10 +6433,13 @@ function Server(options) {
                     // 'field', 'file' or 'finish' listener is ANSWERED, the same net #B793
                     // placed under the non-multipart parse (processRequestData). Unguarded,
                     // such a throw reached uncaughtException -> proc.js SIGTERM and the bundle
-                    // exited (code 143) on Node 22 (engines floor >= 22); on Node 24+ the stream
-                    // machinery forwarded it to busboy's 'error' -> onBusboyError, which answered
-                    // a misleading 400 "Malformed multipart/form-data request" (the body is not
-                    // malformed; a framework function threw). Now a listener throw answers 500
+                    // exited (code 143) on Node 22 (engines floor >= 22); on Node 24+ the outcome
+                    // depended on the listener (measured, #B843 review): in 'field' the stream
+                    // machinery forwarded the throw to busboy's 'error' -> onBusboyError, which
+                    // answered a misleading 400 "Malformed multipart/form-data request" (the body
+                    // is not malformed; a framework function threw); in 'file' it answered that 400
+                    // and the bundle then exited; in 'finish' the request got no answer and the
+                    // bundle exited. Now a listener throw answers 500
                     // "Could not evaluate <METHOD> request data." uniformly across Node versions
                     // (identical wording to #B793, so one log grep catches both parse surfaces),
                     // with the stack on the pairing line; a genuinely malformed body still
@@ -6446,15 +6449,49 @@ function Server(options) {
                     // No known input throws here today (#B546/#B591/#B792 fixed the known ones) --
                     // this is a net, logged at error level so the cause gets fixed. Rule kept
                     // (#B793): fix the throw site, never widen the uncaughtException net.
+                    //
+                    // #B844 (2026-10-11) — the same wrapper also runs the callbacks NESTED in a file
+                    // part, which the 'file' listener only registers: the write stream's 'error' and
+                    // 'finish' handlers, the close callback (the hand-off of a request that carries a
+                    // file runs from it), the file stream's 'end' handler and the cleanup timer's
+                    // callback. Each is wrapped where it is registered, and the registration text is
+                    // kept (#B143 source pins). Unwrapped, an exception raised in one of them ended
+                    // the bundle, answered or not (driven on Node 22, 24, 25 and 26). The line Transform's
+                    // _transform / _flush are left as they are: the #B103 / #B142 suites slice their
+                    // text.
+                    /**
+                     * Wraps a multipart callback so that an exception raised in it is answered
+                     * instead of reaching the process (#B843, #B844).
+                     *
+                     * Used for the three Busboy listeners (text field, file part, end of body) and
+                     * for the callbacks nested in a file part. When nothing has answered or taken
+                     * the request yet, the catch answers a 500 through `throwError`; otherwise it
+                     * logs the stack. It never rethrows. `this`, the arguments and the return value
+                     * pass through.
+                     *
+                     * @inner
+                     * @param   {Function} fn - The listener or callback to run.
+                     * @returns {Function} The guarded function.
+                     * @example
+                     * stream.on('close', guardMultipartListener(function onClose() { cleanUp(); }));
+                     */
                     var guardMultipartListener = function (fn) {
                         return function () {
                             try {
                                 return fn.apply(this, arguments);
                             } catch (listenerErr) {
-                                console.error('[ busboy ] [ onListenerThrow ]', (listenerErr && listenerErr.message) ? listenerErr.message : listenerErr);
+                                // #B844 — an exception message can quote a value taken from the request (the
+                                // engine quotes a property name as written), so it is logged with its control
+                                // characters as visible escapes (#B830).
+                                console.error('[ busboy ] [ onListenerThrow ] ' + escapeLogControlChars((listenerErr && listenerErr.message) ? listenerErr.message : listenerErr));
                                 if (!response.headersSent && !request.handled) {
                                     request.handled = true;
                                     throwError(response, 500, 'Could not evaluate ' + request.method + ' request data.\n' + ((listenerErr && listenerErr.stack) ? listenerErr.stack : listenerErr), next);
+                                } else {
+                                    // #B844 (review F4) — nothing answers here: the request is already answered
+                                    // or handed off, or this is the cleanup timer's callback. No pairing line will
+                                    // carry the stack, so it is logged here, or the cause could not be located.
+                                    console.error('[ busboy ] [ onListenerThrow ] not answered: ' + escapeLogDetailKeepFrames((listenerErr && listenerErr.stack) ? listenerErr.stack : listenerErr));
                                 }
                             }
                         };
@@ -6693,14 +6730,14 @@ function Server(options) {
                         // An errored stream never emits 'finish', so it never decrements:
                         // the request stays terminal at the 500 (the pre-#B143 semantics).
                         ++pending;
-                        writeStreams[index].on('error', function(err) {
+                        writeStreams[index].on('error', guardMultipartListener(function(err) {
                             console.error('[ busboy ] [ onWriteError ]', err);
                             throwError(response, 500, 'Internal server error\n' + err, next);
                             this.close();
                             return;
-                        });
-                        writeStreams[index].on('finish', function() {
-                            this.close( function onUploaded(){
+                        }));
+                        writeStreams[index].on('finish', guardMultipartListener(function() {
+                            this.close( guardMultipartListener(function onUploaded(){
                                 --pending;
                                 console.debug('closing writestreams : ' + pending);
 
@@ -6710,8 +6747,8 @@ function Server(options) {
                                 if (busboyDone && pending === 0) {
                                     resumeAfterMultipart();
                                 }
-                            })
-                        });
+                            }))
+                        }));
 
                         // #B144 (2026-07-22) — consumer-probeable write-error path. A group
                         // with `simulateWriteError: true` (honoured OUTSIDE production scope
@@ -6783,7 +6820,7 @@ function Server(options) {
                         };
 
 
-                        file.on('end', function() {
+                        file.on('end', guardMultipartListener(function() {
 
                             //fileObj = Buffer.from(str2ab(this._dataChunk));
                             //delete this._dataChunk;
@@ -6820,14 +6857,14 @@ function Server(options) {
 
                             // /tmp autoTmpCleanupTimeout
                             if (autoTmpCleanupTimeout) {
-                                setTimeout((tmpFilename) => {
+                                setTimeout(guardMultipartListener((tmpFilename) => {
                                     console.debug('[ BUNDLE ][ '+self.appName+' ][ server ][ upload ] Now removing `'+ tmpFilename +'` from tmp');
                                     var tmpFilename = new _(tmpFilename);
                                     if (tmpFilename.existsSync())
                                         tmpFilename.rmSync();
-                                }, autoTmpCleanupTimeout, tmpFilename);
+                                }), autoTmpCleanupTimeout, tmpFilename);
                             }
-                        });
+                        }));
                     });
 
                     // #B93 — resume the request lifecycle once the multipart body is fully
@@ -6898,6 +6935,11 @@ function Server(options) {
                         }
                     });
 
+                    // #B844 (review F3) — the three guarded registrations are made: remove the
+                    // override, so that what pipe() registers next goes through busboy's own `on`
+                    // (a listener registered through the override is wrapped, and unpipe could no
+                    // longer remove it).
+                    delete busboy.on;
                     request.pipe(busboy);
                 } else {
 
