@@ -4,19 +4,18 @@
  * uncaughtException, which ends the bundle.
  *
  * No known input makes that parse throw today, so the scene's bundle entry
- * installs TEST DOUBLES over the three globals the real parse calls, before
+ * installs TEST DOUBLES over two globals the real parse calls, before
  * `start()`: each throws on a sentinel and is inert otherwise.
  *
  *   formatDataFromString     throws when its string holds `b793fmt`
  *   Object.prototype.count   throws when its receiver has an own key `b793count`
- *   nestBracketNotationKey   throws when the key path holds `b793nest`
  *
  * The throw is therefore raised inside the real call sites of core/server.js,
  * on the real `'end'` listener, over HTTP/1.1 on the default engine (isaac).
  *
  *   01  what already answered before the guard: a parse exception on a POST or
- *       PATCH body (500), in a multipart field (400), and the custom error page
- *       an action's own throwError() is served — the controls
+ *       PATCH body (500), and the custom error page an action's own throwError()
+ *       is served — the controls
  *   02  the guard: GET, HEAD, DELETE and a PUT with a JSON body answer 500 with
  *       the incident ref the log pairs with the stack, as JSON for an XHR request
  *       and as the bundle's own error page for an HTML one; the bundle survives
@@ -24,6 +23,10 @@
  * Red-first: on a tree without the guard every 02 arm gets no answer and the
  * bundle exits (code 143). Each 02 arm re-boots a dead bundle first, so each is
  * red for its own request rather than for the previous arm's exit.
+ *
+ * Not covered here: a `multipart/form-data` request. It never runs the guarded
+ * call (Busboy's listeners build its fields), and what happens to an exception
+ * thrown in one of those listeners depends on the Node.js version.
  *
  * Isolation: the container-boot-request-parsing.test.js shape — a throwaway HOME
  * under os.tmpdir(), its own port window (11400), project:rm + rmSync at
@@ -119,16 +122,6 @@ function request(method, reqPath, body, headers) {
     });
 }
 
-function multipart(fields) {
-    var boundary = '----ginaB793' + STAMP;
-    var body = '';
-    fields.forEach(function (f) {
-        body += '--' + boundary + '\r\nContent-Disposition: form-data; name="' + f[0] + '"\r\n\r\n' + f[1] + '\r\n';
-    });
-    body += '--' + boundary + '--\r\n';
-    return request('POST', webroot + 'echo', body, Object.assign({ 'content-type': 'multipart/form-data; boundary=' + boundary }, XHR));
-}
-
 function runCli(args) {
     var r = spawnSync(process.execPath, [CLI].concat(args), { env: CHILD_ENV, encoding: 'utf8', timeout: 60000 });
     return { status: r.status, stdout: r.stdout || '', stderr: r.stderr || '' };
@@ -138,9 +131,20 @@ function sleep(ms) { return new Promise(function (resolve) { setTimeout(resolve,
 function isChildAlive() { return child && child.exitCode === null && child.signalCode === null; }
 function readJSON(file) { return JSON.parse(fs.readFileSync(file, 'utf8')); }
 
-/** Boots the bundle unless it is running. Returns false when it did not come up. */
+/**
+ * Boots the bundle unless it is running and answering. A bundle that is shutting down
+ * still reads as alive for a moment, so a live process is probed with a control request,
+ * and one that does not answer is given the time to exit before the next boot.
+ * Returns false when the bundle did not come up.
+ */
 async function ensureUp() {
-    if (isChildAlive()) { return true; }
+    if (isChildAlive()) {
+        var probe = await request('GET', webroot + 'echo?x=plain&y=1', null, XHR);
+        if (probe.status === 200) { return true; }
+        var gone = Date.now() + 8000;
+        while (Date.now() < gone && isChildAlive()) { await sleep(150); }
+        if (isChildAlive()) { try { child.kill('SIGKILL'); } catch (e) { /* ignore */ } await sleep(300); }
+    }
     childExit = null;
     var mine = spawn(process.execPath, [CONTAINER, BUNDLE, '@' + PROJ], { env: CHILD_ENV, stdio: ['ignore', 'pipe', 'pipe'] });
     child = mine;
@@ -219,8 +223,8 @@ function installScene() {
     var x = fs.readFileSync(xf, 'utf8');
     var startAnchor = BUNDLE + '.start();';
     if (x.split(startAnchor).length !== 2) { throw new Error('index.js start anchor count ' + (x.split(startAnchor).length - 1)); }
-    // The two function globals are re-assigned when their helper is loaded again, so each
-    // double sits behind an accessor that wraps whatever is assigned.
+    // The function global is re-assigned when its helper is loaded again, so its double
+    // sits behind an accessor that wraps whatever is assigned.
     var doubles = [
         '(function () {',
         '    var guardGlobal = function (name, shouldThrow) {',
@@ -238,7 +242,6 @@ function installScene() {
         '            set: function (fn) { cur = (fn && fn.__b793) ? fn : wrap(fn); } });',
         '    };',
         '    guardGlobal("formatDataFromString", function (s) { return typeof s === "string" && s.indexOf("b793fmt") > -1; });',
-        '    guardGlobal("nestBracketNotationKey", function (o, keys) { return !!(keys && keys.indexOf && keys.indexOf("b793nest") > -1); });',
         '    var realCount = Object.prototype.count;',
         '    Object.defineProperty(Object.prototype, "count", { writable: true, enumerable: false, configurable: true, value: function () {',
         '        if (this !== null && typeof this === "object" && Object.prototype.hasOwnProperty.call(this, "b793count")) { throw new TypeError("b793 injected: count"); }',
@@ -336,14 +339,7 @@ describe('25 - container-boot-parse-throw — a parse exception on the request d
         await assertAlive('01.2');
     });
 
-    it('01.3  a parse exception in a multipart field was already answered 400', async function (t) {
-        if (!ready(t)) { return; }
-        var m = await multipart([['x', 'plain'], ['b793nest[a]', '1']]);
-        assert.equal(m.status, 400);
-        await assertAlive('01.3');
-    });
-
-    it('01.4  an action\'s own throwError(500) on an HTML request is served the bundle\'s error page', async function (t) {
+    it('01.3  an action\'s own throwError(500) on an HTML request is served the bundle\'s error page', async function (t) {
         if (!ready(t)) { return; }
         var b = await request('GET', webroot + 'boom', null, { accept: 'text/html' });
         assert.equal(b.status, 500);
