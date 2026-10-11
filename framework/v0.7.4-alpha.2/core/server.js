@@ -6429,6 +6429,44 @@ function Server(options) {
                     // arrives as `item: [ { id } ]` exactly as from a JSON body. Duplicate
                     // plain names: last one wins.
                     var multipartFields = null;
+                    // #B843 (2026-10-11) — guard the busboy listeners so a throw inside the
+                    // 'field', 'file' or 'finish' listener is ANSWERED, the same net #B793
+                    // placed under the non-multipart parse (processRequestData). Unguarded,
+                    // such a throw reached uncaughtException -> proc.js SIGTERM and the bundle
+                    // exited (code 143) on Node 22 (engines floor >= 22); on Node 24+ the stream
+                    // machinery forwarded it to busboy's 'error' -> onBusboyError, which answered
+                    // a misleading 400 "Malformed multipart/form-data request" (the body is not
+                    // malformed; a framework function threw). Now a listener throw answers 500
+                    // "Could not evaluate <METHOD> request data." uniformly across Node versions
+                    // (identical wording to #B793, so one log grep catches both parse surfaces),
+                    // with the stack on the pairing line; a genuinely malformed body still
+                    // answers 400 via onBusboyError below. The catch SWALLOWS (no rethrow), so on
+                    // Node 24+ the stream forwards nothing and onBusboyError cannot double-answer;
+                    // the !response.headersSent && !request.handled guard is belt-and-suspenders.
+                    // No known input throws here today (#B546/#B591/#B792 fixed the known ones) --
+                    // this is a net, logged at error level so the cause gets fixed. Rule kept
+                    // (#B793): fix the throw site, never widen the uncaughtException net.
+                    var guardMultipartListener = function (fn) {
+                        return function () {
+                            try {
+                                return fn.apply(this, arguments);
+                            } catch (listenerErr) {
+                                console.error('[ busboy ] [ onListenerThrow ]', (listenerErr && listenerErr.message) ? listenerErr.message : listenerErr);
+                                if (!response.headersSent && !request.handled) {
+                                    request.handled = true;
+                                    throwError(response, 500, 'Could not evaluate ' + request.method + ' request data.\n' + ((listenerErr && listenerErr.stack) ? listenerErr.stack : listenerErr), next);
+                                }
+                            }
+                        };
+                    };
+                    // The wrap is applied by overriding busboy.on IN PLACE, so the literal
+                    // busboy.on('field'|'file'|'finish') registrations below stay verbatim —
+                    // the #B92-adjacent and #B143 source pins assert on that exact text.
+                    var _realBusboyOn = busboy.on.bind(busboy);
+                    busboy.on = function (ev, fn) {
+                        if (ev === 'field' || ev === 'file' || ev === 'finish') { fn = guardMultipartListener(fn); }
+                        return _realBusboyOn(ev, fn);
+                    };
                     busboy.on('field', function onMultipartField(name, value, info) {
                         // A truncated value hit the fieldSize cap — busboy truncates
                         // silently, which would hand the app corrupted data; reject instead.
