@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'A `gina bundle:start` that the framework refuses before it starts anything no longer stops the framework. `bundle:start` runs inside the framework''s own process, and a refusal such as an unregistered `@<project>` or an invalid bundle name ended that process (exit code 1) while the command exited 0, so every later command found no framework running (measured in an isolated daemon). The refusal now ends only that command, with exit code 1, and the framework keeps running; an error thrown while the framework prepares the command is handled the same way. Pickup: restart the framework (`gina framework:restart`) (#B855)'
+time: 2026-10-13T15:32:26+01:00

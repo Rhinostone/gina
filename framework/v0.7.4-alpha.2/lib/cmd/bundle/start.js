@@ -73,7 +73,13 @@ function Start(opt, cmd) {
         new CmdHelper(self, opt.client, { port: opt.debugPort, brkEnabled: opt.debugBrkEnabled });
 
         // check CMD configuration
-        if (!isCmdConfigured()) return false;
+        // #B855 — isCmdConfigured() is async: the Promise it returns is always truthy, so this
+        // guard never fired. Its body runs synchronously, and a refusal in it called exit(), which
+        // ended the framework daemon this handler runs in. exit() now ends only this client and
+        // marks the command: stop here.
+        // was: if (!isCmdConfigured()) return false;
+        isCmdConfigured();
+        if (self.cmdExited) return false;
 
 
         // start all bundles

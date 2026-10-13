@@ -19,6 +19,10 @@ var help            = require(ginaPath + '/utils/helper');
 
 
 var aliases = require( getPath('gina').lib + '/cmd/aliases.json' );
+// #B851 / #B855 — the framed exit code an online command's client gets (bundle:start, the one
+// online command, runs inside the framework daemon; writeExit() writes only to a connection
+// bin/cmd marked)
+var startStatus = require('../bundle/inc/start-status');
 /**
  * Runs the framework initialisation/validation sequence before executing a command.
  * Validation checks (`self.check*`) are run in declaration order via the async `begin()` loop.
@@ -205,7 +209,7 @@ function Initialize(opt) {
             // Online runs inside the long-lived daemon serving every client, so
             // exiting here would drop the control plane. End this client instead.
             if ( opt.isOnlineCommand ) {
-                if (opt.client) { opt.client.end(); }
+                if (opt.client) { startStatus.writeExit(opt.client, 1); opt.client.end(); }
                 return;
             }
             process.exit(1);
@@ -221,6 +225,13 @@ function Initialize(opt) {
             console.crit('Gina has some troubles with this command: gina '+ opt.argv.slice(2).join(' ') +'\n'+ err.stack);
             if (opt.client) {
                 opt.client.write('Gina has some troubles with this command: gina '+ opt.argv.slice(2).join(' ') +'\n' + err.stack);
+            }
+            // #B855 — online, a throw from the handler ends this client with exit 1; process.exit
+            // here ended the framework daemon, so every later command found no framework.
+            if ( opt.isOnlineCommand && opt.client ) {
+                startStatus.writeExit(opt.client, 1);
+                opt.client.end();
+                return;
             }
             process.exit(1);
         }

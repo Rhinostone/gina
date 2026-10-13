@@ -18,7 +18,8 @@
  *   05 — findRunningBundle(): the « already running » rule, through an injected probe
  *   06 — writeExit(): only a client bin/cmd marked
  *   07 — core/server.js watchBindOutcome(), extracted and driven with stubs
- *   08 — source pins (comment lines removed): bin/cli, bin/cmd, start.js, server.js, gna.js
+ *   08 — source pins (comment lines removed): bin/cli, bin/cmd, start.js, helper.js and init.js
+ *        (an online refusal ends its client, not the daemon: #B855), server.js, gna.js
  *
  * Red-first: every section fails on the pre-fix tree (the module, the server.js function and
  * the wiring are absent). The daemon paths end to end (S0–S11 of the #B851 sandbox) and a
@@ -519,6 +520,45 @@ describe('08 - the wiring (comment lines removed)', function () {
         var iWatch  = code.indexOf('watchBindOutcome(process.server, ', iListen);
         var iEmit   = code.indexOf("self.emit('started', ", iListen);
         assert.ok(iListen > -1 && iWatch > iListen && iEmit > iWatch, 'listen ' + iListen + ' < watch ' + iWatch + ' < started ' + iEmit);
+    });
+
+    it('helper.js: online, exit() ends only its client, with the exit code framed, and marks the command (#B855)', function () {
+        var code = live(fs.readFileSync(HELPER_PATH, 'utf8'));
+        var at = code.indexOf('exit = function(errorMessage) {');
+        assert.ok(at > -1, 'exit() was not found');
+        var body = code.slice(at, code.indexOf('process.exit(1)', at) + 20);
+        var iOnline = body.indexOf('if ( client && client.ginaStatusFrames === true ) {');
+        var iMark   = body.indexOf('cmd.cmdExited = true;');
+        var iFrame  = body.indexOf('startStatus.writeExit(client, errorMessage ? 1 : 0);');
+        var iRet    = body.indexOf('return;', iFrame);
+        var iExit   = body.indexOf('process.exit(1)');
+        assert.ok(iOnline > -1 && iMark > iOnline && iFrame > iMark && iRet > iFrame, 'online branch: mark, frame, return');
+        assert.ok(iRet < iExit, 'the online branch returns before the process.exit an offline command keeps');
+    });
+
+    it('helper.js: online, an invalid bundle name ends the client through exit(), not process.exit (#B855)', function () {
+        var code = live(fs.readFileSync(HELPER_PATH, 'utf8'));
+        var at = code.indexOf("console.error('[ ' + cmd.bundles[0] + ' ] is not a valid bundle name.');");
+        assert.ok(at > -1, 'the invalid-name branch was not found');
+        var region = code.slice(at, code.indexOf('process.exit(1)', at));
+        assert.match(region, /client\.ginaStatusFrames === true/);
+        assert.match(region, /exit\('\[ ' \+ cmd\.bundles\[0\] \+ ' \] is not a valid bundle name\.'\);\s*return false;/);
+    });
+
+    it('start.js: the handler stops when exit() marked the command (isCmdConfigured() is async; its Promise never failed the old guard)', function () {
+        var code = live(fs.readFileSync(START_PATH, 'utf8'));
+        var at = code.indexOf('isCmdConfigured();');
+        assert.ok(at > -1, 'isCmdConfigured() is not called as a statement');
+        assert.match(code.slice(at, at + 80), /isCmdConfigured\(\);\s*if \(self\.cmdExited\) return false;/);
+        assert.equal(code.indexOf('if (!isCmdConfigured()) return false;'), -1, 'the old guard is gone from start.js');
+    });
+
+    it('init.js: online, the unknown-command and the handler-throw paths end the client with exit 1, not the daemon (#B855)', function () {
+        var code = live(fs.readFileSync(INIT_PATH, 'utf8'));
+        assert.match(code, /if \( opt\.isOnlineCommand \) \{\s*if \(opt\.client\) \{ startStatus\.writeExit\(opt\.client, 1\); opt\.client\.end\(\); \}\s*return;\s*\}/);
+        var iCrit = code.indexOf("console.crit('Gina has some troubles with this command: gina '");
+        var tail  = code.slice(iCrit, code.indexOf('process.exit(1);', iCrit) + 16);
+        assert.match(tail, /if \( opt\.isOnlineCommand && opt\.client \) \{\s*startStatus\.writeExit\(opt\.client, 1\);\s*opt\.client\.end\(\);\s*return;\s*\}\s*process\.exit\(1\);/);
     });
 
     it('gna.js: the readiness flag waits for the server to listen', function () {

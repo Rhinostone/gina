@@ -10,6 +10,8 @@ var inherits    = lib.inherits;
 var Collection  = lib.Collection;
 var helpers     = require( getPath('gina').helpers);
 var escapeRegex = require('./bundle/inc/name-rewrite').escapeRegex;
+// #B855 — the framed exit code exit() sends an online command's client
+var startStatus = require('./bundle/inc/start-status');
 /**
  * @module gina/lib/cmd/helper
  */
@@ -534,6 +536,11 @@ function CmdHelper(cmd, client, debug) {
                     // so the message read `[ undefined ]`.
                     // was: console.error('[ ' + cmd.name + ' ] is not a valid bundle name.');
                     console.error('[ ' + cmd.bundles[0] + ' ] is not a valid bundle name.');
+                    // #B855 — online, end this client only (exit()), and tell it why
+                    if ( client && client.ginaStatusFrames === true ) {
+                        exit('[ ' + cmd.bundles[0] + ' ] is not a valid bundle name.');
+                        return false;
+                    }
                     process.exit(1)
                 }
             } // else, might be a bulk operation: look for `isBulkOperation`
@@ -2131,6 +2138,23 @@ function CmdHelper(cmd, client, debug) {
      * @param {string} [errorMessage] - Error text to send to the client before closing
      */
     exit = function(errorMessage) {
+        // #B855 — an online command (bundle:start, on a connection bin/cmd marked) runs inside the
+        // framework daemon: end THIS client, with the exit code framed, and keep the daemon up.
+        // process.exit() here ended the daemon (measured: `bundle:start web @<unregistered>`),
+        // and every later command found no framework. The command is marked, so its handler
+        // stops (`cmd.cmdExited`, read by bundle/start.js).
+        if ( client && client.ginaStatusFrames === true ) {
+            if (cmd.cmdExited) {
+                return;
+            }
+            cmd.cmdExited = true;
+            if ( typeof(errorMessage) != 'undefined' ) {
+                client.write(errorMessage + '\n');
+            }
+            startStatus.writeExit(client, errorMessage ? 1 : 0);
+            client.end();
+            return;
+        }
         // CMD Client exit
         if ( typeof(errorMessage) != 'undefined' ) {
             client.write(errorMessage + '\n');
