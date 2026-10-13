@@ -607,6 +607,17 @@ describe('08 - the wiring (comment lines removed)', function () {
         assert.ok(body.indexOf('if ( self.anyFailed ) {') > -1, 'the final bulk end() reads it');
     });
 
+    it('lib/cmd/index.js: only the framework\'s own start registers the process as the framework (#B856)', function () {
+        var raw  = fs.readFileSync(path.join(FW, 'lib/cmd/index.js'), 'utf8');
+        var code = live(raw);
+        var iCond = code.indexOf("if (opt.task.action == 'start' && opt.task.topic == 'framework') {");
+        var iProc = code.indexOf("cmd.proc = new Proc('gina-v' + self.version, process);");
+        assert.ok(iCond > -1, 'the start branch is not scoped to the framework topic');
+        assert.ok(iProc > iCond, 'the gina-v registration sits inside it');
+        assert.equal(code.indexOf("if (opt.task.action == 'start') {"), -1, 'the unscoped condition is gone');
+        assert.ok(raw.indexOf("was: if (opt.task.action == 'start') {") > -1, 'CONTROL — the raw text still names it (the strip works)');
+    });
+
     it('gna.js: the readiness flag waits for the server to listen', function () {
         var code = live(fs.readFileSync(GNA_PATH, 'utf8'));
         var iGate = code.indexOf("typeof(_flagServer.listening) == 'boolean' && !_flagServer.listening");

@@ -132,7 +132,14 @@ cmd.onExec = function(client, isFromFramework, opt) {
 
         init = require('./framework/init')(opt);
         //Framework CMD.
-        if (opt.task.action == 'start') {
+        // #B856 — only the framework's own start registers this process as the framework
+        // (`new Proc('gina-v<version>')` below: its title, its pid file and its procs.json
+        // record). `project:start` and `service:start` share the action and came here too: the
+        // CLI process overwrote the running daemon's pid file and its exit removed the daemon's
+        // procs.json record (measured), so a later `gina start` could not tell the framework was
+        // running. They take the offline branch, which runs their handler the same way.
+        // was: if (opt.task.action == 'start') {
+        if (opt.task.action == 'start' && opt.task.topic == 'framework') {
             // Current version of the framework by default
             // But can be overriden with argument: @{version_number}
             // eg.: gina stop @1.0.0

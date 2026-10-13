@@ -1,0 +1,3 @@
+kind: Fixed
+body: '`gina project:start` no longer overwrites the running framework''s pid file or removes its entry from `~/.gina/procs.json`. The command registered itself as the framework: it wrote its own pid into `gina-v<version>.pid`, a helper it ran then removed that file, and its exit removed the framework''s `procs.json` entry, while the framework kept running (measured in an isolated daemon). `gina start` checks that entry before it reports the framework as already running. Only the framework''s own start registers the framework now; `service:start`, which took the same path (code-read), is changed the same way. Pickup: the next command (#B856)'
+time: 2026-10-13T15:32:26+01:00
