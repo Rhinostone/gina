@@ -24,6 +24,8 @@
  *   08 — source pins (comment lines removed): bin/cli, bin/cmd, start.js, helper.js and init.js
  *        (an online refusal ends its client, not the daemon: #B855), restart.js (B2, and a
  *        bulk restart that exits 1 when any bundle failed: #B853), server.js, gna.js
+ *   08b — source pins the #B851 review added: start.js ends an attempt whose child cannot be
+ *        spawned (F2)
  *
  * Red-first: every section fails on the pre-fix tree (the module, the server.js function and
  * the wiring are absent). The daemon paths end to end (S0–S11 of the #B851 sandbox) and a
@@ -690,5 +692,27 @@ describe('08 - the wiring (comment lines removed)', function () {
         var tail = code.slice(iGate, iGate + 700);
         assert.match(tail, /_flagServer\.once\('listening'/);
         assert.equal(tail.split("console.notice('[ FRAMEWORK ] Bundle started !');").length - 1, 2, 'printed on listening, or at once');
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// 08b — the review's wiring
+// ---------------------------------------------------------------------------
+
+describe('08b - the wiring the #B851 review added (comment lines removed)', function () {
+
+    it('start.js: a child that cannot be spawned ends the attempt with 1, through an \'error\' listener (F2)', function () {
+        var code = live(fs.readFileSync(START_PATH, 'utf8'));
+        var iSpawn  = code.indexOf('var child = spawn(');
+        var iSettle = code.indexOf('var settle = function(code) {');
+        var iOn     = code.indexOf("child.on('error', function(spawnErr) {");
+        assert.ok(iSpawn > -1 && iSettle > iSpawn, 'spawn ' + iSpawn + ' < settle ' + iSettle);
+        assert.ok(iOn > iSettle, "child.on('error') is attached, after settle() is defined: " + iOn);
+        var body = code.slice(iOn, code.indexOf('});', iOn));
+        var iGuard = body.indexOf('if (isStarting || settled) {');
+        var iOne   = body.indexOf('settle(1);');
+        assert.ok(iGuard > -1, 'an error once the attempt has its outcome is only logged');
+        assert.ok(iOne > iGuard, 'otherwise the attempt settles with 1');
     });
 });

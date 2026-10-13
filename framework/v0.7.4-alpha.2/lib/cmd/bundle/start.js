@@ -490,6 +490,22 @@ function Start(opt, cmd) {
                     // #B851 — the bind failure core/server.js reports before it ends the boot
                     var bindFailure = null;
 
+                    // #B851 review F2 — a spawn that fails (the runtime binary gone, EAGAIN, EMFILE)
+                    // emits 'error' on the child and no 'exit'. With no listener it was an uncaught
+                    // exception in this daemon, which proc.js only logs here, and nothing ended the
+                    // attempt until the watchdog. It ends at once now. An 'error' once the attempt
+                    // has its outcome (a kill that failed) is only logged.
+                    child.on('error', function(spawnErr) {
+                        var reason = ( spawnErr && spawnErr.code ) ? spawnErr.code : String( ( spawnErr && spawnErr.message ) || spawnErr );
+                        if (isStarting || settled) {
+                            terminal.warn('[bundle:start] ' + bundle + '@' + self.projectName + ': child process error (' + reason + ')');
+                            return;
+                        }
+                        opt.notStarted.push(bundle + '@' + self.projectName);
+                        opt.client.write('  [ ' + bundle + '@' + self.projectName + ' ] could not be started: its process could not be spawned (' + reason + '). Check your logs.');
+                        settle(1);
+                    });
+
                     var checkCaseCount = 2
                         // The 2 flags we need to free the child.stdout if we do not want the command to wait for a timeout
                         // NB.: you can place flag by using terminal.notice
