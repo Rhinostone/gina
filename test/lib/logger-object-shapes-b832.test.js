@@ -16,14 +16,14 @@
  *       (an array element `{"toString": "x"}` from a JSON body, a null-prototype
  *       element) and on a Symbol; a top-level Symbol threw on both writers.
  * The same count also made an object with an own `hasOwnProperty` key render
- * with its commas missing (the helper's own `this.hasOwnProperty` call throws
- * there, and its catch returns 0).
+ * with its commas missing (until #B837 the helper's own `this.hasOwnProperty`
+ * call threw there, and its catch returned 0).
  *
  * The fix, all BEHAVIORAL here (the real singleton is driven): the key count is
  * `Object.keys(obj).length`, the number `count()` returns on every receiver it
  * handles (§01.3) and the right one on a null-prototype object or an object
- * with an own `hasOwnProperty` key, where `Object.prototype.count.call` returns
- * 0 (§01.2); a null-prototype object takes the object path; a value whose
+ * with an own `hasOwnProperty` key, where `Object.prototype.count.call` returned
+ * 0 until #B837 (§01.2); a null-prototype object takes the object path; a value whose
  * coercion throws is written as its `Object.prototype.toString` tag, so an
  * object inside an array reads `[object Object]` whatever its prototype; a
  * Symbol is written with `String()`.
@@ -101,10 +101,10 @@ describe('#B832 §01 — the premise, with controls', function () {
         assert.throws(function () { o.count(); }, TypeError);
     });
 
-    it('01.2 Object.prototype.count.call reads 0 where Object.keys reads the real count', function () {
-        assert.equal(Object.prototype.count.call(nullProto({ a: 1, b: 2 })), 0);
+    it('01.2 Object.prototype.count.call agrees with Object.keys on a null-prototype object and an own hasOwnProperty key (it read 0 before #B837)', function () {
+        assert.equal(Object.prototype.count.call(nullProto({ a: 1, b: 2 })), 2);
         assert.equal(Object.keys(nullProto({ a: 1, b: 2 })).length, 2);
-        assert.equal(Object.prototype.count.call({ hasOwnProperty: 'x', a: 1 }), 0);
+        assert.equal(Object.prototype.count.call({ hasOwnProperty: 'x', a: 1 }), 2);
         assert.equal(Object.keys({ hasOwnProperty: 'x', a: 1 }).length, 2);
     });
 

@@ -56,10 +56,11 @@ const env                   = process.env.NODE_ENV
  * Returns the engine-parsed query as a plain object (#B666).
  *
  * Express 5's default `simple` query parser is `querystring.parse`, whose result
- * has a `null` prototype. The framework's request bags are plain objects: the
- * `count()` helper installed on `Object.prototype` iterates `this.hasOwnProperty`,
- * and a controller reads `req.get.count()` / `req.delete.count()` as documented.
- * A null-prototype bag would make that count read 0 for every key it holds.
+ * has a `null` prototype. The framework's request bags are plain objects: a
+ * controller reads `req.get.count()` / `req.delete.count()` as documented, and a
+ * null-prototype bag inherits no `count()` (nor any other `Object.prototype`
+ * method) to call. Until #B837 the helper also read 0 on such a bag when reached
+ * through `Object.prototype.count.call`.
  *
  * The copy is built with `Object.defineProperty`, so a client-chosen key such as
  * `__proto__` becomes an own data property of the copy and never reaches the

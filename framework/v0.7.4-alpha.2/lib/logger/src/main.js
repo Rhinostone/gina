@@ -870,10 +870,10 @@ function Logger() {
         // #B832 — count the keys with Object.keys, not `obj.count()`: the helper is
         // an ordinary property lookup, so an OWN key named `count` (a parsed body
         // `{"count": 5}`) made the call throw, and a null-prototype object has no
-        // helper at all. `Object.prototype.count.call` (#B546's ownCount) is not
-        // enough here: it reads 0 on a null-prototype object or on one with an own
-        // `hasOwnProperty` key, which drops the commas. Object.keys returns the
-        // number the helper returns on every receiver it handles.
+        // helper at all. `Object.prototype.count.call` (#B546's ownCount) was not
+        // enough here: until #B837 it read 0 on a null-prototype object or on one
+        // with an own `hasOwnProperty` key, which dropped the commas. Object.keys
+        // returns the number the helper returns on every receiver it handles.
         // was: , len = obj.count()
         var l           = 0
             , len       = Object.keys(obj).length

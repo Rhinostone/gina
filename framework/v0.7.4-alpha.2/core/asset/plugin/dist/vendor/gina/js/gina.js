@@ -4635,7 +4635,10 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
                     // and stays literal for the grammar to refuse — it used to splice `undefined`.
                     var fieldNames = [];
                     for (var fieldKey in self) {
-                        if ( self.hasOwnProperty(fieldKey) && self[fieldKey] && typeof(self[fieldKey]) == 'object' && ('value' in self[fieldKey]) ) {
+                        // #B837 — the built-in own-key test: a field named `hasOwnProperty` is an own
+                        // field object on the instance, and calling it threw « not a function ».
+                        // was: if ( self.hasOwnProperty(fieldKey) && self[fieldKey] && typeof(self[fieldKey]) == 'object' && ('value' in self[fieldKey]) )
+                        if ( Object.prototype.hasOwnProperty.call(self, fieldKey) && self[fieldKey] && typeof(self[fieldKey]) == 'object' && ('value' in self[fieldKey]) ) {
                             fieldNames.push(fieldKey);
                         }
                     }
@@ -10256,6 +10259,26 @@ function PrototypesHelper(instance) {
     }
 
     if ( typeof(Object.count) == 'undefined' ) {
+        /**
+         * Object.prototype.count — the number of the receiver's own enumerable properties:
+         * the keys of an object, the indices of an array. Installed here only when no
+         * `count` exists yet: in a bundle process `utils/prototypes.js` has installed its
+         * own copy first, so this is the copy the browser bundle carries.
+         *
+         * Each key is tested with the built-in `Object.prototype.hasOwnProperty`, reached
+         * through `.call` (#B837). `this.hasOwnProperty(prop)` was an ordinary property
+         * lookup: an own key of that name that is not a function (a form field named
+         * `hasOwnProperty`) made the call throw on the first key, as did an object with
+         * no prototype (`Object.create(null)`), and the catch returned the count so far, 0.
+         *
+         * Changes made here must be reflected in:
+         *  - gina/utils/prototypes.js (the copy a bundle process installs)
+         *
+         * @returns {number} The number of own enumerable properties.
+         * @example
+         * ({ a: 1, b: 2 }).count();                                    // → 2
+         * Object.prototype.count.call({ hasOwnProperty: 'x', a: 1 }); // → 2
+         */
         Object.defineProperty( Object.prototype, 'count', {
             writable:   true,
             enumerable: false,
@@ -10267,8 +10290,10 @@ function PrototypesHelper(instance) {
                     var self = this;
                     if (this instanceof String) self = JSON.parse(this);
 
+                    // #B837 — the built-in own-key test, which no own key of the receiver can shadow
+                    // was: for (var prop in this) if (this.hasOwnProperty(prop)) ++i;
                     for (var prop in this)
-                        if (this.hasOwnProperty(prop)) ++i;
+                        if (Object.prototype.hasOwnProperty.call(this, prop)) ++i;
 
                     return i;
                 } catch (err) {

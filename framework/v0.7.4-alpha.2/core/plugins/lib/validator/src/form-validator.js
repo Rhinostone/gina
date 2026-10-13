@@ -1615,7 +1615,10 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
                     // and stays literal for the grammar to refuse — it used to splice `undefined`.
                     var fieldNames = [];
                     for (var fieldKey in self) {
-                        if ( self.hasOwnProperty(fieldKey) && self[fieldKey] && typeof(self[fieldKey]) == 'object' && ('value' in self[fieldKey]) ) {
+                        // #B837 — the built-in own-key test: a field named `hasOwnProperty` is an own
+                        // field object on the instance, and calling it threw « not a function ».
+                        // was: if ( self.hasOwnProperty(fieldKey) && self[fieldKey] && typeof(self[fieldKey]) == 'object' && ('value' in self[fieldKey]) )
+                        if ( Object.prototype.hasOwnProperty.call(self, fieldKey) && self[fieldKey] && typeof(self[fieldKey]) == 'object' && ('value' in self[fieldKey]) ) {
                             fieldNames.push(fieldKey);
                         }
                     }

@@ -21,8 +21,8 @@
  * getter materialises the engine's OWN parse (its getter beneath the shadow, so the
  * app's `query parser` setting is honoured at read time) as a PLAIN, writable own
  * property on the first read — `querystring.parse` (the `simple` default) returns
- * a null-prototype object, and gina's `Object.prototype.count()` helper, which the
- * documented `req.get.count()` / `req.delete.count()` call, cannot iterate one —
+ * a null-prototype object, and the documented `req.get.count()` / `req.delete.count()`
+ * has no `count()` to call on one (gina's helper lives on `Object.prototype`) —
  * and the setter stores an assigned value the same way. On Express 4 (no getter on
  * the chain) the getter answers `undefined` and materialises nothing, the setter
  * stores: the #B211 data property's behaviour byte for byte. No layer is
@@ -288,12 +288,12 @@ describe('express-query-b666 §02 — the SHIPPED accessor, driven on both Expre
         assert.deepEqual(req.query, { merged: true });
     });
 
-    it('WHY the plain copy: a null-prototype parse has no count(), and gina\'s helper under-counts it to 0', function () {
+    it('WHY the plain copy: a null-prototype parse has no count() of its own to call', function () {
         var H = loadHelpers();
         var raw = querystring.parse('a=1&b=2');
         assert.equal(Object.getPrototypeOf(raw), null, 'fixture control: querystring.parse is null-prototype');
         assert.equal(typeof raw.count, 'undefined', 'the documented req.get.count() would not exist');
-        assert.equal(Object.prototype.count.call(raw), 0, 'and the shipped helper reads 0 for two keys (its hasOwnProperty call throws, caught)');
+        assert.equal(Object.prototype.count.call(raw), 2, 'the helper reached through .call counts it since #B837; only the req.get.count() shorthand is missing');
         var plain = H.toPlainQuery(raw);
         assert.equal(plain.count(), 2);
         assert.deepEqual(Object.assign({}, plain), { a: '1', b: '2' });
