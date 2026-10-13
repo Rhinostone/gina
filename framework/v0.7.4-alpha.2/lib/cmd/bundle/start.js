@@ -15,6 +15,11 @@ var runtime     = require(__dirname + '/../../../../../utils/runtime.js');
 // client. Relative path: the bare `lib/<name>` form is unavailable in CLI/daemon scope.
 var bootLines   = require('./inc/boot-lines');
 var escapeRegex = require('./inc/name-rewrite').escapeRegex;
+// #B851 — the outcome this command reports to the CLI (frames, exit codes, the bind failure)
+// and the « already running » rule; ps-titles reads a pid's title without a shell. Relative
+// paths: the bare `lib/<name>` form is unavailable in CLI/daemon scope.
+var startStatus = require('./inc/start-status');
+var psTitles    = require('./../framework/inc/ps-titles');
 // `lib` is previously defiened as this file is required by anoth
 // For user output
 var terminal    = lib.logger;
@@ -74,6 +79,8 @@ function Start(opt, cmd) {
         // start all bundles
         opt.onlineCount = 0;
         opt.notStarted = [];
+        // #B851 — the first failure's exit code (end() sends it to the CLI)
+        opt.exitCode = 0;
 
         if (!self.name) {
             // bulk mode needs at least one bundle — `self.bundles[0]` is undefined on a zero-bundle
@@ -341,6 +348,19 @@ function Start(opt, cmd) {
                 if (isStarting)
                     return;
 
+                // #B851 / #B854 — a bundle that already runs is not started again. A second start
+                // spawned a child that overwrote the running bundle's pid file with its own pid,
+                // could not bind the port and removed the file as it exited (measured), so
+                // `bundle:status` read the running bundle as stopped; the command printed the
+                // bind error and exited 0. Checked before the node_modules check, which may
+                // remove and reinstall node_modules under the running bundle.
+                var runningPid = findRunning(bundle, appPath);
+                if ( runningPid !== null ) {
+                    ++opt.onlineCount;
+                    opt.client.write('\n\r  [ ' + bundle + '@' + self.projectName + ' ] is already running with PID [ ' + runningPid + ' ]');
+                    return end(opt, cmd, isBulkStart, bundleIndex, 0);
+                }
+
 
                 var proceedToStart = function(nodeModulesErr) {
                     if (nodeModulesErr) {
@@ -437,15 +457,32 @@ function Start(opt, cmd) {
                             clearInterval(timerId);
                             opt.client.write('Sorry my friend, this is taking too long ! Terminating. Check your logs.');
                             child.kill('SIGKILL');
-                            if (!opt.client.destroyed) {
-                                opt.client.emit('exit');
-                                opt.client.emit('end');
-                            }
-
-
-                            //end(opt, cmd, isBulkStart, bundleIndex);
+                            // #B851 — was: 'exit' and 'end' emitted on the client without end(), so
+                            // no outcome, and in bulk mode the bundles after this one never started.
+                            // if (!opt.client.destroyed) {
+                            //     opt.client.emit('exit');
+                            //     opt.client.emit('end');
+                            // }
+                            opt.notStarted.push(bundle + '@' + self.projectName);
+                            settle(1);
                         }
                     }, maxTimeout);
+
+                    // #B851 — one outcome per attempt. Several paths can see one failure (an emerg
+                    // line, then the exit); a second end() wrote to an ended client and, in bulk
+                    // mode, started the next bundle twice.
+                    var settled = false;
+                    var settle = function(code) {
+                        if (settled) {
+                            return false;
+                        }
+                        settled = true;
+                        clearInterval(timerId);
+                        end(opt, cmd, isBulkStart, bundleIndex, code);
+                        return true;
+                    };
+                    // #B851 — the bind failure core/server.js reports before it ends the boot
+                    var bindFailure = null;
 
                     var checkCaseCount = 2
                         // The 2 flags we need to free the child.stdout if we do not want the command to wait for a timeout
@@ -470,6 +507,8 @@ function Start(opt, cmd) {
                         // Without this guard, every runtime emerg log (written to stdout by the logger's
                         // 'default' container) triggers child.kill('SIGKILL') and silences the error.
                         if (isStarting) return;
+                        // #B851 — nor once the attempt has its outcome.
+                        if (settled) return;
 
                         // #B691 — pass the bundle's warn-and-above boot lines on to the client, ahead
                         // of the checks below, so a warning comes before the started or aborted line.
@@ -485,29 +524,41 @@ function Start(opt, cmd) {
                             terminal.debug('[bundle:start] boot lines not passed on: '+ bootLinesErr.message);
                         }
 
-                        // handle errors
-                        if ( /EADDRINUSE.*port/i.test(data) && !errorFound ) {
-                            terminal.log(data);
-                            // kill the bundle starting process first
-                            child.kill('SIGKILL');
-
-                            errorFound = true;
-                            //opt.client.write(data);
-                            try {
-                                port = ' #'+ data.match(/port\":\s+\d+/)[0].split(/\:/)[1].trim() +' ';
-                                opt.client.write('  [ ' + bundle + '@' + self.projectName + ' ] has already been started, or port'+ port+'might be busy');
-
-                            } catch(_err) {
-                                opt.client.write(_err);
-                            }
-
-
-                            ++opt.onlineCount;
-                            end(opt, cmd, isBulkStart, bundleIndex);
-                            clearInterval(timerId);
-
-                            return;
+                        // #B851 — the bind failure core/server.js reports (its emerg line) before it
+                        // ends the boot: kept to name the outcome.
+                        if (!bindFailure) {
+                            bindFailure = startStatus.parseBindFailure(data);
                         }
+
+                        // handle errors
+                        // #B851 — was: the « has already been started, or port … might be busy »
+                        // branch. In text logs it never fired (`EADDRINUSE` and `port` sit on
+                        // different lines of the logged error); in JSON logs `port\":` never
+                        // matched and the branch wrote an Error object to the client, which threw.
+                        // A bundle that already runs is now found before the spawn, and a bind
+                        // failure is named from core/server.js's own line.
+                        // if ( /EADDRINUSE.*port/i.test(data) && !errorFound ) {
+                        //     terminal.log(data);
+                        //     // kill the bundle starting process first
+                        //     child.kill('SIGKILL');
+                        //
+                        //     errorFound = true;
+                        //     //opt.client.write(data);
+                        //     try {
+                        //         port = ' #'+ data.match(/port\":\s+\d+/)[0].split(/\:/)[1].trim() +' ';
+                        //         opt.client.write('  [ ' + bundle + '@' + self.projectName + ' ] has already been started, or port'+ port+'might be busy');
+                        //
+                        //     } catch(_err) {
+                        //         opt.client.write(_err);
+                        //     }
+                        //
+                        //
+                        //     ++opt.onlineCount;
+                        //     end(opt, cmd, isBulkStart, bundleIndex);
+                        //     clearInterval(timerId);
+                        //
+                        //     return;
+                        // }
 
                         // catch fatal errors to exit
                         if ( /(\[|\[\s+)emerg/.test(data) ) {
@@ -520,11 +571,16 @@ function Start(opt, cmd) {
                             // and CLI output — not just routed to the daemon's MQ logger.
                             var _emergMsg = data.toString().replace(/\x1B\[\d+m/g, '').trim();
                             opt.notStarted.push(bundle + '@' + self.projectName);
-                            opt.client.write('  [ ' + bundle + '@' + self.projectName + ' ] aborted :( \n  ' + _emergMsg);
+                            // #B851 — a bind failure is named for what it is
+                            if (bindFailure) {
+                                opt.client.write('\n' + startStatus.bindFailureMessage(bundle + '@' + self.projectName, bindFailure, isWin32()));
+                            } else {
+                                opt.client.write('  [ ' + bundle + '@' + self.projectName + ' ] aborted :( \n  ' + _emergMsg);
+                            }
 
-                            ++opt.onlineCount;
-                            end(opt, cmd, isBulkStart, bundleIndex);
-                            clearInterval(timerId);
+                            // #B851 — was: ++opt.onlineCount (an aborted bundle counted as online),
+                            // end() with no outcome, then clearInterval (settle() clears it).
+                            settle(1);
 
                             return;
                         }
@@ -566,7 +622,8 @@ function Start(opt, cmd) {
                             opt.client.write('  [ ' + bundle + '@' + self.projectName + ' ] started V(-.o)V'+ url + debuggerOn);
 
 
-                            end(opt, cmd, isBulkStart, bundleIndex);
+                            // #B851 — was: end(opt, cmd, isBulkStart, bundleIndex);
+                            settle(0);
                             return;
                         }
 
@@ -579,6 +636,12 @@ function Start(opt, cmd) {
                     var error = null, onException = false;
                     child.stderr.on('data', function(err) {
                         error = err.toString();
+
+                        // #B851 — core/server.js writes its bind failure here too, synchronously
+                        // (the stdout emerg line can be lost on a pipe at exit)
+                        if (!bindFailure) {
+                            bindFailure = startStatus.parseBindFailure(error);
+                        }
 
                         if (/Waiting for the debugger to disconnect: will be reused if not disconected./.test(error) ) { // dual debug --inspect-gina && --inspect
                             onException = true;
@@ -616,7 +679,8 @@ function Start(opt, cmd) {
                         // handles only signals that cannot be cannot be caught or ignored
                         // ref.: `framework/<version>/lib/proc.js`
                         if (onException) { // dual debug --inspect-gina && --inspect
-                            return end(opt, cmd, isBulkStart, bundleIndex);
+                            // #B851 — was: return end(opt, cmd, isBulkStart, bundleIndex);
+                            return settle(0);
                         }
                         // if (/(SIGKILL|SIGSTOP)/i.test(signal)) {
                         // Fixed on 2023-03-23 - Allowing docker to catch exit signal on `SIGABRT`
@@ -626,6 +690,14 @@ function Start(opt, cmd) {
                             }
                             terminal.emerg('[' + this.pid + '] `'+ self.name +'@'+ self.projectName +'` exiting with signal: ', signal);
                             cmd.proc.dismiss(this.pid, signal);
+                            // #B851 — a signal from outside before readiness (`kill -9`, the OOM
+                            // killer) reported nothing: the client waited for the timeout. A kill
+                            // this command sent itself has already settled the attempt.
+                            if (!isStarting && !settled) {
+                                opt.notStarted.push(bundle + '@' + self.projectName);
+                                opt.client.write('  [ ' + bundle + '@' + self.projectName + ' ] stopped before it was ready (signal ' + signal + '). Check your logs.');
+                                settle(startStatus.exitCodeBeforeReady(code, signal));
+                            }
                             return;
                         }
 
@@ -633,11 +705,27 @@ function Start(opt, cmd) {
                         // before stdout emitted the expected readiness flags. Previously this
                         // fell through silently and the setInterval timer ran the full 60-second
                         // wait before reporting "Sorry my friend...". Now we clean up immediately.
-                        if (!isStarting && code !== 0) {
-                            clearInterval(timerId);
+                        // #B851 — any exit before readiness ends the attempt with the bundle's own
+                        // code (1 when it was 0, 128 + the signal number for a signal): an exit 0
+                        // waited for the timeout too. A bind failure is named.
+                        // was: if (!isStarting && code !== 0) {
+                        // was:     clearInterval(timerId);
+                        // was:     opt.notStarted.push(bundle + '@' + self.projectName);
+                        // was:     opt.client.write('  [ ' + bundle + '@' + self.projectName + ' ] crashed during startup (exit code ' + code + '). Check your logs.');
+                        // was:     end(opt, cmd, isBulkStart, bundleIndex);
+                        // was: }
+                        if (!isStarting && !settled) {
                             opt.notStarted.push(bundle + '@' + self.projectName);
-                            opt.client.write('  [ ' + bundle + '@' + self.projectName + ' ] crashed during startup (exit code ' + code + '). Check your logs.');
-                            end(opt, cmd, isBulkStart, bundleIndex);
+                            if (bindFailure) {
+                                opt.client.write('\n' + startStatus.bindFailureMessage(bundle + '@' + self.projectName, bindFailure, isWin32()));
+                            } else if (signal) {
+                                opt.client.write('  [ ' + bundle + '@' + self.projectName + ' ] stopped before it was ready (signal ' + signal + '). Check your logs.');
+                            } else if (code !== 0) {
+                                opt.client.write('  [ ' + bundle + '@' + self.projectName + ' ] crashed during startup (exit code ' + code + '). Check your logs.');
+                            } else {
+                                opt.client.write('  [ ' + bundle + '@' + self.projectName + ' ] exited before it was ready (exit code 0). Check your logs.');
+                            }
+                            settle(startStatus.exitCodeBeforeReady(code, signal));
                         }
 
                     });
@@ -656,18 +744,70 @@ function Start(opt, cmd) {
 
 
     /**
+     * #B851 / #B854 — the pid of the bundle when it already runs: its pid file names a running
+     * process titled `gina: <bundle>@<project>` (on Bun, one running the bundle's entry; where
+     * `ps` cannot tell, a live pid), read with `inc/start-status.js` `findRunningBundle()`.
+     * `null` when there is no such file or process. Never throws.
+     *
+     * @inner
+     * @private
+     * @param {string} bundle - Bundle name
+     * @param {?string} appPath - The bundle's entry (`index.js`), which Bun's `ps` shows
+     * @returns {?number} The running bundle's pid, or `null`
+     */
+    var findRunning = function(bundle, appPath) {
+        var content = null;
+        try {
+            content = fs.readFileSync(_(GINA_RUNDIR +'/'+ bundle +'@'+ self.projectName +'.pid', true)).toString();
+        } catch (pidErr) {
+            return null;
+        }
+        try {
+            return startStatus.findRunningBundle(content, bundle +'@'+ self.projectName, appPath || null, {
+                parsePid : psTitles.parsePid,
+                read     : psTitles.readPidTitle,
+                alive    : function(pid) {
+                    try {
+                        process.kill(pid, 0);
+                        return true;
+                    } catch (killErr) {
+                        return !!(killErr && killErr.code === 'EPERM');
+                    }
+                }
+            });
+        } catch (findErr) {
+            terminal.debug('[bundle:start] running check skipped: '+ findErr.message);
+            return null;
+        }
+    };
+
+    /**
      * Advances to the next bundle in bulk-start mode, or emits 'end' on the client socket.
+     *
+     * #B851 — the outcome reaches the CLI: before the connection ends, the exit code is framed
+     * to the client (`inc/start-status.js` `writeExit()`, for a client `bin/cmd` marked): the
+     * attempt's own code in single mode, 1 when any bundle failed in bulk mode. The CLI
+     * exited 0 for every outcome.
+     *
      * @inner
      * @private
      * @param {object} opt
      * @param {object} cmd
      * @param {boolean} [isBulkStart]
      * @param {number} [i] - Current bundle index in bulk mode
-     * @param {boolean} [error]
+     * @param {(boolean|number)} [error] - The attempt's exit code; `true` is 1 (a refusal), absent is 0
      */
     var end = function (opt, cmd, isBulkStart, i, error) {
         if ( typeof(opt.msg) != 'undefined' ) {
             opt.client.write('\n\r'+ opt.msg);
+            // #B851 — printed once: in bulk mode every later bundle's end() printed it again
+            delete opt.msg;
+        }
+
+        // #B851 — the attempt's exit code; the first failure's is kept for the command
+        var code = ( error === true ) ? 1 : ( ( typeof(error) == 'number' ) ? startStatus.normalizeCode(error) : 0 );
+        if ( code !== 0 && !opt.exitCode ) {
+            opt.exitCode = code;
         }
 
         isBulkStart = ( typeof(isBulkStart) == 'undefined' ) ? false : isBulkStart;
@@ -685,6 +825,8 @@ function Start(opt, cmd) {
                 //     process.exit(1);
                 // }
 
+                // #B851 — bulk: 1 when any bundle failed
+                startStatus.writeExit(opt.client, opt.exitCode ? 1 : 0);
                 if (!opt.client.destroyed)
                     opt.client.emit('end');
             }
@@ -696,6 +838,8 @@ function Start(opt, cmd) {
         //     process.exit(1);
         // }
 
+        // #B851 — the outcome, framed last
+        startStatus.writeExit(opt.client, code);
         if (!opt.client.destroyed)
             opt.client.emit('end');
         // Force exit in case process is stuck

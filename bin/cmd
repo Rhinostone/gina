@@ -69,6 +69,12 @@ function Cmd(opt, runOffine) {
                 // required to allow regular CMD to exit properly
                 conn.end();
             });
+            // #B851 — a write to a client that has gone (EPIPE, or a write after it ended) emits
+            // 'error' on this connection, which had no listener: it surfaced as an
+            // uncaughtException in this long-lived daemon. It only means the client left.
+            conn.on('error', function(connErr) {
+                console.debug('[ CLI ] client connection: '+ ( (connErr && connErr.code) || connErr ));
+            });
 
             //Receiving.
             conn.on('data', function(data) {
@@ -97,6 +103,18 @@ function Cmd(opt, runOffine) {
                 }
 
                 console.debug( '[ FRAMEWORK ] CMD received "'+ argv.join(' ') +'"' );
+
+                // #B851 — the CLI learns that this daemon reports the command's outcome: a framed
+                // header now, the command's exit code framed last, just before the connection
+                // ends (lib/cmd/bundle/inc/start-status.js). bin/cli exited 0 for every outcome.
+                // The mark tells the handlers that this client takes frames.
+                conn.ginaStatusFrames = true;
+                try {
+                    conn.write( require(local.frameworkPath + '/lib/cmd/bundle/inc/start-status').encodeHeader() );
+                } catch (headerErr) {
+                    conn.ginaStatusFrames = false;
+                    console.debug('[ FRAMEWORK ] no status header: '+ headerErr.message);
+                }
 
                 argv[0] = process.execPath;
                 argv[1] = argv[1] + '/bin/cli';
