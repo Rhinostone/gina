@@ -2250,7 +2250,22 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
                                     }
 
                                     // placing end:flag to allow the CLI to retrieve bundl info from here
-                                    console.notice('[ FRAMEWORK ] Bundle started !');
+                                    // #B851 — the flag waits for the bind. It was printed on this timer
+                                    // whether or not the server listened, so after a failed bind
+                                    // `bundle:start` still read the bundle as started. core/server.js now
+                                    // ends the boot on a bind error; the flag is printed once
+                                    // `process.server.listening` is true, or on 'listening' when the bind is
+                                    // still pending here. A server without a boolean `listening` keeps the
+                                    // timer alone.
+                                    // was: console.notice('[ FRAMEWORK ] Bundle started !');
+                                    var _flagServer = process.server;
+                                    if ( _flagServer && typeof(_flagServer.listening) == 'boolean' && !_flagServer.listening && typeof(_flagServer.once) == 'function' ) {
+                                        _flagServer.once('listening', function onBundleListening() {
+                                            console.notice('[ FRAMEWORK ] Bundle started !');
+                                        });
+                                    } else {
+                                        console.notice('[ FRAMEWORK ] Bundle started !');
+                                    }
                                 }, 700); // 1000 - Wait to make sure that the bundle is mounted on the file system
                             });
 

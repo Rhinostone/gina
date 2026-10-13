@@ -774,6 +774,53 @@ function _instrumentKeyValid(req) {
 }
 
 /**
+ * #B851 — Ends the boot when the server cannot bind its port.
+ *
+ * `listen()` reports a failed bind (`EADDRINUSE`, `EACCES`, `EADDRNOTAVAIL`) on
+ * a later tick, through the server's `'error'` event. The isaac engine only
+ * logged it (its own `'error'` listener, server.isaac.js) and the boot went on:
+ * `Bundle started !` was printed on its timer (core/gna.js) and, with nothing
+ * listening, the process then exited 0, so `bundle:start` and `gina-container`
+ * took a bundle that never listened for a started one (measured on isaac). On
+ * the express engine nothing listened for the event, so it became an uncaught
+ * exception (code-read).
+ *
+ * Until the server listens, a bind error now ends the boot: an emerg line, then
+ * `[ FRAMEWORK ] abort: could not listen on port <port>: <code> (<message>)`
+ * written synchronously to stderr (an asynchronous write is lost on a pipe at
+ * exit), then exit 1 — the shape of core/gna.js `abort()`. The handler is
+ * removed on `'listening'`, so an error the server emits once it listens is
+ * handled as before. A server object without `once` and `removeListener` is
+ * left alone.
+ *
+ * @inner
+ * @private
+ * @param {object} rawServer - The server `self.instance.listen()` returned (or the instance)
+ * @param {(number|string)} port - The port passed to `listen()`
+ * @returns {boolean} `true` when the watch is attached
+ * @example
+ * var _rawServer = self.instance.listen(port);
+ * watchBindOutcome(_rawServer, port);
+ */
+function watchBindOutcome(rawServer, port) {
+    if ( !rawServer || typeof(rawServer.once) != 'function' || typeof(rawServer.removeListener) != 'function' ) {
+        return false;
+    }
+    var onBindError = function onBindError(err) {
+        var code    = ( err && err.code ) ? err.code : 'ERROR';
+        var reason  = 'could not listen on port '+ port +': '+ code +' ('+ ( ( err && err.message ) ? err.message : String(err) ) +')';
+        console.emerg('[ SERVER ] '+ reason);
+        try { fs.writeSync(2, '[ FRAMEWORK ] abort: '+ reason +'\n'); } catch (_e) { /* best-effort */ }
+        process.exit(1);
+    };
+    rawServer.once('error', onBindError);
+    rawServer.once('listening', function onBound() {
+        rawServer.removeListener('error', onBindError);
+    });
+    return true;
+}
+
+/**
  * #INS8 — Attach the authenticated WebSocket transport for `/_gina/agent` to
  * the raw HTTP server. The standalone Inspector (services/src/inspector on
  * :4101) can connect over a WebSocket as an alternative to the SSE channel —
@@ -7118,6 +7165,9 @@ function Server(options) {
         // internally and returns it — without capturing here it is unreachable.
         var _rawServer = self.instance.listen(self.conf[self.appName][self.env].server.port);
         process.server = (_rawServer && typeof _rawServer.close === 'function') ? _rawServer : self.instance;
+        // #B851 — until the server listens, a bind error ends the boot with exit 1 (it used to be
+        // logged, or uncaught on express, and the boot went on as if it listened).
+        watchBindOutcome(process.server, self.conf[self.appName][self.env].server.port);
 
         // #INS8 — attach the authenticated WebSocket transport for /_gina/agent
         // to the raw server. Covers both the isaac and express engines (server.js
