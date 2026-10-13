@@ -2539,7 +2539,16 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
                 projectName = getContext('projectName');
                 processList = getContext('processList');
                 process.list = processList;
-                bundleProcess = new Proc(appName + '@' + projectName, process);
+                // #B850 — a worker child (an entry named `child.js` / `child-*.js`, loaded with
+                // `--argv-filename`) runs under its parent bundle's name but is not the bundle. It
+                // registers WITHOUT a pid file: it wrote its own pid into `<bundle>@<project>.pid`
+                // and removed that file when it exited, so `bundle:stop` signalled the worker, and
+                // `bundle:restart` reported success while the bundle kept serving. It is also marked
+                // a minion, so its exit never unlinks the bundle's mount (lib/proc.js dismiss). Its
+                // title and signal handlers are unchanged.
+                // was: bundleProcess = new Proc(appName + '@' + projectName, process);
+                process.isMinion = true;
+                bundleProcess = new Proc(appName + '@' + projectName, process, false);
             }
         } catch (err) {
             abort(err)

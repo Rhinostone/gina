@@ -67,7 +67,14 @@ var generator   = require( _(__dirname + '/generator') );
  *
  * @param {string}  bundle       - Bundle name
  * @param {object}  [proc]       - Existing process descriptor to attach to
- * @param {boolean} [usePidFile] - Write/read PID from a file (default: true)
+ * @param {boolean} [usePidFile] - Write the `<bundle>.pid` file in the run directory
+ *   (default: true). With `false` the process still gets its `gina: <bundle>` title and
+ *   its signal handlers, but no pid file, so `onReady()` never fires (it waits for the
+ *   file). A worker child loaded with `--argv-filename` registers this way (#B850).
+ *
+ * @example
+ * var bundleProcess = new Proc('api@shop', process);         // title, handlers, api@shop.pid
+ * var workerProcess = new Proc('api@shop', process, false);  // title, handlers, no pid file
  */
 function Proc(bundle, proc, usePidFile){
 
@@ -658,13 +665,25 @@ function Proc(bundle, proc, usePidFile){
                 }
             }
 
-            if (self.usePidFile) {
-                // save file
-                if (!isReplacementNeeded) {
-                    self.PID    = self.proc.pid;
-                    self.path   = path + pathObj.sep;
-                    //Add PID file.
-                    setPID(bundle, self.PID, self.proc);
+            // #B850 — the title and the signal handlers (setPID) are set for every registered
+            // process; only the pid file depends on `usePidFile`. With `false` none of the three
+            // was set, so a process could not register without a pid file and keep its handlers.
+            // was: if (self.usePidFile) {
+            // was:     // save file
+            // was:     if (!isReplacementNeeded) {
+            // was:         self.PID    = self.proc.pid;
+            // was:         self.path   = path + pathObj.sep;
+            // was:         //Add PID file.
+            // was:         setPID(bundle, self.PID, self.proc);
+            // was:         save(bundle, self.PID, self.proc);
+            // was:     }
+            // was: }
+            if (!isReplacementNeeded) {
+                self.PID    = self.proc.pid;
+                self.path   = path + pathObj.sep;
+                setPID(bundle, self.PID, self.proc);
+                //Add PID file.
+                if (self.usePidFile) {
                     save(bundle, self.PID, self.proc);
                 }
             }
