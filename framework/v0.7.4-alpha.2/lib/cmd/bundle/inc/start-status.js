@@ -140,7 +140,9 @@ function writeExit(client, code) {
 /**
  * Reads the frames out of a stream of chunks. `push()` returns the text with every frame of
  * ours removed; an incomplete frame at the end of a chunk is held until the next one; a
- * payload that is not ours is passed through as text.
+ * payload that is not ours is passed through as text, and its closing separator is read again
+ * as the one that may open our next frame, so a stray separator just before a frame of ours
+ * does not hide it.
  *
  * @returns {{push: function(*): string, flush: function(): string, hasHeader: function(): boolean, exitCode: function(): ?number}}
  * @example
@@ -182,7 +184,14 @@ function createStatusReader() {
                 } else if (payload.indexOf(EXIT_PREFIX) === 0 && /^\d{1,3}$/.test(payload.slice(EXIT_PREFIX.length))) {
                     exit = normalizeCode(parseInt(payload.slice(EXIT_PREFIX.length), 10));
                 } else {
-                    out += s.slice(a, b + 1);
+                    // not ours: the opening separator and the payload are text, and the closing
+                    // separator is read again, since it may open our next frame. Consumed here, a
+                    // stray separator up to MAX_FRAME characters before the trailer swallowed the
+                    // trailer's own opening one and the exit code was lost (the #B851 review, F1).
+                    // was: out += s.slice(a, b + 1);
+                    out += s.slice(a, b);
+                    i = b;
+                    continue;
                 }
                 i = b + 1;
             }

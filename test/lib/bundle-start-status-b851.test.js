@@ -12,6 +12,8 @@
  *
  * Sections:
  *   01 — the frames: encode, read across chunk splits, stray separators, foreign payloads
+ *   01b — a stray separator right before one of our frames: its closing separator is read
+ *        again, as the one that may open our frame (the #B851 review, F1)
  *   02 — createCliState(): what bin/cli prints and exits with, with and without the header
  *   03 — exitCodeBeforeReady(): the bundle's own code, 128 + signal, 1 for an exit 0
  *   04 — parseBindFailure() and bindFailureMessage()
@@ -160,6 +162,69 @@ describe('01 - the frames', function () {
         var got = feed(RS + 'gina-exit:abc' + RS, 4);
         assert.equal(got.text, RS + 'gina-exit:abc' + RS);
         assert.equal(got.reader.exitCode(), null);
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// 01b — a stray separator right before one of our frames
+// ---------------------------------------------------------------------------
+
+describe('01b - a stray separator right before one of our frames', function () {
+
+    // A separator that opens a payload that is not ours is text, and the separator that closes that
+    // payload may be the one that opens our next frame. The reader took it as the closing one, so a
+    // stray separator up to 64 characters before the trailer lost the exit code, and bin/cli exited 1
+    // with « the framework ended this command before it reported the outcome » for a bundle the
+    // daemon reported as started (measured, the #B851 review, finding F1).
+    var HEAD  = RS + 'gina-status:1' + RS;
+    var TRAIL = RS + 'gina-exit:0' + RS;
+
+    /**
+     * Reads `text` in slices of every size from 1 to 40 and checks the header, the code and the text.
+     *
+     * @param {string} text
+     * @param {string} expectedText
+     * @param {string} label
+     */
+    function check(text, expectedText, label) {
+        for (var size = 1; size <= 40; size++) {
+            var got = feed(text, size);
+            assert.equal(got.reader.hasHeader(), true, label + ', slice size ' + size);
+            assert.equal(got.reader.exitCode(), 0, label + ', slice size ' + size);
+            assert.equal(got.text, expectedText, label + ', slice size ' + size);
+        }
+    }
+
+    it('a stray separator 3 characters before the trailer: the code is read and the text kept', function () {
+        check(HEAD + 'x' + RS + 'abc' + TRAIL, 'x' + RS + 'abc', 'stray 3 characters before');
+    });
+
+    it('a stray separator right before the trailer', function () {
+        check(HEAD + 'x' + RS + TRAIL, 'x' + RS, 'stray right before');
+    });
+
+    it('a stray separator 60 characters before the trailer', function () {
+        var y = 'y'.repeat(60);
+        check(HEAD + 'x' + RS + y + TRAIL, 'x' + RS + y, 'stray 60 characters before');
+    });
+
+    it('a stray separator right before the header', function () {
+        check('x' + RS + HEAD + 'started' + TRAIL, 'x' + RS + 'started', 'stray before the header');
+    });
+
+    it('CONTROL — a stray separator 100 characters before the trailer (more than a frame holds)', function () {
+        var y = 'y'.repeat(100);
+        check(HEAD + 'x' + RS + y + TRAIL, 'x' + RS + y, 'stray 100 characters before');
+    });
+
+    it('bin/cli exits with the trailer\'s code, and prints no « ended » line', function () {
+        var st = ss().createCliState();
+        st.onData(HEAD + '  [ web@p ] started V(-.o)V');
+        st.onData('x' + RS + 'abc' + TRAIL);
+        var end = st.onEnd();
+        assert.equal(end.code, 0);
+        assert.equal(end.message, null);
     });
 });
 
