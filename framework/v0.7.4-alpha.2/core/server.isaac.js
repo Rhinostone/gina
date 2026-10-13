@@ -3080,6 +3080,14 @@ function ServerEngineClass(options) {
                                     if (a[0].indexOf('+') > -1) a[0] = a[0].replace(/\+/g, ' ');
                                     if (a[0].indexOf('%') > -1) a[0] = safeDecodeURIComponent(a[0]);
                                 }
+                                // #B848 — a field named `__proto__`, `constructor` or `prototype` is
+                                // dropped, as the data helper drops it from a query string (#B592):
+                                // assigned here, a `__proto__` holding a JSON value reached the
+                                // `Object.prototype` setter and re-pointed the prototype of
+                                // `request.query`, which the DELETE branch of server.js handed over
+                                // as `req.delete`. The test follows the key decode above, so an
+                                // encoded name is caught too; drop, never throw (#B446).
+                                if ( a[0] === '__proto__' || a[0] === 'constructor' || a[0] === 'prototype' ) continue;
                                 request.query[ a[0] ] = a[1]
                             }
                         }
@@ -3102,7 +3110,12 @@ function ServerEngineClass(options) {
                                 if (a[0].indexOf('+') > -1) a[0] = a[0].replace(/\+/g, ' ');
                                 if (a[0].indexOf('%') > -1) a[0] = safeDecodeURIComponent(a[0]);
                             }
-                            request.query[ a[0] ] = a[1]
+                            // #B848 — the three names are dropped here too (see the multi-value
+                            // branch above); this branch holds no loop, so the guard wraps the
+                            // assignment instead of skipping to the next field.
+                            if ( a[0] !== '__proto__' && a[0] !== 'constructor' && a[0] !== 'prototype' ) {
+                                request.query[ a[0] ] = a[1]
+                            }
                         } else { // for redirection purposes or when passing `?encodedJsonObject`
                             try {
                                 if ( a[0].indexOf('%') > -1 ) { // encoded URI Component

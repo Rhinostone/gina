@@ -201,6 +201,53 @@ function ownCount(container) {
 }
 
 /**
+ * #B848 / #B847 — the DELETE container (`req.delete`) as a plain object holding the
+ * query's own fields.
+ *
+ * The DELETE branch of `processRequestData` handed the engine's parsed query over by
+ * reference. On isaac a field named `__proto__` holding a JSON value re-pointed that
+ * object's prototype (#B848): a property read on `req.delete` then saw the injected
+ * values while `Object.keys`, `JSON.stringify` and an own-key check did not, and an
+ * injected `count`, `hasOwnProperty` or `toString` made the documented calls throw. On
+ * Express 4 with a `query parser` built on node's `querystring` the parsed query has no
+ * prototype at all, so `req.delete.count()` was not a function (#B847).
+ *
+ * The copy is a plain object holding each own enumerable key of the query, read with
+ * `Object.keys` (which an object without a prototype answers too), except `__proto__`,
+ * `constructor` and `prototype`, dropped as the data helper drops them from a query
+ * string (#B592); with `__proto__` skipped, the plain assignment below never reaches the
+ * `Object.prototype` setter. Values are kept by reference. Any other value is handed over
+ * as it is: an array (a whole-query JSON array, which isaac parses as one), a string or a
+ * number carries neither defect, and the DELETE branch calls this only for a value whose
+ * own-key count is above zero.
+ *
+ * @param   {*} query - the engine's parsed query (`request.query`)
+ * @returns {*} a new plain object with the query's own keys minus the three names, or
+ *   `query` itself when it is not an object or is an array
+ * @inner
+ * @private
+ *
+ * @example
+ * copyOwnQueryKeys({ a: '1', b: '2' });                           // { a: '1', b: '2' }, a new object
+ * copyOwnQueryKeys(require('querystring').parse('a=1'));          // { a: '1' }, plain: count() → 1
+ * copyOwnQueryKeys(JSON.parse('{"__proto__":{"x":1},"a":"1"}')); // { a: '1' }
+ * copyOwnQueryKeys([1, 2]);                                       // the same array
+ */
+function copyOwnQueryKeys(query) {
+    if ( query === null || typeof query !== 'object' || Array.isArray(query) ) {
+        return query;
+    }
+    var copy = {}, keys = Object.keys(query);
+    for (var k = 0; k < keys.length; ++k) {
+        if ( keys[k] === '__proto__' || keys[k] === 'constructor' || keys[k] === 'prototype' ) {
+            continue;
+        }
+        copy[ keys[k] ] = query[ keys[k] ];
+    }
+    return copy;
+}
+
+/**
  * #B830 (2026-10-09) — render the control characters of a value as visible escapes before
  * it is written into a log or error message, so a client-supplied value cannot forge a
  * physical log line (CWE-117). The escaped set: C0 (U+0000-U+001F), DEL and C1
@@ -7510,7 +7557,12 @@ function Server(options) {
 
             case 'delete':
                 if ( ownCount(request.query) > 0 ) {
-                    request.delete = request.query;
+                    // #B848 / #B847 — a plain copy holding the query's own fields, never the
+                    // engine's object itself: on isaac its prototype could have been re-pointed
+                    // by a `__proto__` field, and on Express 4 with a `querystring` parser it
+                    // has no prototype (no `count()` to call). See copyOwnQueryKeys().
+                    // was: request.delete = request.query;
+                    request.delete = copyOwnQueryKeys(request.query);
 
                 }
                 // else, matching route params against url context instead once, route is identified

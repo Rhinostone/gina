@@ -1,0 +1,3 @@
+kind: Fixed
+body: '`req.delete` is a plain object with Express 4 and a `querystring`-based query parser. With Express 4 and `app.set(''query parser'', ''simple'')`, or any query parser returning an object without a prototype, the DELETE branch handed that object over as `req.delete`, so on every DELETE to a path after the first `req.delete.count()` and `req.delete.hasOwnProperty()` were not functions. Measured with express 4.22.3. The DELETE branch now hands over a plain object holding the query''s own fields. Express 4''s default parser (`extended`) and Express 5 already gave a plain object. Server-side only: restart the bundle, nothing to re-bake (#B847)'
+time: 2026-10-13T13:57:30+01:00
