@@ -5,6 +5,11 @@ const { runMain } = require('module');
 var execFile    = require('child_process').execFile;
 
 var CmdHelper   = require('./../helper');
+// #B851 — the restart checks its own outcome (the running bundle's pid before and after), with
+// the rule bundle:start uses; ps-titles reads a pid's title without a shell. Relative paths: the
+// bare `lib/<name>` form is unavailable in CLI scope.
+var startStatus = require('./inc/start-status');
+var psTitles    = require('./../framework/inc/ps-titles');
 var console     = lib.logger;
 // var Shell       = lib.Shell;
 
@@ -71,6 +76,8 @@ function Restart(opt, cmd) {
         // start all bundles
         opt.onlineCount = 0;
         opt.notStarted = [];
+        // #B853 — set by the first bundle that fails to restart, read by the final end()
+        self.anyFailed = false;
         if (!self.name) {
             // bulk mode needs at least one bundle — `self.bundles[0]` is undefined on a zero-bundle project
             if ( !self.bundles || !self.bundles.length ) {
@@ -209,18 +216,37 @@ function Restart(opt, cmd) {
                 //         end(opt, cmd, isBulkRestart, bundleIndex)
                 //     }, 250); // 500
                 // })
+                // #B851 (B2, moved from #B850) — the bundle that runs before the stop, to compare
+                // with the one that runs after the start
+                var prePid = runningPid(bundle, appPath);
                 execFile(self.cliArgv[0], stopArgv, function onStopped(err, stopStdout) {
                     if (err) {
                         return onFailed(err);
                     }
                     execFile(self.cliArgv[0], startArgv, function onStarted(err, startStdout) {
                         if (err) {
+                            // #B851 — a failed start now exits non-zero: print what the stop and the
+                            // start said (the start's own line names the reason; « Command failed »
+                            // names only the command)
+                            var failedOut = (stopStdout || '') + (startStdout || '');
+                            if (failedOut) {
+                                console.log(failedOut);
+                            }
                             return onFailed(err);
                         }
                         // retrieve messages from the parent stdout
                         var stdout = (stopStdout || '') + (startStdout || '');
                         if (stdout) {
                             console.log(stdout.replace(/\n\rTrying to.*/gm, ''));
+                        }
+                        // #B851 (B2) — the restart checks its own outcome: a start that exits 0
+                        // must leave a running bundle that is not the one that ran before the stop.
+                        // A stop that did not stop the bundle made the start report « already
+                        // running » with the old pid, and the restart exited 0 while the old code
+                        // kept serving (the #B850 shape).
+                        var restartFailure = startStatus.restartFailure(prePid, runningPid(bundle, appPath));
+                        if (restartFailure) {
+                            return onFailed(new Error('[ '+ bundle +'@'+ self.projectName +' ] did not restart: '+ restartFailure));
                         }
                         setTimeout(() => {
                             //opt.client.write('  => bundle [ ' + bundle + '@' + self.projectName + ' ] restarted on port #'+ bundlePort+' :D\n');
@@ -244,13 +270,19 @@ function Restart(opt, cmd) {
      * @param {Error} [error] - Truthy when restart failed; causes process.exit(1)
      */
     var end = function (opt, cmd, isBulkRestart, i, error) {
+        // #B853 — a bulk restart exited with the LAST bundle's outcome only: a bundle that failed
+        // in the middle of the list was reported, and the command still exited 0
+        if ( typeof(error) != 'undefined' ) {
+            self.anyFailed = true;
+        }
         if (isBulkRestart) {
             ++i;
             if ( typeof(self.bundles[i]) != 'undefined' ) {
                 restart(opt, cmd, i)
             } else {
 
-                if ( typeof(error) != 'undefined') {
+                // #B853 — was: if ( typeof(error) != 'undefined') {
+                if ( self.anyFailed ) {
                     return process.exit(1);
                 }
                 if (!opt.client.destroyed)
@@ -269,6 +301,44 @@ function Restart(opt, cmd) {
             process.exit(0);
         }
     }
+
+    /**
+     * #B851 (B2) — the pid of the bundle that runs, read from its pid file with the rule
+     * `bundle:start` uses (`inc/start-status.js` `findRunningBundle()`): a running process
+     * titled `gina: <bundle>@<project>` (on Bun, one running the bundle's entry; where `ps`
+     * cannot tell, a live pid). `null` when there is no such file or process. Never throws.
+     *
+     * @inner
+     * @private
+     * @param {string} bundle - Bundle name
+     * @param {?string} appPath - The bundle's entry (`index.js`), which Bun's `ps` shows
+     * @returns {?number} The running bundle's pid, or `null`
+     */
+    var runningPid = function(bundle, appPath) {
+        var content = null;
+        try {
+            content = fs.readFileSync(_(GINA_RUNDIR +'/'+ bundle +'@'+ self.projectName +'.pid', true)).toString();
+        } catch (pidErr) {
+            return null;
+        }
+        try {
+            return startStatus.findRunningBundle(content, bundle +'@'+ self.projectName, appPath || null, {
+                parsePid : psTitles.parsePid,
+                read     : psTitles.readPidTitle,
+                alive    : function(pid) {
+                    try {
+                        process.kill(pid, 0);
+                        return true;
+                    } catch (killErr) {
+                        return !!(killErr && killErr.code === 'EPERM');
+                    }
+                }
+            });
+        } catch (findErr) {
+            console.debug('[bundle:restart] running check skipped: '+ findErr.message);
+            return null;
+        }
+    };
 
     /**
      * Resolves the bundle entry point path (dev source or compiled release) and

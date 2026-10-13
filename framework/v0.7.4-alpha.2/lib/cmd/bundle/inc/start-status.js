@@ -365,7 +365,34 @@ function findRunningBundle(pidContent, name, entry, probe) {
     return null;
 }
 
+/**
+ * Whether `bundle:restart` restarted the bundle (#B851, the check moved from #B850): after a
+ * start that exited 0, a bundle runs (`findRunningBundle()` read its pid file) and it is not
+ * the process that ran before the stop. A start that reported « already running » after a stop
+ * that did not stop the bundle exits 0 with the same pid; a start that read as started while no
+ * bundle runs is the older daemon's case (`b850-design.md` § 7).
+ *
+ * @param {?number} prePid - The running bundle's pid before the stop, or null
+ * @param {?number} postPid - The running bundle's pid after the start, or null
+ * @returns {?string} `null` when it restarted; otherwise the reason, for
+ *   `[ <bundle>@<project> ] did not restart: <reason>`
+ * @example
+ * restartFailure(4242, 4300);   // null
+ * restartFailure(4242, 4242);   // 'PID 4242 still runs after the stop'
+ * restartFailure(null, null);   // 'no running bundle after the start'
+ */
+function restartFailure(prePid, postPid) {
+    if ( postPid === null || typeof(postPid) == 'undefined' ) {
+        return 'no running bundle after the start';
+    }
+    if ( prePid !== null && typeof(prePid) != 'undefined' && postPid === prePid ) {
+        return 'PID '+ postPid +' still runs after the stop';
+    }
+    return null;
+}
+
 module.exports = {
+    restartFailure       : restartFailure,
     RS                   : RS,
     HEADER_PAYLOAD       : HEADER_PAYLOAD,
     EXIT_PREFIX          : EXIT_PREFIX,

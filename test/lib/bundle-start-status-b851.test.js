@@ -17,9 +17,11 @@
  *   04 — parseBindFailure() and bindFailureMessage()
  *   05 — findRunningBundle(): the « already running » rule, through an injected probe
  *   06 — writeExit(): only a client bin/cmd marked
+ *   06b — restartFailure(): `bundle:restart` checks its own outcome (B2, moved from #B850)
  *   07 — core/server.js watchBindOutcome(), extracted and driven with stubs
  *   08 — source pins (comment lines removed): bin/cli, bin/cmd, start.js, helper.js and init.js
- *        (an online refusal ends its client, not the daemon: #B855), server.js, gna.js
+ *        (an online refusal ends its client, not the daemon: #B855), restart.js (B2, and a
+ *        bulk restart that exits 1 when any bundle failed: #B853), server.js, gna.js
  *
  * Red-first: every section fails on the pre-fix tree (the module, the server.js function and
  * the wiring are absent). The daemon paths end to end (S0–S11 of the #B851 sandbox) and a
@@ -383,6 +385,28 @@ describe('06 - writeExit(): only a client bin/cmd marked', function () {
 
 
 // ---------------------------------------------------------------------------
+// 06b — restartFailure(): did bundle:restart restart the bundle (B2)
+// ---------------------------------------------------------------------------
+
+describe('06b - restartFailure(): bundle:restart checks its own outcome (B2)', function () {
+
+    it('a new running pid after the start is a restart', function () {
+        assert.equal(ss().restartFailure(4242, 4300), null);
+        assert.equal(ss().restartFailure(null, 4300), null, 'no bundle ran before: a start is enough');
+    });
+
+    it('the same pid after the stop and the start: it did not restart', function () {
+        assert.equal(ss().restartFailure(4242, 4242), 'PID 4242 still runs after the stop');
+    });
+
+    it('no running bundle after a start that exited 0: it did not restart', function () {
+        assert.equal(ss().restartFailure(4242, null), 'no running bundle after the start');
+        assert.equal(ss().restartFailure(null, null), 'no running bundle after the start');
+    });
+});
+
+
+// ---------------------------------------------------------------------------
 // 07 — core/server.js watchBindOutcome(), driven
 // ---------------------------------------------------------------------------
 
@@ -559,6 +583,28 @@ describe('08 - the wiring (comment lines removed)', function () {
         var iCrit = code.indexOf("console.crit('Gina has some troubles with this command: gina '");
         var tail  = code.slice(iCrit, code.indexOf('process.exit(1);', iCrit) + 16);
         assert.match(tail, /if \( opt\.isOnlineCommand && opt\.client \) \{\s*startStatus\.writeExit\(opt\.client, 1\);\s*opt\.client\.end\(\);\s*return;\s*\}\s*process\.exit\(1\);/);
+    });
+
+    it('restart.js: the bundle\'s pid is read before the stop and checked after a start that exited 0 (B2)', function () {
+        var code = live(fs.readFileSync(RESTART_PATH, 'utf8'));
+        var iPre   = code.indexOf('var prePid = runningPid(bundle, appPath);');
+        var iStop  = code.indexOf('execFile(self.cliArgv[0], stopArgv');
+        var iStart = code.indexOf('execFile(self.cliArgv[0], startArgv');
+        var iCheck = code.indexOf('startStatus.restartFailure(prePid, runningPid(bundle, appPath))');
+        var iEnd   = code.indexOf('end(opt, cmd, isBulkRestart, bundleIndex)', iCheck);
+        assert.ok(iPre > -1 && iPre < iStop, 'the pre-stop pid is read before the stop: ' + iPre + ' < ' + iStop);
+        assert.ok(iCheck > iStart, 'the check runs in the start callback');
+        assert.ok(iEnd > iCheck, 'before the success end()');
+        assert.match(code.slice(iCheck, iEnd), /return onFailed\(new Error\(/);
+    });
+
+    it('restart.js: a bulk restart exits 1 when any bundle failed, not only the last (#B853)', function () {
+        var code = live(fs.readFileSync(RESTART_PATH, 'utf8'));
+        var at = code.indexOf('var end = function (opt, cmd, isBulkRestart, i, error) {');
+        assert.ok(at > -1, 'end() was not found');
+        var body = code.slice(at, code.indexOf('var runningPid = function', at));
+        assert.ok(body.indexOf('self.anyFailed = true;') > -1, 'a failure is remembered');
+        assert.ok(body.indexOf('if ( self.anyFailed ) {') > -1, 'the final bulk end() reads it');
     });
 
     it('gna.js: the readiness flag waits for the server to listen', function () {

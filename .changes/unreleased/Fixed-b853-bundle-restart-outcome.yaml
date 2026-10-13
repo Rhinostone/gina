@@ -1,0 +1,3 @@
+kind: Fixed
+body: '`gina bundle:restart` now exits 1 when the bundle did not restart. Its start step exits non-zero on a failed start (#B851), and a start that exits 0 must leave a running bundle that is not the process that ran before the stop: a stop that missed the bundle used to end with the old process still serving and exit code 0 (measured with a pid file naming another process, the shape of #B850). On a failure the command prints what its stop and start steps said. `bundle:restart @<project>` exits 1 when any bundle failed, where only the last bundle''s outcome decided it (measured: the first bundle failed, the last restarted, exit 0). `project:restart` sees the same codes. Pickup: the next command (#B853)'
+time: 2026-10-13T15:32:26+01:00
