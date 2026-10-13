@@ -8886,6 +8886,12 @@ function Server(options) {
      * from a user-relayed ref. The HTML surfaces (custom error page data +
      * the inline fallback page) carry the same ref.
      *
+     * #B842 — the custom error page is dispatched at most once per request:
+     * the dispatch marks the request (`_ginaErrorPageDispatched`), and a
+     * later call for a marked request answers with the built-in page instead
+     * of dispatching the page again — the case of an error-page dispatch
+     * that raises, whose catch in the router calls this function again.
+     *
      * @inner
      * @private
      * @param {object} res - Server response object
@@ -9183,11 +9189,21 @@ function Server(options) {
                             break;
                         }
                     }
-                    if ( !hasMiddlewareException ) {
+                    // #B842 — the error page is dispatched at most once per request. When building
+                    // the error-page controller raises, the router's catch calls throwError again
+                    // for the same request; dispatching the page again raised again, and the cycle
+                    // ran until the call stack overflowed and the bundle exited, with no answer
+                    // sent. The render-time guard (isRenderingCustomError) is read only once the
+                    // page renders, which comes after that point. The mark is a property of the
+                    // request resolved above, so it lasts as long as the request and is never
+                    // cleared: a request that carries it falls through to the built-in page
+                    // below, answered under the incident ref of this call.
+                    if ( !hasMiddlewareException && !_req._ginaErrorPageDispatched ) {
                         var router = local.router;
                         if ( typeof(router._server) == 'undefined' ) {
                             router._server = self.instance;
                         }
+                        _req._ginaErrorPageDispatched = true;
                         router.route(_req, res, next, _req.routing);
 
                         return;
