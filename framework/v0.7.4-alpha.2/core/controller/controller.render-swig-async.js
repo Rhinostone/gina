@@ -109,7 +109,10 @@ function getRenderALS() {
  * @param {boolean}  autoescape   - Per-bundle autoescape (captured by initSwigEngine)
  * @param {function} SwigFilters  - The SwigFilters factory (from `deps`), registered once
  * @param {function} throwError   - `self.throwError`, carried into the filter set
- * @returns {{engine:*, compiled:Map}} The cached-or-built engine + its compiled-fn memo
+ * @returns {{engine:*, compiled:Map, ginaFilterNames:Object<string, boolean>, bundleEngine:*, bundleRev:number}}
+ *   The cached-or-built engine + its compiled-fn memo, and the #B825 replay state
+ *   (`replayBundleRegistrations`): gina's filter names, the bundle engine and the
+ *   record revision last replayed
  */
 function getSwigEngine(swigMod, templateRoot, loader, autoescape, SwigFilters, throwError) {
     if (!process.gina._swigEngines) {
@@ -133,10 +136,15 @@ function getSwigEngine(swigMod, templateRoot, loader, autoescape, SwigFilters, t
         });
         // #B25 / #TPL1 Tier-2 — register the gina filters ONCE on the shared
         // engine (context-free; per-request context flows via _renderALS).
-        registerGinaFilters(engine, SwigFilters, throwError, (autoescape === true));
+        var ginaFilterNames = registerGinaFilters(engine, SwigFilters, throwError, (autoescape === true));
         process.gina._swigEngines[key] = {
-            engine:   engine,
-            compiled: new Map()
+            engine:          engine,
+            compiled:        new Map(),
+            // #B825 — replay state (replayBundleRegistrations): gina's filter names are
+            // never replayed over; the bundle engine and record revision last replayed
+            ginaFilterNames: ginaFilterNames,
+            bundleEngine:    null,
+            bundleRev:       -1
         };
     }
     return process.gina._swigEngines[key];
@@ -245,16 +253,71 @@ function computeIsProxyHost(req, localOptions) {
  * @param {function} SwigFilters - The SwigFilters factory (from `deps`)
  * @param {function} throwError  - `self.throwError`, carried for the singleton-fallback path
  * @param {boolean}  [autoescape=false] - The engine's own autoescape mode
- * @returns {void}
+ * @returns {Object<string, boolean>} the names registered (#B825: a bundle filter
+ *   of one of these names is not replayed over gina's)
  */
 function registerGinaFilters(engine, SwigFilters, throwError, autoescape) {
     var filters = SwigFilters({ options: {}, isProxyHost: false, throwError: throwError, autoescape: (autoescape === true) });
+    var names   = Object.create(null);
 
     for (var name in filters) {
         if (typeof filters[name] === 'function' && name !== 'getConfig') {
             engine.setFilter(name, filters[name]);
+            names[name] = true;
         }
     }
+    return names;
+}
+
+/**
+ * #B825 — replay onto the async engine what the bundle registered on its own
+ * engine: `this.engine` in `controllers/setup.js`, `self.engine` in an action.
+ *
+ * swig gives every instance private filter and tag maps, so a registration on
+ * the bundle's engine never reaches the engine this delegate builds;
+ * controller.js records each one on the bundle's engine when the bundle renders
+ * through an async loader (`recordRegistrations`, `engine._ginaRegistrations`),
+ * and this replays the record whenever it changed. setup.js runs before the
+ * render, and again on later requests, so a registration made after this engine
+ * was minted lands at the next render; a render with nothing new replays nothing.
+ *
+ * A bundle filter named like one of gina's is not replayed: on the default
+ * render path gina registers its filters again at each render, after setup.js,
+ * so gina's wins there (measured), and it wins here too. Tags and extensions
+ * are replayed as recorded.
+ *
+ * @inner
+ * @param {{engine:*, ginaFilterNames:Object<string, boolean>, bundleEngine:*, bundleRev:number}} entry
+ *   The async engine's registry entry (from `getSwigEngine`), updated in place
+ * @param {*} bundleEngine - The bundle's own engine (`deps.swig`); the swig
+ *   module, or an engine with no record, replays nothing
+ * @returns {void}
+ *
+ * @example
+ * var entry = getSwigEngine(swigMod, loaderKey, stash.loader, stash.autoescape, SwigFilters, self.throwError);
+ * replayBundleRegistrations(entry, deps.swig);
+ */
+function replayBundleRegistrations(entry, bundleEngine) {
+    var record = (bundleEngine && bundleEngine._ginaRegistrations) || null;
+    if ( !record || (entry.bundleEngine === bundleEngine && entry.bundleRev === record.rev) ) {
+        return;
+    }
+    var engine = entry.engine, name, tag;
+    for (name in record.filters) {
+        if (entry.ginaFilterNames && entry.ginaFilterNames[name] === true) {
+            continue;
+        }
+        engine.setFilter(name, record.filters[name]);
+    }
+    for (name in record.tags) {
+        tag = record.tags[name];
+        engine.setTag(name, tag.parse, tag.compile, tag.ends, tag.blockLevel);
+    }
+    for (name in record.extensions) {
+        engine.setExtension(name, record.extensions[name]);
+    }
+    entry.bundleEngine = bundleEngine;
+    entry.bundleRev    = record.rev;
 }
 
 /**
@@ -578,6 +641,9 @@ module.exports = async function renderSwigAsync(userData, displayInspector, errO
     try {
         engineEntry = getSwigEngine(swigMod, loaderKey, stash.loader, stash.autoescape, SwigFilters, self.throwError);
         engine      = engineEntry.engine;
+        // #B825 — what the bundle registered through `this.engine` (setup.js) or
+        // `self.engine` (an action): `deps.swig` is that engine.
+        replayBundleRegistrations(engineEntry, deps.swig);
     } catch (engErr) {
         return self.throwError(engErr);
     }

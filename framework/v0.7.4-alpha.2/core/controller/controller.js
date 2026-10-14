@@ -368,7 +368,7 @@ function exposeOptionsOnEngine(engine, opts) {
  * (they read per-request context from `process.gina._renderALS`, so a shared
  * engine cannot bleed), and a bundle's own `controllers/setup.js` filters land
  * here too because `self.engine` points at this instance before setup runs
- * (`router.js:944` hands `controller.engine` to the setup module). Two things
+ * (`router.js:1079` hands `controller.engine` to the setup module). Two things
  * the move off the module lost are restored per instance at mint: #B535
  * bridges the three registration setters back to the module, and #B538 gives
  * the instance its own `getOptions()` accessor (`exposeOptionsOnEngine`) —
@@ -398,6 +398,71 @@ function getDefaultSwigEngine(swigMod, templateRoot, opts) {
         exposeOptionsOnEngine(process.gina._swigDefaultEngines[templateRoot], opts);
     }
     return process.gina._swigDefaultEngines[templateRoot];
+}
+
+/**
+ * #B825 — record what a bundle registers on its per-bundle engine, for the
+ * async render delegate.
+ *
+ * A bundle whose templates come from an async swig loader
+ * (`settings.template.swig.loader`) renders on an engine the delegate builds
+ * itself (`controller.render-swig-async.js`, `getSwigEngine`), and swig gives
+ * every instance private filter and tag maps (swig-core `install()`): a filter
+ * that `controllers/setup.js` registers through `this.engine` lands on this
+ * engine (and, through the #B535 bridge, on the module), never on that one, so a
+ * template using it answered `Invalid filter` (500), a tag `Unexpected tag`, and
+ * an extension was missing from `_ext`. The maps cannot be copied out later, so
+ * each registration is recorded as it is made, and the delegate replays the
+ * record onto its engine whenever it changed (`replayBundleRegistrations`).
+ *
+ * Wraps the three setters as they are, the #B535 bridge included: a
+ * registration still reaches the instance and the module first, and the
+ * setter's own validation throws before anything is recorded. Idempotent per
+ * instance. Installed by `setOptions` only for a bundle with an async swig
+ * loader; the default render path never reads the record.
+ *
+ * @inner
+ * @param {*} engine - A per-bundle `new swigMod.Swig()` instance
+ * @returns {*} the same instance, its setters recording into `engine._ginaRegistrations`
+ *   (`{ rev, filters, tags, extensions }`, `rev` incremented on every registration)
+ *
+ * @example
+ * var engine = recordRegistrations(getDefaultSwigEngine(swig, dir, swigOptions));
+ * engine.setFilter('stamp', fn);   // engine._ginaRegistrations.filters.stamp === fn
+ */
+function recordRegistrations(engine) {
+    if (engine._ginaRegistrations) {
+        return engine;
+    }
+    var record = {
+        rev       : 0,
+        filters   : Object.create(null),
+        tags      : Object.create(null),
+        extensions: Object.create(null)
+    };
+    var _setFilter    = engine.setFilter;
+    var _setTag       = engine.setTag;
+    var _setExtension = engine.setExtension;
+    engine.setFilter = function (name, method) {
+        var result = _setFilter.apply(engine, arguments);
+        record.filters[name] = method;
+        record.rev++;
+        return result;
+    };
+    engine.setTag = function (name, parse, compile, ends, blockLevel) {
+        var result = _setTag.apply(engine, arguments);
+        record.tags[name] = { parse: parse, compile: compile, ends: ends, blockLevel: blockLevel };
+        record.rev++;
+        return result;
+    };
+    engine.setExtension = function (name, object) {
+        var result = _setExtension.apply(engine, arguments);
+        record.extensions[name] = object;
+        record.rev++;
+        return result;
+    };
+    engine._ginaRegistrations = record;
+    return engine;
 }
 const { type }      = require('node:os');
 var SwigFilters     = lib.SwigFilters;
@@ -1715,6 +1780,23 @@ function SuperController(options) {
             local._swigEngine = ( dir && typeof(swig.Swig) === 'function' )
                 ? getDefaultSwigEngine(swig, dir, swigOptions)
                 : swig;
+            // #B825 — a bundle whose templates come from an async swig loader renders
+            // on the async delegate's own engine, which never sees what setup.js
+            // registers on this one: record the registrations, and the delegate replays
+            // them. The test is the one render() uses to pick the async delegate; a
+            // bundle without an async loader keeps this engine untouched.
+            var _asyncRoot = local.options.conf && local.options.conf.content
+                && local.options.conf.content.templates && local.options.conf.content.templates._common
+                && local.options.conf.content.templates._common.html;
+            if (
+                local._swigEngine !== swig
+                && _asyncRoot && typeof(process.gina) != 'undefined' && process.gina
+                && process.gina._swigLoaders && process.gina._swigLoaders[_asyncRoot]
+                && process.gina._swigLoaders[_asyncRoot].loader
+                && process.gina._swigLoaders[_asyncRoot].loader.async === true
+            ) {
+                recordRegistrations(local._swigEngine);
+            }
             // Must precede controllers/setup.js: router.js hands `controller.engine`
             // to the setup module, so a bundle's own filters register HERE.
             self.engine = local._swigEngine;
