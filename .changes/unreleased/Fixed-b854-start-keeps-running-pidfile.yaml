@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'A `gina bundle:start` on a bundle that is already running no longer deletes that bundle''s pid file. The second start spawned a new process that wrote its own pid into `<bundle>@<project>.pid`, could not bind the port, and removed the file as it exited, so `bundle:status` read the running bundle as stopped and `bundle:stop` found it only by its process title (measured in an isolated daemon, for `bundle:start <bundle>` and for `bundle:start @<project>`). The command now finds the running bundle from its pid file before it starts anything, and starts nothing. Pickup: restart the framework (`gina framework:restart`) (#B854)'
-time: 2026-10-13T15:32:26+01:00
