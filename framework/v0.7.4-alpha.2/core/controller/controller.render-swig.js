@@ -582,6 +582,34 @@ module.exports = async function render(userData, displayInspector, errOptions, d
             path += data.page.view.ext
         }
 
+        // #B867 — the page template must stay inside the section's template root. A template path
+        // can come from request data by routes the routing fill (#B833) never sees: a controller that
+        // passes a request value to self.setTemplate() or writes it to req.routing.param.file. The
+        // branches above join it under the root unchecked (the setTemplate, namespace and param.path
+        // branches had no check; the CVE-2023-25345 check above looks at the first character only,
+        // and for a leading `.` it checks one path while the read below uses another, relative to the
+        // cwd), and `_()` normalises a path BEFORE it turns `\` into `/`, so a backslash-separated
+        // `..` survived until the read. So the path the read below opens is checked here, resolved
+        // the way the read resolves it: it must sit under the resolved root plus a separator (a
+        // sibling such as `html2/` does not pass), compared as written on both sides (a symlinked
+        // bundle directory is a prefix both share; resolving links on one side only would refuse
+        // every page). That comparison is lexical, so the path read must also hold no `..`
+        // segment: `_()` collapses a `/`-separated `..`, so one still in the path came from a
+        // backslash-separated value, and the read resolves it AFTER following any symlink inside
+        // the root, out of it — a symlinked subdirectory with a `..` behind it passed the
+        // comparison and read its target's parent. Custom error pages are exempt on the flag
+        // renderCustomError sets on the options, never on a flag carried by the render data: they
+        // may live in <sharedPath>/errors.
+        if ( localOptions.isRenderingCustomError !== true ) {
+            var _pageTemplateRoot   = nodePath.resolve(localOptions.template.html);
+            var _pageRootPrefix     = ( _pageTemplateRoot.charAt(_pageTemplateRoot.length - 1) === nodePath.sep ) ? _pageTemplateRoot : _pageTemplateRoot + nodePath.sep;
+            if ( nodePath.resolve(path).indexOf(_pageRootPrefix) !== 0 || /(^|[\/\\])\.\.([\/\\]|$)/.test(path) ) {
+                throw new Error('[CVE-2023-25345] Path traversal attempt blocked: the template path of route `'+ localOptions.rule +'` resolves outside the template root');
+            }
+            _pageTemplateRoot = null;
+            _pageRootPrefix = null;
+        }
+
         data.page.view.path = path;
     } catch (dataErr) {
         return self.throwError(dataErr);

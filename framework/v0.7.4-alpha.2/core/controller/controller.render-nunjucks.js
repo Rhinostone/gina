@@ -1407,6 +1407,20 @@ module.exports = async function renderNunjucks(userData, displayInspector, errOp
             return self.throwError(pathErr);
         }
 
+        // #B867 — the page template must stay inside the template root, checked before anything
+        // below touches the filesystem. A template path can come from request data through
+        // self.setTemplate() or a req.routing.param.file write, and nunjucks' FileSystemLoader only
+        // tests `fullpath.indexOf(root) === 0`, with no separator: a sibling directory whose name
+        // starts with the root's (`html2/`) passed it, and the existence pre-flight below ran on an
+        // unchecked join. The path checked is the one the loader resolves, path.resolve(root, name);
+        // it must sit under the resolved root plus a separator. The custom error branch above reads
+        // its own configured file and is not concerned.
+        var _pageTemplateRoot = nodePath.resolve(templateRoot);
+        var _pageRootPrefix   = ( _pageTemplateRoot.charAt(_pageTemplateRoot.length - 1) === nodePath.sep ) ? _pageTemplateRoot : _pageTemplateRoot + nodePath.sep;
+        if ( nodePath.resolve(templateRoot, templateRel).indexOf(_pageRootPrefix) !== 0 ) {
+            return self.throwError(new Error('[CVE-2023-25345] Path traversal attempt blocked: the template path of route `'+ localOptions.rule +'` resolves outside the template root'));
+        }
+
         // Template-existence pre-flight — nunjucks throws on missing templates
         // with a generic message; this produces a Gina-style error object with
         // a clear path so the dev sees what was looked up.

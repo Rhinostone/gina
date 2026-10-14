@@ -2316,16 +2316,22 @@ function SuperController(options) {
      *
      * The render delegates (controller.render-swig.js,
      * controller.render-nunjucks.js) read `localOptions._templateOverride`
-     * and use it verbatim under the templates root — with no namespace
+     * and join it under the section's template root (`html` in
+     * templates.json, `templates/html` by default) — with no namespace
      * prefixing — before falling back to `data.page.view.file`/`.ext`.
+     * The resolved path must stay inside that root (#B867): a value that
+     * resolves outside it (a `..` segment, a backslash-separated `..`, an
+     * absolute path) makes the render answer 500 instead of reading the file,
+     * so a request value can be passed here without leaving the root.
      * Setting this after `setOptions()` has already populated
      * `data.page.view.*` is the supported way to redirect rendering from
      * inside an action — that eviction-order is otherwise unreachable from
      * controller code because `local.options` is closure-private.
      *
      * @memberof BaseController
-     * @param {string} file - Template path relative to the bundle's
-     *                        templates root (no extension; pass `ext` separately).
+     * @param {string} file - Template path relative to the section's template
+     *                        root (no extension; pass `ext` separately). It must
+     *                        resolve inside that root.
      * @param {string} [ext] - File extension (with or without leading dot).
      *                         Defaults to whatever `data.page.view.ext` carries.
      * @returns {void}
@@ -2333,7 +2339,7 @@ function SuperController(options) {
      * // Catch-all action dispatching to a template chosen at runtime:
      * this.catchAll = function (req, res, next) {
      *     var self = this;
-     *     self.setTemplate('errors/' + res.statusCode); // → templates/errors/404(.html)
+     *     self.setTemplate('errors/' + res.statusCode); // → templates/html/errors/404.html
      *     self.render({ message: 'Not found' });
      * };
      */
