@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'A reset on a multi-file upload input no longer throws, and a delete on an edit form holding several stored files no longer leaves a deleted file in the form. The reset set the input''s value to the files still listed, which the browser refuses, so it removed nothing; one delete click removed every preview but only the first file''s inputs, sent two removal requests, and the save posted the second file again. Every file of the input is now removed under its own index, in one pass, and the server receives one request naming them all. Any reset or delete control of an input removes all of its files, as before. Browser-bundled: rebuild bundles to pick it up (#B860).'
+time: 2026-10-14T04:00:22+01:00

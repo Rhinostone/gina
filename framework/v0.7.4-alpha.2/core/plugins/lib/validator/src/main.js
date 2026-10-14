@@ -5252,10 +5252,23 @@ function ValidatorPlugin(rules, data, formId, culture) {
                 , maxWidth = null
                 , ratio = null
             ;
+            // #B859 — the staging answer, by file index, on the file input: a reset names the files
+            // it removes from these entries (`originalFilename`, and the preview's own when there is
+            // one), so a file that got no preview <img> — not an image, no `preview` — is removed too.
+            if ( $uploadTriger ) {
+                $uploadTriger.stagedFiles = files;
+            }
             for (var f = 0, fLen = files.length; f<fLen; ++f) {
 
                 // creating reset link
-                let resetLinkId = $previewContainer.id.replace(/\-preview/, '-'+f+'-reset-trigger');
+                // #B861 — the id is `<file input id>-<f>-reset-trigger`, the one that
+                // `bindUploadResetOrDeleteTrigger` binds. It was derived from the preview container's
+                // id by replacing `-preview`, which gives that id only for the default container
+                // `<input id>-preview`: with a custom `data-gina-form-upload-preview` id the result was
+                // the container's own id, so the container was taken for the reset link (« Reset »
+                // written inside it, its classes changed) and no reset control was bound.
+                // was: let resetLinkId = $previewContainer.id.replace(/\-preview/, '-'+f+'-reset-trigger');
+                let resetLinkId = $uploadTriger.id + '-' + f + '-reset-trigger';
                 let resetLinkNeedToBeAdded = false;
                 let $resetLink = document.getElementById(resetLinkId);
                 let defaultClassNameArr = ['reset','js-upload-reset'];
@@ -5508,6 +5521,330 @@ function ValidatorPlugin(rules, data, formId, culture) {
     }
 
     /**
+     * getUploadFieldPrefix — the prefix of the hidden `<prefix>[i][…]` fields a file input's
+     * staged files write into its form: `data-gina-form-upload-prefix`, else the input's name,
+     * else `files`. The one rule for building those fields and for removing them.
+     *
+     * @inner
+     * @private
+     * @param {HTMLInputElement} $input - the file input
+     * @returns {string} the field prefix
+     *
+     * @example
+     * getUploadFieldPrefix(document.getElementById('avatar')); // 'avatar'
+     */
+    var getUploadFieldPrefix = function($input) {
+        return $input.getAttribute('data-gina-form-upload-prefix') || $input.name || $input.getAttribute('name') || 'files';
+    };
+
+    /**
+     * getUploadFileNodes — the file nodes of an upload preview container, in document order.
+     *
+     * A file node is an element carrying `data-upload-original-filename` (gina writes it on the
+     * previews it renders, and a page marks its own node for a file shown without an image with
+     * it), or an `<img>` that is a child of the container or of one of its `<li>` children (the
+     * `<li>` gina wraps each preview in when the container is a `<ul>`). A node inside a file node
+     * belongs to it and is not a file of its own.
+     *
+     * @inner
+     * @private
+     * @param {HTMLElement|null} $container - the preview container
+     * @returns {Array<HTMLElement>} a static list, safe to walk while its nodes are removed
+     *
+     * @example
+     * getUploadFileNodes(document.getElementById('avatar-preview')); // [ <img>, <a data-upload-original-filename="cv.pdf"> ]
+     */
+    var getUploadFileNodes = function($container) {
+        var fileNodes = [];
+        if ( !$container || typeof($container.querySelectorAll) != 'function' ) {
+            return fileNodes;
+        }
+        var $nodes = $container.querySelectorAll('*'), $node = null, $parent = null, isFileNode = false, k = 0;
+        for (var n = 0, nLen = $nodes.length; n < nLen; ++n) {
+            $node       = $nodes[n];
+            $parent     = $node.parentNode;
+            isFileNode  = $node.hasAttribute('data-upload-original-filename')
+                        || /^img$/i.test($node.tagName)
+                            && ( $parent === $container || $parent && /^li$/i.test($parent.tagName) && $parent.parentNode === $container );
+            if ( !isFileNode ) {
+                continue;
+            }
+            for (k = 0; k < fileNodes.length; ++k) {
+                if ( fileNodes[k].contains($node) ) {
+                    break;
+                }
+            }
+            if ( k == fileNodes.length ) {
+                fileNodes.push($node);
+            }
+        }
+        return fileNodes;
+    };
+
+    /**
+     * removeUploadEntryFields — #B858/#B862: removes from a file input's form the controls of one
+     * of its files, `<prefix>[index]…` (except those marked `data-gina-form-upload-is-locked`), and
+     * keeps them on the input so that the next selection puts them back
+     * (see restoreRemovedUploadFields): a page's declared fields — `[preview][*]` sub-fields, a
+     * caption — are part of the form, not of the file.
+     *
+     * @inner
+     * @private
+     * @param {HTMLInputElement} $uploadTrigger - the file input
+     * @param {string} fieldPrefix - see getUploadFieldPrefix
+     * @param {number} index - the file's index in the input's selection
+     * @returns {number} the count of removed controls
+     *
+     * @example
+     * removeUploadEntryFields($input, 'avatar', 0); // 10 — avatar[0][name] … avatar[0][mime]
+     */
+    var removeUploadEntryFields = function($uploadTrigger, fieldPrefix, index) {
+        var $form = $uploadTrigger.form || null;
+        if ( !$form ) {
+            return 0;
+        }
+        var re          = new RegExp('^'+ (fieldPrefix +'['+ index +']').replace(/[.*+?^${}()|[\]\\\-]/g, '\\$&'))
+            , removed   = 0
+            , $field    = null
+            , isLocked  = null
+        ;
+        if ( !$uploadTrigger.removedUploadFields ) {
+            $uploadTrigger.removedUploadFields = {};
+        }
+        for (var d = 0, dLen = $form.length; d < dLen; d++) {
+            $field = $form[d];
+            // data-gina-form-upload-is-locked
+            // this exception prevent `tagged datas` to be deleted on image delete
+            isLocked = ( $field.dataset ) ? $field.dataset.ginaFormUploadIsLocked || false : false;
+            if ( re.test($field.name) && !/true/i.test(isLocked) ) {
+                if ( !$uploadTrigger.removedUploadFields[index] ) {
+                    $uploadTrigger.removedUploadFields[index] = [];
+                }
+                $uploadTrigger.removedUploadFields[index].push({ $field: $field, $parent: $field.parentNode, $next: $field.nextSibling });
+                if ( /^hidden$/i.test($field.type) ) {
+                    $field.value = '';
+                }
+                $field.remove();
+                removed++;
+                dLen--;
+                d--;
+            }
+        }
+        return removed;
+    };
+
+    /**
+     * restoreRemovedUploadFields — #B858: puts back into a file input's form the controls of file
+     * `index` that a reset or a delete removed (see removeUploadEntryFields), where they were and
+     * in their order, a hidden one emptied. A control the page has meanwhile put back under the
+     * same name is kept instead.
+     *
+     * @inner
+     * @private
+     * @param {HTMLInputElement} $el - the file input
+     * @param {number} index - the file's index in the new selection
+     * @returns {number} the count of restored controls
+     *
+     * @example
+     * restoreRemovedUploadFields($input, 0); // 4 — the declared avatar[0][preview][…] inputs
+     */
+    var restoreRemovedUploadFields = function($el, index) {
+        var stash = ( $el.removedUploadFields ) ? $el.removedUploadFields[index] : null;
+        if ( !stash || !$el.form ) {
+            return 0;
+        }
+        delete $el.removedUploadFields[index];
+        var $form = $el.form, restored = 0, entry = null, isTaken = false;
+        // last removed first: each control then goes back before a sibling already in place
+        for (var s = stash.length - 1; s >= 0; --s) {
+            entry   = stash[s];
+            isTaken = false;
+            for (var c = 0, cLen = $form.length; c < cLen; ++c) {
+                if ( $form[c].name == entry.$field.name ) {
+                    isTaken = true;
+                    break;
+                }
+            }
+            if ( isTaken ) {
+                continue;
+            }
+            if ( /^hidden$/i.test(entry.$field.type) ) {
+                entry.$field.value = '';
+            }
+            if ( entry.$parent && entry.$parent.isConnected ) {
+                entry.$parent.insertBefore(entry.$field, ( entry.$next && entry.$next.parentNode === entry.$parent ) ? entry.$next : null);
+            } else {
+                $form.appendChild(entry.$field);
+            }
+            restored++;
+        }
+        return restored;
+    };
+
+    /**
+     * buildUploadHiddenFields — #B858: the hidden `<prefix>[i][…]` fields of a file input's
+     * selection, in its form, by file index: the inputs the form holds are reused (declared by the
+     * page, or written by an earlier selection), the ones a reset removed come back, and the
+     * missing mandatory ones are created, empty, for the staging answer to fill. Run on EVERY
+     * selection: building them only with the input's virtual upload form left a selection made
+     * after a reset with no field in the form, and one with more files than the first with none for
+     * its new files.
+     *
+     * @inner
+     * @private
+     * @param {HTMLInputElement} $el - the file input
+     * @param {string} fieldPrefix - see getUploadFieldPrefix
+     * @param {number} filesLength - the count of files selected
+     * @param {Array<string>} mandatoryFields - the metadata keys every file gets an input for
+     * @param {boolean} bindResetTriggers - binds each file's reset trigger when it is already in
+     *   the page (the selection that creates the virtual upload form)
+     * @returns {Array<object>} by file index, the field map the staging answer fills
+     *
+     * @example
+     * buildUploadHiddenFields($input, 'avatar', 1, mandatoryFields, true)[0].location; // <input name="avatar[0][location]">
+     */
+    var buildUploadHiddenFields = function($el, fieldPrefix, filesLength, mandatoryFields, bindResetTriggers) {
+        var hiddenFields        = []
+            , formInputsFields  = $el.form.getElementsByTagName('INPUT')
+            , fieldType         = null
+            , hiddenField       = null
+            , _userName         = null
+            , _name             = null
+            , _nameRe           = null
+            , subPrefix         = null
+            , $newVirtualField  = null
+        ;
+        for (var _f = 0, _fLen = filesLength; _f < _fLen; ++_f) { // for each file
+            // binding upload reset trigger
+            if ( bindResetTriggers ) {
+                bindUploadResetOrDeleteTrigger('reset', $el, _f);
+            }
+            hiddenFields[_f] = null;
+            // the fields a reset or a delete took out of the form come back for this file
+            restoreRemovedUploadFields($el, _f);
+            subPrefix = fieldPrefix + '['+ _f +']';
+            _nameRe = new RegExp('^'+subPrefix.replace(/\[/g, '\\[').replace(/\]/g, '\\]'));
+            // collecting existing DOM fields
+            for (var h = 0, hLen = formInputsFields.length; h < hLen; ++h) {
+                fieldType   = formInputsFields[h].getAttribute('type');
+                hiddenField = null;
+                _name       = null, _userName = null;
+                // #B731 — read once from the file input, above
+                // was: errorField= formInputsFields[h].getAttribute('data-gina-form-upload-error') || fieldId + '-error' || null;
+
+                if (fieldType && /hidden/i.test(fieldType) ) {
+                    hiddenField = formInputsFields[h];
+
+                    _name       = ( /\[\w+\]$/i.test(hiddenField.name) )
+                                ? hiddenField.name.match(/\[\w+\]$/)[0].replace(/\[|\]/g, '')
+                                : hiddenField.name;
+                    _userName   = ( /\[\w+\]$/i.test(hiddenField.name) )
+                                ? hiddenField.name.match(/\[\w+\]$/)[0].replace(/\[|\]/g, '')
+                                : hiddenField.name;
+
+                    // mandatory informations
+                    if (
+                        hiddenField
+                        && typeof(_name) != 'undefiend'
+                        && mandatoryFields.indexOf( _name ) > -1
+                        && _nameRe.test( hiddenField.name )
+                    ) {
+
+                        if (!hiddenFields[_f] )
+                            hiddenFields[_f] = {};
+
+                        if ( /\[preview\]/i.test(hiddenField.name) ) {
+                            if ( typeof(hiddenFields[_f].preview) == 'undefined' )
+                                hiddenFields[_f].preview = {};
+
+                            hiddenFields[_f].preview[_name] = hiddenField;
+                        } else {
+                            hiddenFields[_f][_name] = hiddenField;
+                        }
+                    } else if (
+                        hiddenField
+                        && typeof(_name) != 'undefiend'
+                        && mandatoryFields.indexOf( _name ) < 0
+                        && _nameRe.test( hiddenField.name )
+                    ) { // defined by user
+                        if (!hiddenFields[_f] )
+                            hiddenFields[_f] = {};
+
+                        if ( /\[preview\]/i.test(hiddenField.name) ) {
+                            if ( typeof(hiddenFields[_f].preview) == 'undefined' )
+                                hiddenFields[_f].preview = {};
+
+                            hiddenFields[_f].preview[_userName] = hiddenField;
+                        } else {
+                            hiddenFields[_f][_userName] = hiddenField;
+                        }
+                    }
+                }
+            }
+
+            // completing by adding non-declared mandatoring fields in the DOM: all but preview
+            for (var m = 0, mLen = mandatoryFields.length; m < mLen; ++m) {
+                // optional, must be set by user
+                // needs recheck
+                if (!hiddenFields[_f] )
+                    hiddenFields[_f] = {};
+
+                if ( typeof(hiddenFields[_f][ mandatoryFields[m] ]) == 'undefined' ) {
+                    // #B459 — `preview` is the one slot that is never a flat input:
+                    // its value is an OBJECT (`{location, uri, tmpUri, width, height}`),
+                    // which an input's `.value` can only hold as "[object Object]".
+                    // A form that declares no `[preview][...]` sub-fields gets an
+                    // EMPTY sub-field map instead, so the fill loop still visits the
+                    // key (the nested thumbnail is rendered from there) and posts
+                    // nothing for it — the documented field set. Declaring the
+                    // sub-fields stays the opt-in for persisting the preview.
+                    if ( mandatoryFields[m] == 'preview' ) {
+                        hiddenFields[_f].preview = {};
+                        continue;
+                    }
+
+                    _name = fieldPrefix +'['+ _f +']['+ mandatoryFields[m] +']';
+                    // create input & add it to the form
+                    $newVirtualField = document.createElement('input');
+                    $newVirtualField.type = 'hidden';
+                    $newVirtualField.id = 'input.' + uuid();
+                    $newVirtualField.name = _name;
+                    $newVirtualField.value = '';
+
+                    $el.form.appendChild($newVirtualField);
+                    hiddenFields[_f][ mandatoryFields[m] ] = $el.form[$el.form.length-1];// last added
+                }
+
+            }
+
+        } // EO for files
+        return hiddenFields;
+    };
+
+    /**
+     * dropEmptyUploadPreviewItem — removes the `<li>` a reset or a delete left empty in a `<ul>`
+     * preview container (gina wraps each preview, and each reset link it renders, in one).
+     *
+     * @inner
+     * @private
+     * @param {HTMLElement|null} $item - the parent of the node just removed
+     * @param {HTMLElement|null} $container - the preview container
+     * @returns {void}
+     */
+    var dropEmptyUploadPreviewItem = function($item, $container) {
+        if (
+            $item
+            && $container
+            && $item !== $container
+            && $item.parentNode === $container
+            && /^li$/i.test($item.tagName)
+            && !$item.children.length
+        ) {
+            $item.remove();
+        }
+    };
+
+    /**
      * restoreUploadAffordance
      *
      * Restores the upload input's add-affordance visibility once files were
@@ -5544,210 +5881,241 @@ function ValidatorPlugin(rules, data, formId, culture) {
     /**
      * onUploadResetOrDelete
      *
-     * Removes the previewed file(s): notifies the server first (the removal
-     * XHR is sent BEFORE any DOM removal — the preview DOM feeds the payload),
-     * then removes the preview image and its reset/delete link from the DOM,
-     * restores the upload input's add-affordance (see restoreUploadAffordance)
-     * and, when defined, invokes the `data-gina-form-upload-on-reset` /
-     * `data-gina-form-upload-on-delete` callback — a bare identifier
-     * registered on `window` — once per action with
-     * `{ $upload, bindingType, files }`.
+     * Removes the input's file(s): the staged ones (`reset`: its selection) or the stored ones
+     * (`delete`: the entries the bind-time scan recorded). Each file is reached by its index — its
+     * reset or delete link, its preview node(s) (see getUploadFileNodes) and its hidden
+     * `<prefix>[index]…` fields (see removeUploadEntryFields) — and not by walking the preview's
+     * `<img>` children, so a file shown without an image is removed too (#B859). The server is
+     * notified first, in ONE request naming every removed file (the removal XHR is sent BEFORE any
+     * DOM removal), then the link, the preview node(s) and the fields go, the upload input's
+     * add-affordance comes back (see restoreUploadAffordance) and, when defined, the
+     * `data-gina-form-upload-on-reset` / `data-gina-form-upload-on-delete` callback — a bare
+     * identifier registered on `window` — runs once per action with `{ $upload, bindingType, files }`.
      *
-     * @param {object} $uploadTrigger
+     * @param {object} $uploadTrigger - the file input
      * @param {string} bindingType - `reset` or `delete`
-     * @returns
+     * @returns {void}
      */
     var onUploadResetOrDelete = function($uploadTrigger, bindingType) {
         console.debug(bindingType + ' input files');
         var isOnResetMode       = ( /reset/i.test(bindingType) ) ? true : false
-            , uploadPreviewId   = $uploadTrigger.id +'-preview'
+            // #B861 — the container the input names, resolved as a selection resolves it. It was
+            // always `<input id>-preview`, so with a custom `data-gina-form-upload-preview` id it was
+            // null, and reading its children threw.
+            // was: , uploadPreviewId   = $uploadTrigger.id +'-preview'
+            , uploadPreviewId   = $uploadTrigger.getAttribute('data-gina-form-upload-preview') || $uploadTrigger.id +'-preview'
             , $uploadPreview    = document.getElementById(uploadPreviewId);
 
         var childNodeFile           = null
             , childNodeFilePreview  = null
-            // static snapshot of the preview images: nodes are removed from
-            // the DOM mid-loop, so a live NodeList would shift under the
-            // iteration (out-of-range reads on multi-file passes)
-            , childNodes            = Array.prototype.filter.call($uploadPreview.childNodes, function (node) {
-                return /img/i.test(node.tagName);
-            })
+            // #B859 — a static snapshot of the container's FILE nodes (see getUploadFileNodes): the
+            // <img> a `<ul>` container wraps in an <li> counts, and so does the node a page marks for
+            // a file shown without an image. It held the container's direct <img> children only, so
+            // the reset of a `<ul>` container removed nothing.
+            , childNodes            = getUploadFileNodes($uploadPreview)
             , $resetLink            = null
-            , files                 = $uploadTrigger.customFiles
+            , files                 = $uploadTrigger.customFiles || []
+            , stagedFiles           = $uploadTrigger.stagedFiles || []
+            , fieldPrefix           = getUploadFieldPrefix($uploadTrigger)
+            , entries               = []
+            , remainingFiles        = []
             , filesToBeRemoved      = []
             , onRemoveCbName        = $uploadTrigger.getAttribute('data-gina-form-upload-on-' + bindingType)
             , uploadHiddenClass     = $uploadTrigger.getAttribute('data-gina-form-upload-hidden-class')
             , removedCount          = 0
         ;
 
-        for (let i = 0, len = childNodes.length; i < len; i++) {
-            // only look for IMG tags
-            if ( /img/i.test(childNodes[i].tagName) ) {
-                if (isOnResetMode) {
-                    childNodeFile           =  childNodes[i].getAttribute('data-upload-original-filename');
-                    filesToBeRemoved.push(childNodeFile);
-                    childNodeFilePreview    = childNodes[i].getAttribute('data-upload-preview-original-filename');
-                    if (childNodeFilePreview) {
-                        filesToBeRemoved.push(childNodeFilePreview);
+        // #B859 — the pass walks the input's FILES, by index (its selection when resetting, the
+        // stored entries when deleting), not the preview's <img> children: a file shown without an
+        // image has no <img>, so its fields and its staged copy were left behind.
+        // #B860 — every file of the input goes, each under its own index, in one pass: the
+        // per-<img> pass re-read the index after each removal and kept the next file's fields, and
+        // on a multi-file reset it threw when it set the input's value to the files still listed.
+        for (let f = 0, fLen = files.length; f < fLen; f++) {
+            // a staged file is reset, not deleted: a delete link left on the page belongs to the
+            // stored file the selection replaced
+            if ( !isOnResetMode && !files[f].deleteLinkId ) {
+                remainingFiles.push(files[f]);
+                continue;
+            }
+            let entry = { index: f, $link: null, nodes: [], names: [] };
+            if (isOnResetMode) {
+                let linkId = $uploadTrigger.id +'-'+ f +'-reset-trigger';
+                entry.$link = document.getElementById(linkId);
+                for (let n = 0, nLen = childNodes.length; n < nLen; n++) {
+                    if ( childNodes[n].getAttribute('data-upload-reset-link-id') == linkId ) {
+                        entry.nodes.push(childNodes[n]);
                     }
+                }
+                // the names the staging answer gave — the ones its <img> preview carries
+                childNodeFile           = ( stagedFiles[f] && stagedFiles[f].originalFilename )
+                                        ? stagedFiles[f].originalFilename
+                                        : ( entry.nodes.length ) ? entry.nodes[0].getAttribute('data-upload-original-filename') : files[f].name;
+                childNodeFilePreview    = ( stagedFiles[f] && stagedFiles[f].preview && stagedFiles[f].preview.originalFilename )
+                                        ? stagedFiles[f].preview.originalFilename
+                                        : ( entry.nodes.length ) ? entry.nodes[0].getAttribute('data-upload-preview-original-filename') : null;
+            } else {
+                entry.$link = document.getElementById( files[f].deleteLinkId );
+                if ( childNodes[f] ) {
+                    entry.nodes.push(childNodes[f]);
+                }
+                childNodeFile           = files[f].name;
+                childNodeFilePreview    = null;
+            }
+            if (childNodeFile) {
+                entry.names.push(childNodeFile);
+                filesToBeRemoved.push(childNodeFile);
+            }
+            if (childNodeFilePreview) {
+                entry.names.push(childNodeFilePreview);
+                filesToBeRemoved.push(childNodeFilePreview);
+            }
+            entries.push(entry);
+        } // EO for
+
+        if ( entries.length > 0 ) {
+            // remove file from the server - filesToBeRemoved
+            let url = $uploadTrigger.getAttribute('data-gina-form-upload-'+ bindingType +'-action');
+            if ( !url || typeof(url) == 'undefined' || url == '' || /404/.test(url) ) {
+                throw new Error('input file `'+ $uploadTrigger.id +'` error: `data-gina-form-upload-'+bindingType+'-action` is required. You need to provide a valide url.');
+            }
+            let method = $uploadTrigger.getAttribute('data-gina-form-upload-'+ bindingType +'-method');
+            if ( !method || typeof(method) == 'undefined' || method == '') {
+                if (isOnResetMode) {
+                    method = 'POST';
                 } else {
-                    let file = childNodes[i].src.substring(childNodes[i].src.lastIndexOf('/')+1);
-                    childNodeFile = file;
-                    filesToBeRemoved.push(childNodeFile);
+                    method = (filesToBeRemoved.length > 1) ? 'POST': 'DELETE';
+                    console.warn('`data-gina-form-upload-'+ bindingType +'-method` was not defined. Switching to `'+ method +'` by default.');
+                }
+            } else {
+                method = method.toUpperCase();
+            }
+            let isSynchrone = $uploadTrigger.getAttribute('data-gina-form-upload-'+ bindingType +'-is-synchrone');
+            if ( /null/i.test(isSynchrone) || typeof(method) == 'undefined' || method == '' ) {
+                isSynchrone = true;
+            }
+
+            let xhrOptions = {
+                url: url,
+                method: method,
+                isSynchrone: isSynchrone,
+                headers : {
+                    // #FORMCT — the body sent below is JSON (JSON.stringify({ files })).
+                    // Send application/json — NOT the urlencoded default — or the server
+                    // url-decodes the JSON body ('+' -> space, decodeURIComponent) and
+                    // corrupts '+'/'%' in removed-file keys.
+                    'Content-Type': 'application/json; charset=UTF-8',
+                    // cross domain is enabled by default, but you need to setup `Access-Control-Allow-Origin`
+                    'X-Requested-With': 'XMLHttpRequest' // in case of cross domain origin
+                }
+            };
+            // #CSRF2 follow-up — inject X-Gina-CSRF-Token on mutating methods (file remove → DELETE/POST)
+            if ( isMutatingMethod(method) ) {
+                let csrfToken = readCsrfCookie();
+                if (csrfToken) {
+                    xhrOptions.headers['X-Gina-CSRF-Token'] = csrfToken;
+                }
+            }
+            let xhr = setupXhr(xhrOptions);
+            //handleXhr(xhr);
+            if ( /GET|DELETE/i.test(method) ) {
+                xhr.send();
+            } else {
+                xhr.send(JSON.stringify({ files: filesToBeRemoved }));
+            }
+
+            // when there is no more files to preview, restore input file visibility
+            // display upload input
+            restoreUploadAffordance($uploadTrigger, uploadHiddenClass);
+
+            for (let e = 0, eLen = entries.length; e < eLen; e++) {
+                $resetLink      = entries[e].$link;
+                childNodeFile   = entries[e].names[0] || null;
+
+                // update form files for validation & submit/send: the file's fields leave the form,
+                // kept on the input for the next selection (#B858). They are `<prefix>[index]…`, the
+                // prefix they were built with (#B862: it was the input's name, so with a custom
+                // `data-gina-form-upload-prefix` they stayed while the server was told to drop the file).
+                removeUploadEntryFields($uploadTrigger, fieldPrefix, entries[e].index);
+
+                if ( $resetLink ) {
+                    // #A11Y7/U5 — the control about to be removed is the one the user
+                    // just activated, so it holds focus; removing a focused element
+                    // drops focus to <body> and the user loses their place with no
+                    // signal. Move focus first, onto the file input that owns the
+                    // staged files — which `restoreUploadAffordance` just made visible
+                    // again. Guarded on it actually holding focus, so a programmatic
+                    // reset never yanks focus away from wherever the user really is.
+                    if ( document.activeElement === $resetLink || $resetLink.contains(document.activeElement) ) {
+                        if ( typeof($uploadTrigger.focus) == 'function' ) {
+                            $uploadTrigger.focus();
+                        }
+                        // #A11Y5's lesson, applied: `typeof focus == 'function'` is true
+                        // for EVERY HTMLElement, and focus() is a silent no-op on one
+                        // that cannot take focus (hidden, disabled, detached) — so
+                        // confirm the move instead of assuming it. Signal-only: there is
+                        // no better fallback than the document, and failing loudly here
+                        // would break a removal that otherwise succeeded.
+                        if ( document.activeElement !== $uploadTrigger ) {
+                            console.debug('[FormValidator][upload]['+ ($uploadTrigger.id || '?') +'] '+ bindingType +': could not move focus to the file input before removing the '+ bindingType +' control; focus falls back to the document.');
+                        }
+                    }
+                }
+                // Announce the removal. `aria-live="polite"` queues rather than
+                // interrupts, so this lands after the focus move above has been
+                // announced instead of racing it. Function replacer, not a string:
+                // a file name may contain `$`, and a string replacement would expand
+                // `$&` / `$1` patterns inside it.
+                if ( $uploadTrigger.form && childNodeFile ) {
+                    announceA11yStatus(
+                        $uploadTrigger.form,
+                        a11yLabel('fileRemoved').replace('%s', function () { return childNodeFile; })
+                    );
                 }
 
-                // remove file from input.files
-                for (let f = 0, fLen = files.length; f < fLen; f++) {
-                    if (files[f].name == childNodeFile) {
-                        // get resetLink element
-                        if (isOnResetMode) {
-                            $resetLink      = document.getElementById( childNodes[i].getAttribute('data-upload-'+ bindingType +'-link-id') );
-                        } else {
-                            $resetLink      = document.getElementById( files[f].deleteLinkId );
-                        }
+                // remove link & preview node(s) - must be done last
+                // (the reset/delete link's own click listener dies with the node)
+                if ( $resetLink ) {
+                    let $linkItem = $resetLink.parentNode;
+                    $resetLink.remove();
+                    dropEmptyUploadPreviewItem($linkItem, $uploadPreview);
+                }
+                for (let i = 0, iLen = entries[e].nodes.length; i < iLen; i++) {
+                    let $nodeItem = entries[e].nodes[i].parentNode;
+                    entries[e].nodes[i].remove();
+                    dropEmptyUploadPreviewItem($nodeItem, $uploadPreview);
+                }
+                removedCount++;
+            } // EO for
 
-                        // hide reset or delete link & image
-                        $resetLink.style.display = 'none';
-                        childNodes[i].style.display = 'none';
-
-                        // remove file from input.files
-                        files.splice(f, 1);
-                        removedCount++;
-                        // Since `$uploadTrigger.files` isFrozen & isSealed
-                        $uploadTrigger.customFiles  = files;
-                        if (isOnResetMode) {
-                            $uploadTrigger.value        = files.join(', C:\\fakepath\\');
-                        }
-
-                        // update form files for validation & submit/send
-                        let re = new RegExp('^'+($uploadTrigger.name+'['+f+']').replace(/\-|\[|\]|\./g, '\\$&'));
-                        for ( let d = 0, dLen = $uploadTrigger.form.length; d < dLen; d++) {
-                            // data-gina-form-upload-is-locked
-                            // this exception prevent `tagged datas` to be deleted on image delete
-                            let isLocked = $uploadTrigger.form[d].dataset.ginaFormUploadIsLocked || false;
-                            if ( re.test($uploadTrigger.form[d].name) && !/true/i.test(isLocked) ) {
-                                $uploadTrigger.form[d].remove();
-                                dLen--;
-                                d--;
-                                //update toolbar
-                                if (gina && envIsDev && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
-                                    try {
-                                        // update toolbar
-                                        window.ginaToolbar.update('data-xhr', {files: files});
-                                    } catch (err) {
-                                        throw err
-                                    }
-                                }
-                            }
-                        }
-                        // remove file from the server - filesToBeRemoved
-                        let url = $uploadTrigger.getAttribute('data-gina-form-upload-'+ bindingType +'-action');
-                        if ( !url || typeof(url) == 'undefined' || url == '' || /404/.test(url) ) {
-                            throw new Error('input file `'+ $uploadTrigger.id +'` error: `data-gina-form-upload-'+bindingType+'-action` is required. You need to provide a valide url.');
-                        }
-                        let method = $uploadTrigger.getAttribute('data-gina-form-upload-'+ bindingType +'-method');
-                        if ( !method || typeof(method) == 'undefined' || method == '') {
-                            if (isOnResetMode) {
-                                method = 'POST';
-                            } else {
-                                method = (filesToBeRemoved.length > 1) ? 'POST': 'DELETE';
-                                console.warn('`data-gina-form-upload-'+ bindingType +'-method` was not defined. Switching to `'+ method +'` by default.');
-                            }
-                        } else {
-                            method = method.toUpperCase();
-                        }
-                        let isSynchrone = $uploadTrigger.getAttribute('data-gina-form-upload-'+ bindingType +'-is-synchrone');
-                        if ( /null/i.test(isSynchrone) || typeof(method) == 'undefined' || method == '' ) {
-                            isSynchrone = true;
-                        }
-
-                        let xhrOptions = {
-                            url: url,
-                            method: method,
-                            isSynchrone: isSynchrone,
-                            headers : {
-                                // #FORMCT — the body sent below is JSON (JSON.stringify({ files })).
-                                // Send application/json — NOT the urlencoded default — or the server
-                                // url-decodes the JSON body ('+' -> space, decodeURIComponent) and
-                                // corrupts '+'/'%' in removed-file keys.
-                                'Content-Type': 'application/json; charset=UTF-8',
-                                // cross domain is enabled by default, but you need to setup `Access-Control-Allow-Origin`
-                                'X-Requested-With': 'XMLHttpRequest' // in case of cross domain origin
-                            }
-                        };
-                        // #CSRF2 follow-up — inject X-Gina-CSRF-Token on mutating methods (file remove → DELETE/POST)
-                        if ( isMutatingMethod(method) ) {
-                            let csrfToken = readCsrfCookie();
-                            if (csrfToken) {
-                                xhrOptions.headers['X-Gina-CSRF-Token'] = csrfToken;
-                            }
-                        }
-                        let xhr = setupXhr(xhrOptions);
-                        //handleXhr(xhr);
-                        if ( /GET|DELETE/i.test(method) ) {
-                            xhr.send();
-                        } else {
-                            xhr.send(JSON.stringify({ files: filesToBeRemoved }));
-                        }
-
-                        // when there is no more files to preview, restore input file visibility
-                        // display upload input
-                        restoreUploadAffordance($uploadTrigger, uploadHiddenClass);
-
-                        // #A11Y7/U5 — the control about to be removed is the one the user
-                        // just activated, so it holds focus; removing a focused element
-                        // drops focus to <body> and the user loses their place with no
-                        // signal. Move focus first, onto the file input that owns the
-                        // staged files — which `restoreUploadAffordance` just made visible
-                        // again. Guarded on it actually holding focus, so a programmatic
-                        // reset never yanks focus away from wherever the user really is.
-                        if ( document.activeElement === $resetLink || $resetLink.contains(document.activeElement) ) {
-                            if ( typeof($uploadTrigger.focus) == 'function' ) {
-                                $uploadTrigger.focus();
-                            }
-                            // #A11Y5's lesson, applied: `typeof focus == 'function'` is true
-                            // for EVERY HTMLElement, and focus() is a silent no-op on one
-                            // that cannot take focus (hidden, disabled, detached) — so
-                            // confirm the move instead of assuming it. Signal-only: there is
-                            // no better fallback than the document, and failing loudly here
-                            // would break a removal that otherwise succeeded.
-                            if ( document.activeElement !== $uploadTrigger ) {
-                                console.debug('[FormValidator][upload]['+ ($uploadTrigger.id || '?') +'] '+ bindingType +': could not move focus to the file input before removing the '+ bindingType +' control; focus falls back to the document.');
-                            }
-                        }
-                        // Announce the removal. `aria-live="polite"` queues rather than
-                        // interrupts, so this lands after the focus move above has been
-                        // announced instead of racing it. Function replacer, not a string:
-                        // a file name may contain `$`, and a string replacement would expand
-                        // `$&` / `$1` patterns inside it.
-                        if ( $uploadTrigger.form && childNodeFile ) {
-                            announceA11yStatus(
-                                $uploadTrigger.form,
-                                a11yLabel('fileRemoved').replace('%s', function () { return childNodeFile; })
-                            );
-                        }
-
-                        // remove link & image - must be done last
-                        // (the reset/delete link's own click listener dies with the node)
-                        $resetLink.remove();
-                        childNodes[i].remove();
-                        break;
-                    }
-                } // EO for
+            // Since `$uploadTrigger.files` isFrozen & isSealed
+            $uploadTrigger.customFiles  = remainingFiles;
+            if (isOnResetMode) {
+                // every staged file is gone; a file input's value can only be emptied
+                // was: $uploadTrigger.value = files.join(', C:\\fakepath\\');
+                $uploadTrigger.value        = '';
+                $uploadTrigger.stagedFiles  = [];
+            }
+            //update toolbar
+            if (gina && envIsDev && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
+                try {
+                    // update toolbar
+                    window.ginaToolbar.update('data-xhr', {files: remainingFiles});
+                } catch (err) {
+                    throw err
+                }
             }
         }
 
-        // #B150 — the removal loop matched zero previews against the input's
-        // customFiles, so NOTHING was removed: the tmp-delete XHR, the #R8
-        // indicator strip, and the removal callback below are all `removedCount>0`
-        // -gated and are about to be skipped, silently, leaving any staged tmp
-        // files on the server. That is expected when there was nothing to remove
-        // (an empty preview set), but a NON-EMPTY preview set that matched nothing
-        // is a state desync (e.g. a runtime-injected bind whose customFiles names
-        // do not line up with the rendered `data-upload-original-filename`s) —
-        // signal it so the otherwise-invisible skip is diagnosable. Signal-only:
-        // the `removedCount>0` gates STAY (no removal => no removal callback, #B94).
+        // #B150 — the input held no file to remove while its preview container shows file nodes,
+        // so NOTHING was removed: the tmp-delete XHR, the #R8 indicator strip, and the removal
+        // callback below are all skipped, silently, leaving any staged tmp files on the server.
+        // That is expected when there was nothing to remove (an empty preview set), but a
+        // NON-EMPTY preview set with no file to remove is a state desync (e.g. a runtime-injected
+        // bind that recorded no file) — signal it so the otherwise-invisible skip is diagnosable.
+        // Signal-only: the `removedCount>0` gates STAY (no removal => no removal callback, #B94).
         if (removedCount === 0 && childNodes.length > 0) {
-            console.warn('[FormValidator][upload]['+ ($uploadTrigger.id || '?') +'] '+ bindingType +': '+ childNodes.length +' preview(s) present but none matched the staged input files — nothing removed, cleanup skipped. Ensure each preview\'s `data-upload-original-filename` matches a current input file name.');
+            console.warn('[FormValidator][upload]['+ ($uploadTrigger.id || '?') +'] '+ bindingType +': '+ childNodes.length +' preview(s) present but none matched the staged input files — nothing removed, cleanup skipped. The input holds no file to '+ bindingType +'.');
         }
 
         // #R8 — at least one staged file the indicator reported is gone:
@@ -8863,36 +9231,26 @@ function ValidatorPlugin(rules, data, formId, culture) {
                     console.debug('preview is visible ...');
                     $uploadTrigger.customFiles = [];
                     $uploadTrigger.form = $target;
-                    var $els = $previewContainer.childNodes;
+                    // #B859 — the stored files are the container's FILE nodes (see getUploadFileNodes):
+                    // an <img> (its file named by its src's last segment, as before) — also inside the
+                    // <li> of a `<ul>` container — or a node the page marks with
+                    // `data-upload-original-filename` for a file it shows without an image (the
+                    // attribute names the file). Only the container's direct <img> children counted,
+                    // so the delete link of a file shown without an image was bound to nothing; the
+                    // `<ul>` branch that stood here never ran (it read the `length` of an element).
+                    var $els = getUploadFileNodes($previewContainer), deleteLinkId = null;
                     for (let i = 0, len = $els.length; i < len; i++) {
-                        let $img = null;
-                        if ( /ul/i.test($els[i].tagName) ) {
-                            for (let e = 0, eLen = $els[i].length; e < eLen; e++) {
-                                //let $li = new DOMParser().parseFromString($els[i].innerHTML, 'text/html');
-                                let $li = $$els[i];
-                                for (let l = 0, lLen = $li.length; l < lLen; l++) {
-                                    if ( /img/i.test($li[l]) ) {
-                                        $img = $li[l];
-                                        $img.setAttribute('');
+                        let $img = $els[i];
+                        deleteLinkId = uploadTriggerId + '-'+index+'-delete-trigger';
+                        let file = $img.getAttribute('data-upload-original-filename') || ( ($img.src) ? $img.src.substring($img.src.lastIndexOf('/')+1) : '' );
+                        $uploadTrigger.customFiles.push({
+                            name: file,
+                            deleteLinkId: deleteLinkId
+                        });
+                        // bind reset trigger
+                        bindUploadResetOrDeleteTrigger(bindingType, $uploadTrigger, index);
 
-                                        index++;
-                                    }
-                                }
-
-                            }
-                        } else if ( /img/i.test($els[i].tagName) ) {
-                            $img = $els[i];
-                            deleteLinkId = uploadTriggerId + '-'+index+'-delete-trigger';
-                            let file = $img.src.substring($img.src.lastIndexOf('/')+1);
-                            $uploadTrigger.customFiles.push({
-                                name: file,
-                                deleteLinkId: deleteLinkId
-                            });
-                            // bind reset trigger
-                            bindUploadResetOrDeleteTrigger(bindingType, $uploadTrigger, index);
-
-                            index++;
-                        }
+                        index++;
                     }
                 }
 
@@ -9038,8 +9396,8 @@ function ValidatorPlugin(rules, data, formId, culture) {
                             if ( typeof($el.form) != 'undefined' ) {
 
                                 // adding virtual fields
-                                var fieldPrefix = 'files'; // by default
-                                var fieldName   = $el.getAttribute('data-gina-form-upload-prefix') || $el.name || $el.getAttribute('name');
+                                // #B862 — the prefix rule the reset removes the fields by (see getUploadFieldPrefix)
+                                var fieldPrefix = getUploadFieldPrefix($el);
                                 var fieldId     = $el.id || $el.getAttribute('id');
 
                                 var hasPreviewContainer = false;
@@ -9065,12 +9423,7 @@ function ValidatorPlugin(rules, data, formId, culture) {
                                     hasPreviewContainer = true;
                                 }
 
-                                if (fieldName) {
-                                    fieldPrefix = fieldName
-                                }
-
                                 var hiddenFields        = []
-                                    , hiddenFieldObject = null
                                     , mandatoryFields   = [
                                         'name'
                                         , 'group'
@@ -9084,117 +9437,10 @@ function ValidatorPlugin(rules, data, formId, culture) {
                                         , 'mime'
                                         , 'preview'
                                     ]
-                                    , formInputsFields  = $el.form.getElementsByTagName('INPUT')
-                                    , fieldType         = null
-                                    , hiddenField       = null
-                                    , _userName         = null
-                                    , _altId            = null
-                                    , _name             = null
-                                    , _nameRe           = null
-                                    , subPrefix         = null
-                                    , uploadFields      = {}
                                 ;
 
-                                for (var _f = 0, _fLen = files.length; _f < _fLen; ++_f) { // for each file
-                                    // binding upload reset trigger
-                                    bindUploadResetOrDeleteTrigger('reset', $el, _f);
-                                    hiddenFields[_f] = null;
-                                    subPrefix = fieldPrefix + '['+ _f +']';
-                                    _nameRe = new RegExp('^'+subPrefix.replace(/\[/g, '\\[').replace(/\]/g, '\\]'));
-                                    // collecting existing DOM fields
-                                    for (var h = 0, hLen = formInputsFields.length; h < hLen; ++h) {
-                                        fieldType   = formInputsFields[h].getAttribute('type');
-                                        hiddenField = null;
-                                        _name       = null, _userName = null;
-                                        // #B731 — read once from the file input, above
-                                        // was: errorField= formInputsFields[h].getAttribute('data-gina-form-upload-error') || fieldId + '-error' || null;
-
-                                        if (fieldType && /hidden/i.test(fieldType) ) {
-                                            hiddenField = formInputsFields[h];
-
-                                            _name       = ( /\[\w+\]$/i.test(hiddenField.name) )
-                                                        ? hiddenField.name.match(/\[\w+\]$/)[0].replace(/\[|\]/g, '')
-                                                        : hiddenField.name;
-                                            _userName   = ( /\[\w+\]$/i.test(hiddenField.name) )
-                                                        ? hiddenField.name.match(/\[\w+\]$/)[0].replace(/\[|\]/g, '')
-                                                        : hiddenField.name;
-
-                                            // mandatory informations
-                                            if (
-                                                hiddenField
-                                                && typeof(_name) != 'undefiend'
-                                                && mandatoryFields.indexOf( _name ) > -1
-                                                && _nameRe.test( hiddenField.name )
-                                            ) {
-
-                                                if (!hiddenFields[_f] )
-                                                    hiddenFields[_f] = {};
-
-                                                if ( /\[preview\]/i.test(hiddenField.name) ) {
-                                                    if ( typeof(hiddenFields[_f].preview) == 'undefined' )
-                                                        hiddenFields[_f].preview = {};
-
-                                                    hiddenFields[_f].preview[_name] = hiddenField;
-                                                } else {
-                                                    hiddenFields[_f][_name] = hiddenField;
-                                                }
-                                            } else if (
-                                                hiddenField
-                                                && typeof(_name) != 'undefiend'
-                                                && mandatoryFields.indexOf( _name ) < 0
-                                                && _nameRe.test( hiddenField.name )
-                                            ) { // defined by user
-                                                if (!hiddenFields[_f] )
-                                                    hiddenFields[_f] = {};
-
-                                                if ( /\[preview\]/i.test(hiddenField.name) ) {
-                                                    if ( typeof(hiddenFields[_f].preview) == 'undefined' )
-                                                        hiddenFields[_f].preview = {};
-
-                                                    hiddenFields[_f].preview[_userName] = hiddenField;
-                                                } else {
-                                                    hiddenFields[_f][_userName] = hiddenField;
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    // completing by adding non-declared mandatoring fields in the DOM: all but preview
-                                    for (var m = 0, mLen = mandatoryFields.length; m < mLen; ++m) {
-                                        // optional, must be set by user
-                                        // needs recheck
-                                        if (!hiddenFields[_f] )
-                                            hiddenFields[_f] = {};
-
-                                        if ( typeof(hiddenFields[_f][ mandatoryFields[m] ]) == 'undefined' ) {
-                                            // #B459 — `preview` is the one slot that is never a flat input:
-                                            // its value is an OBJECT (`{location, uri, tmpUri, width, height}`),
-                                            // which an input's `.value` can only hold as "[object Object]".
-                                            // A form that declares no `[preview][...]` sub-fields gets an
-                                            // EMPTY sub-field map instead, so the fill loop still visits the
-                                            // key (the nested thumbnail is rendered from there) and posts
-                                            // nothing for it — the documented field set. Declaring the
-                                            // sub-fields stays the opt-in for persisting the preview.
-                                            if ( mandatoryFields[m] == 'preview' ) {
-                                                hiddenFields[_f].preview = {};
-                                                continue;
-                                            }
-
-                                            _name = fieldPrefix +'['+ _f +']['+ mandatoryFields[m] +']';
-                                            // create input & add it to the form
-                                            $newVirtualField = document.createElement('input');
-                                            $newVirtualField.type = 'hidden';
-                                            $newVirtualField.id = 'input.' + uuid();
-                                            $newVirtualField.name = _name;
-                                            $newVirtualField.value = '';
-
-                                            $el.form.appendChild($newVirtualField);
-                                            hiddenFields[_f][ mandatoryFields[m] ] = $el.form[$el.form.length-1];// last added
-                                        }
-
-                                    }
-
-                                } // EO for files
+                                // #B858 — built again on every selection (see buildUploadHiddenFields)
+                                hiddenFields = buildUploadHiddenFields($el, fieldPrefix, files.length, mandatoryFields, true);
 
                                 $uploadForm.uploadProperties = {
                                     id                  : $el.form.id || $el.getAttribute('id'),
@@ -9246,6 +9492,18 @@ function ValidatorPlugin(rules, data, formId, culture) {
                                 document.getElementById($ownerPopin.id).appendChild($uploadForm)
                             } else {
                                 document.body.appendChild($uploadForm)
+                            }
+                        } else {
+                            // #B858 — a selection that finds the input's virtual upload form builds its
+                            // own hidden fields: they were built only with that form, so after a reset
+                            // (which takes them out of the real form) the next selection filled inputs
+                            // no longer in it and the save posted no file, and a selection with more
+                            // files than the first had none for its new files. In a popin the lookup
+                            // above reads a parsed COPY of the popin, without the upload's properties:
+                            // they are on the document's element.
+                            $uploadForm = document.getElementById(uploadFormId) || $uploadForm;
+                            if ( $el.form && $uploadForm.uploadProperties ) {
+                                $uploadForm.uploadProperties.uploadFields = buildUploadHiddenFields($el, getUploadFieldPrefix($el), files.length, $uploadForm.uploadProperties.mandatoryFields, false);
                             }
                         }
 

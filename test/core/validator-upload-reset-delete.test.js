@@ -36,6 +36,18 @@
  *    documented attribute name (and the not-found warn no longer suggests an
  *    id with a double-appended suffix).
  *
+ * 4. #B859 / #B860: the removal pass walks the input's FILES by index instead
+ *    of the preview's <img> children, so a file shown without an image, an
+ *    <img> wrapped in the <li> of a `<ul>` container, and every file of a
+ *    multi-file input are removed. `childNodes` is now the static list
+ *    `getUploadFileNodes($uploadPreview)` returns, and each file's link and
+ *    preview node(s) go after the one removal request (pins 04 and 05; the
+ *    behaviour is driven in test/core/validator-upload-reset-reselect-b858.test.js
+ *    and test/e2e/validator-upload-reset-reselect-b858.spec.js). `fnSlice` now
+ *    walks from the declaration to its closing brace, skipping comments and
+ *    strings: it took a fixed 16,000-char window, and the rewritten
+ *    `onUploadResetOrDelete` is 15,361 chars.
+ *
  * Usage: node --test test/core/validator-upload-reset-delete.test.js
  */
 var { describe, it } = require('node:test');
@@ -52,20 +64,45 @@ var mainSrc = fs.readFileSync(MAIN_SRC_PATH, 'utf8');
 
 // function-body slices, anchored on the DECLARATION form (a bare name can
 // match comments/JSDoc earlier in the file)
+// #B859 — from the declaration to its closing brace: a brace walk that skips
+// comments and string literals, so a brace inside either cannot end the slice.
+// It was a FIXED window, widened 12000 -> 16000 for #A11Y7/U5 when the pinned
+// code moved past its end; the #B859 rewrite of `onUploadResetOrDelete` is
+// 15,361 chars, so the next edit there would have pushed the dispatch pins out
+// of the window again. A walk follows the function wherever it ends.
+// was: return src.substring(start, start + 16000);
 function fnSlice(src, declToken) {
     var start = src.indexOf(declToken);
     assert.ok(start > -1, 'declaration anchor not found: ' + declToken);
-    // generous fixed span is fine here: both functions are < 200 lines and the
-    // assertions inside are existence/ordering checks, not end-of-slice pins.
-    // Widened 12000 -> 16000 for #A11Y7/U5, which added the pre-removal focus move
-    // and removal announcement inside `onUploadResetOrDelete` (~2.6k chars) and
-    // pushed the #R8 strip and the callback dispatch past the old window — the
-    // pinned code was present and correctly ordered, the extractor just could not
-    // reach it. `onUploadResetOrDelete` currently ends ~14.2k past its anchor.
-    // NOTE this is still a FIXED window and will bite again on the next sizeable
-    // edit here; the durable fix is to brace-walk to the real function end, as
-    // the sibling validator-upload-progress.test.js already does.
-    return src.substring(start, start + 16000);
+    var i = src.indexOf('{', start), depth = 0, c = null, next = null, end = -1;
+    assert.ok(i > -1, 'no body after the declaration: ' + declToken);
+    for (; i < src.length; i++) {
+        c = src[i];
+        next = src[i + 1];
+        if (c === '/' && next === '/') {
+            i = src.indexOf('\n', i);
+            assert.ok(i > -1, 'unterminated line comment after: ' + declToken);
+            continue;
+        }
+        if (c === '/' && next === '*') {
+            end = src.indexOf('*/', i + 2);
+            assert.ok(end > -1, 'unterminated block comment after: ' + declToken);
+            i = end + 1;
+            continue;
+        }
+        if (c === '\'' || c === '"' || c === '`') {
+            for (i++; i < src.length && src[i] !== c; i++) {
+                if (src[i] === '\\') { i++; }
+            }
+            continue;
+        }
+        if (c === '{') {
+            depth++;
+        } else if (c === '}' && --depth === 0) {
+            return src.substring(start, i + 1);
+        }
+    }
+    assert.fail('unbalanced braces after: ' + declToken);
 }
 var onRemoveSlice = fnSlice(mainSrc, 'var onUploadResetOrDelete = function');
 var binderSlice   = fnSlice(mainSrc, 'var bindUploadResetOrDeleteTrigger = function').substring(0, 4000);
@@ -86,16 +123,22 @@ describe('upload reset/delete — dead removal tail replaced by direct removals 
         assert.doesNotMatch(onRemoveSlice, /removeListener\(gina,\s*\$\w+,\s*'click'/);
     });
 
-    it('04 - childNodes is a STATIC img snapshot, not the live NodeList', function () {
-        assert.match(onRemoveSlice,
-            /childNodes\s*=\s*Array\.prototype\.filter\.call\(\$uploadPreview\.childNodes,\s*function \(node\) \{\s*return \/img\/i\.test\(node\.tagName\);\s*\}\)/);
+    it('04 - childNodes is a STATIC snapshot of the file nodes (getUploadFileNodes), not the live NodeList', function () {
+        // #B859 — was: the container's direct <img> children, through
+        // Array.prototype.filter.call($uploadPreview.childNodes, … /img/i …)
+        assert.match(onRemoveSlice, /childNodes\s*=\s*getUploadFileNodes\(\$uploadPreview\)/);
+        // the helper builds a plain array: a static list, safe to walk while its nodes are removed
+        var fileNodesSlice = fnSlice(mainSrc, 'var getUploadFileNodes = function');
+        assert.match(fileNodesSlice, /var fileNodes = \[\];[\s\S]*?fileNodes\.push\(\$node\);[\s\S]*?return fileNodes;/);
         assert.ok(onRemoveSlice.indexOf('childNodes            = $uploadPreview.childNodes') < 0,
             'the live-NodeList assignment must be gone');
     });
 
-    it('05 - direct removals: link first, then the preview image, then break', function () {
+    it('05 - direct removals: the link first, then the file\'s preview node(s)', function () {
+        // #B860 — was: /\$resetLink\.remove\(\);[\s\S]{0,120}?childNodes\[i\]\.remove\(\);[\s\S]{0,40}?break;/
+        // (one <img> per pass, then `break`); each file now has its own entry
         assert.match(onRemoveSlice,
-            /\$resetLink\.remove\(\);[\s\S]{0,120}?childNodes\[i\]\.remove\(\);[\s\S]{0,40}?break;/);
+            /\$resetLink\.remove\(\);[\s\S]{0,300}?entries\[e\]\.nodes\[i\]\.remove\(\);/);
     });
 
     it('06 - the len--/i-- live-list compensation is deleted', function () {

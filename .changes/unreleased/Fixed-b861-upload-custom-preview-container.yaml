@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'A staged upload whose preview container has its own id (a `data-gina-form-upload-preview` other than `<input id>-preview`) can be reset again. The reset link''s id was derived from the container''s, which gave the container''s own id: the container was taken for the link, the text `Reset` was written inside it, its classes were changed, and no reset control was bound. The link is now `<input id>-<index>-reset-trigger`, and the reset finds the container the input names. An upload input with no preview container no longer posts empty metadata: reading the missing container threw after the staging answer arrived, before the inputs were filled. Browser-bundled: rebuild bundles to pick it up (#B861).'
+time: 2026-10-14T04:00:23+01:00
