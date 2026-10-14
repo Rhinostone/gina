@@ -27046,8 +27046,15 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge'
 
         var registeredPopins = [];
 
-        // Cached regex — avoids repeated RegExp construction in click handlers
-        var _rePopinClick = new RegExp('^popin\\.click\\.gina-popin-' + instance.id);
+        // Cached regex — avoids repeated RegExp construction in click handlers.
+        // #B876: the `-` after the instance id is load-bearing. Instance ids are
+        // `'gina-popins-' + _nextId()` (`gina-popins-gp-1`, `gina-popins-gp-14`, … from one shared
+        // counter) and every engine-built click trigger id is
+        // `popin.click.gina-popin-<instance.id>-<_nextId()>-<name>`, so without the delimiter the
+        // regex of `gina-popins-gp-1` also matched the triggers of `gina-popins-gp-14`: one click
+        // fired two proxies, the popin loaded twice, and the second load replaced the bound form
+        // before it was submitted.
+        var _rePopinClick = new RegExp('^popin\\.click\\.gina-popin-' + instance.id + '-');
 
 
         /**
