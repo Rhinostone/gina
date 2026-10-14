@@ -1065,6 +1065,33 @@ function Routing() {
     };
 
     /**
+     * #B833 — a route placeholder value coming from the REQUEST (checkRouteParams is fed
+     * `request[method]`, which merges the query string and body) is substituted VERBATIM into
+     * `param.file` / `param.path` / `param.namespace`, AFTER the route requirement was matched
+     * against the URL segment. A query value of the same name therefore overrides a
+     * requirement-validated URL segment and can carry `..` into the rendered template path
+     * (CWE-22, the CVE-2023-25345 class the render delegates guard). This predicate flags a value
+     * that would ESCAPE when used as a path component: a `..` path segment, or a leading path
+     * separator (an absolute path, which `path.resolve` honours over the root). Developer-authored
+     * static prefixes in `param.file` (e.g. `../shared/:template`, reaching a sibling namespace
+     * directory) are NOT request values and are never tested here — only the substituted value is.
+     *
+     * @inner
+     * @param {*} value - the request-supplied placeholder value
+     * @returns {boolean} true when the value would escape as a path component
+     *
+     * @example
+     * _isUnsafePathValue('../../etc/passwd'); // true  (`..` segment)
+     * _isUnsafePathValue('/etc/passwd');      // true  (leading separator — absolute path)
+     * _isUnsafePathValue('estimate-add');     // false
+     * _isUnsafePathValue('foo/bar');          // false (stays within the root once prefixed)
+     */
+    var _isUnsafePathValue = function(value){
+        var v = (typeof value === 'string') ? value : String(value);
+        return /(^|[\/\\])\.\.([\/\\]|$)/.test(v) || /^[\/\\]/.test(v);
+    };
+
+    /**
      * checkRouteParams
      *
      * Fills the route's `:placeholders` from `params`: for each `param` entry declared as a
@@ -1104,6 +1131,21 @@ function Routing() {
 
                     regex = new RegExp('(:'+variable+'/|:'+variable+'$)', 'g');
 
+                    // #B833 — fail closed BEFORE substituting: a request value that would escape as
+                    // a path component must never fill a filesystem-path param (`file`/`path`/
+                    // `namespace`). Only guard when THIS variable actually fills one of those (a `..`
+                    // in a value that fills only `title`/`url` is harmless). A traversal attempt
+                    // throws the same CVE-2023-25345 block the render delegates raise.
+                    if ( _isUnsafePathValue(params[variable]) ) {
+                        var _b833Ph = new RegExp(':' + variable.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?:/|$)');
+                        if (
+                            ( typeof(route.param.file) != 'undefined'      && _b833Ph.test(route.param.file) )
+                            || ( typeof(route.param.path) != 'undefined'      && _b833Ph.test(route.param.path) )
+                            || ( typeof(route.param.namespace) != 'undefined' && _b833Ph.test(route.param.namespace) )
+                        ) {
+                            throw new Error('[CVE-2023-25345] Path traversal attempt blocked in route param `' + variable + '`');
+                        }
+                    }
 
                     // #B688 — path, title and namespace go through `replacement`, as `file` and the
                     // URL below already did. A string replacement expanded `$`-patterns found in the
