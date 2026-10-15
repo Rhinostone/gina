@@ -21864,8 +21864,17 @@ function ValidatorPlugin(rules, data, formId, culture) {
     /**
      * bindForm
      *
+     * Binds a form record: resolves its rule set, wires the live check, the submit trigger and
+     * the form-level listeners, then runs the bind-time silent validation.
+     *
+     * The rule set comes from, in order: the `customRule` the caller passes (a rule object, or the
+     * name of a known rule set); else the form's `data-gina-form-rule`, when it names a known rule
+     * set (#B879 — how `reBind()`, `.bind()` and `getFormById()` re-bind a form whose id names no
+     * rule set); else the form's id, `-` and `/` read as `.`. A form matching none of them is
+     * bound with an empty rule set.
+     *
      * @param {object} [$target] - DOM element
-     * @param {object|string} [customRule]
+     * @param {object|string} [customRule] - a rule object, or the name of a known rule set
      *
      * @return {object} bindedForm
      * */
@@ -21975,6 +21984,18 @@ function ValidatorPlugin(rules, data, formId, culture) {
 
         // console.debug('binding for: '+ _id);
         var withRules = false, rule = null, evt = '', proceed = null;
+
+        // #B879 — a bind given no rule resolves it as the first bind does: the form's
+        // `data-gina-form-rule` first, when it names a known rule set, then the form's id (the
+        // branch below). By the id alone, a re-bind — `reBind()`, `.bind()`, or `getFormById()` on
+        // an unbound form — gave a form whose id names no rule set an empty rule set: no field was
+        // live-checked and the submit trigger kept the gated mark of the previous bind.
+        if ( typeof(customRule) == 'undefined' && $target.getAttribute('data-gina-form-rule') ) {
+            var attrRule = $target.getAttribute('data-gina-form-rule').replace(/\-|\//g, '.');
+            if ( typeof(rules[attrRule]) != 'undefined' ) {
+                customRule = attrRule;
+            }
+        }
 
         if (
             typeof(customRule) != 'undefined'
