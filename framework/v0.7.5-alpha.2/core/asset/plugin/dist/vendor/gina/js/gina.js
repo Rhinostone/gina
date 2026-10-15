@@ -31982,7 +31982,10 @@ if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
  *
  * A key holding a dot is a property path (`'address.city'`), also inside an
  * array of objects (`'reviews[*].ratings.score'`). A dotted key that is not a
- * property path matches nothing.
+ * property path matches nothing. A single field after `[*]` (`'tags[*].label'`)
+ * is read from each element of the array and compared like a plain key: a row
+ * matches when one element matches, and an element that is not an object (a
+ * string, a number, `null`) is compared as itself.
  *
  * Query results (`find`, `orderBy`, `limit`, `notIn`, …) are Arrays carrying
  * these methods, so calls chain. Their `filter` takes either a function, which
@@ -32001,7 +32004,8 @@ if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
  * and the value `not null`, in any case, matches every defined, non-null
  * value. `{ searchOptionRules: { skipEval: true } }`, passed to the
  * constructor, turns the comparison off for the plain (non-dotted) keys of
- * that Collection; it changes neither `not null` nor a dotted key.
+ * that Collection and for a single field after `[*]`; it changes neither
+ * `not null` nor a property path.
  *
  * @class Collection
  * @constructor
@@ -32025,7 +32029,7 @@ if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
  * // find — nested
  * col.find({ 'address.city': 'Paris' });
  * // find — within array
- * col.find({ 'tags[*].label': 'news' });
+ * col.find({ 'tags[*].label': 'news' });                // the rows holding an element { label: 'news' }
  * // OR clause (pass two filter objects)
  * col.or().find({ name: 'Alice' }, { name: 'Bob' });
  *
@@ -32665,13 +32669,36 @@ function Collection(content, options) {
                 }
             }
 
-            // if one of the entry matches the given filter, tag the whole entry as matched
+            /**
+             * Search on a `[*]` key: compare the elements of the row's array with
+             * `filter`, and count the condition once when one element matches.
+             *
+             * A single field after `[*]` (`'tags[*].label'`) is read from each
+             * element that is an object, like a plain key is read from a row, and
+             * compared like that plain key (#B823). An element that is not an
+             * object (a string, a number, `null`) is compared as itself. A dotted
+             * rest (`'reviews[*].ratings.score'`) is a property path of each element.
+             *
+             * @inner
+             * @private
+             * @param {*}      filter   - The filter value, or a comparison (`'>= 4'`)
+             * @param {string} f        - The key, e.g. `'tags[*].label'`
+             * @param {object} _content - The row
+             * @param {number} matched  - The conditions matched so far
+             * @param {number} i        - Not read
+             * @returns {{matched: number}} `matched`, plus one when an element matches
+             *
+             * @example
+             * // row { tags: [{ label: 'News' }, { label: 'Sport' }] }
+             * searchWithin('Sport', 'tags[*].label', row, 0, 0); // { matched: 1 }
+             */
             var searchWithin = function(filter, f, _content, matched, i) {
 
                 var collectionName  = null
                     , collection    = null
                     , arr           = null
-                    , field         = null;
+                    , field         = null
+                    , elementValue  = null;
 
 
                 arr = f.split(/\[\*\]/g);
@@ -32695,7 +32722,14 @@ function Collection(content, options) {
 
                         } else { // normal case
 
-                            searchResult = search(filter, field, collection[c], subMatched, searchOptionRules);
+                            // #B823 — the whole element was handed to search(), whose every
+                            // branch refuses an object, so a plain sub-field of an array of
+                            // objects (`'tags[*].label'`) matched nothing. An object element
+                            // now gives its field, like a plain key gives its value (below);
+                            // an element that is not an object is compared as itself, as before.
+                            // searchResult = search(filter, field, collection[c], subMatched, searchOptionRules);
+                            elementValue = ( collection[c] !== null && typeof(collection[c]) == 'object' ) ? collection[c][field] : collection[c];
+                            searchResult = search(filter, field, elementValue, subMatched, searchOptionRules);
                             subMatched = searchResult.matched;
                         }
 
