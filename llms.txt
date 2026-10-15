@@ -1,6 +1,6 @@
 # Gina — LLM Reference
 
-MVC framework for Node.js and Bun. No Express dependency. Built-in HTTP/2. Multi-bundle architecture. Scope-based data isolation. CommonJS core with an ESM compatibility layer (`import gina from 'gina'` via a strict exports map). Runtime dependencies: `@rhinostone/swig`, `engine.io`, `psl`, `ws` (+ `intl-messageformat` in the framework manifest) — everything else uses Node.js built-ins.
+MVC framework for Node.js and Bun. No Express dependency. Built-in HTTP/2. Multi-bundle architecture. Scope-based data isolation. CommonJS core with an ESM compatibility layer (`import gina from 'gina'` via a strict exports map). Runtime dependencies: `@rhinostone/swig`, `engine.io`, `psl`, `ws` (+ `intl-messageformat` in the framework manifest) — everything else uses Node.js built-ins. Platforms: macOS and Linux; on Windows gina runs inside WSL2 or a Docker container, and native Windows stops at the npm install or at the first `gina` / `gina-init` / `gina-container` command with one message pointing to those instructions (a check inlined at the top of each entry point and of both install scripts, #B888).
 
 ---
 

@@ -9,6 +9,14 @@
  */
 
 //Imports
+// Native Windows is refused before anything else loads (#B888): gina runs
+// inside WSL2 or a Docker container there. Inlined, not required, so this
+// file keeps working when it is copied on its own.
+if ( process.platform === 'win32' ) {
+    require('fs').writeSync(2, 'gina does not run natively on Windows.\nRun it inside WSL2 or a Docker container: https://gina.io/docs/getting-started/installation#windows\n');
+    process.exit(1);
+}
+
 var fs          = require('fs');
 var os          = require("os");
 var util        = require('util');
@@ -143,14 +151,10 @@ function PostInstall() {
      * @inner
      * @private
      * @returns {void}
-     * @throws {Error} On win32, which is not supported yet
      */
     var configure = function() {
 
-        // TODO - handle windows case
-        if ( /^true$/i.test(isWin32()) ) {
-            throw new Error('Windows in not yet fully supported. Thank you for your patience');
-        }
+        // Native Windows already stopped at the top of this file (#B888).
 
         self.isWin32            = isWin32();
         self.isGlobalInstall    = ( typeof(process.env.npm_config_global) != 'undefined' && /^(true|false)$/i.test(process.env.npm_config_global) )
