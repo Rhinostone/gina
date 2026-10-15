@@ -404,17 +404,20 @@ describe('10 - start.js passes the boot lines on to its client', function () {
         assert.ok(iSpawn < iCreate && iCreate < iHandler, 'spawn ' + iSpawn + ' < create ' + iCreate + ' < handler ' + iHandler);
     });
 
-    it('pushes each chunk after the started guard and before the EADDRINUSE, emerg and started checks', function () {
+    // #B851 (2026-10-13, approved by Martin Luther ETOUMAN NDAMBWE) — the anchor was the
+    // `/EADDRINUSE.*port/i.test(data)` branch #B851 removed; it is now the bind-failure capture
+    // that replaced it. The assertions are unchanged.
+    it('pushes each chunk after the started guard and before the bind-failure, emerg and started checks', function () {
         var h = stdoutHandler();
         var iGuard = h.indexOf('if (isStarting) return;');
         var iPush  = h.indexOf('bootLineFilter.push(data)');
-        var iAddr  = h.indexOf('/EADDRINUSE.*port/i.test(data)');
+        var iAddr  = h.indexOf('startStatus.parseBindFailure(data)');
         var iEmerg = h.indexOf('/(\\[|\\[\\s+)emerg/.test(data)');
         var iFlags = h.indexOf('data.match(checkCaseRe)');
         assert.ok(iPush > -1, 'the handler does not push its chunk to the filter');
         assert.ok(iAddr > -1 && iEmerg > -1 && iFlags > -1, 'the existing checks were not found — the pins need updating');
         assert.ok(iGuard < iPush, 'after the started guard');
-        assert.ok(iPush < iAddr && iPush < iEmerg && iPush < iFlags, 'before the EADDRINUSE, emerg and started checks');
+        assert.ok(iPush < iAddr && iPush < iEmerg && iPush < iFlags, 'before the bind-failure, emerg and started checks');
     });
 
     it('writes the entries to the client only while it is connected', function () {
@@ -434,8 +437,9 @@ describe('10 - start.js passes the boot lines on to its client', function () {
         assert.ok(iPush > -1, 'the handler does not push its chunk to the filter');
         var iTry   = h.lastIndexOf('try {', iPush);
         var iCatch = h.indexOf('} catch (', iPush);
-        var iAddr  = h.indexOf('/EADDRINUSE.*port/i.test(data)');
+        // #B851 — anchor moved from the removed EADDRINUSE branch to the bind-failure capture
+        var iAddr  = h.indexOf('startStatus.parseBindFailure(data)');
         assert.ok(iTry > h.indexOf('if (isStarting) return;'), 'a try opens after the guard, before the push');
-        assert.ok(iCatch > iPush && iCatch < iAddr, 'its catch closes before the EADDRINUSE check');
+        assert.ok(iCatch > iPush && iCatch < iAddr, 'its catch closes before the bind-failure check');
     });
 });

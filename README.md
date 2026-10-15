@@ -68,46 +68,54 @@ open https://localhost:3100
 
 > **npm 12+** blocks install scripts by default, and gina's post-install bootstraps `~/.gina` and the framework dependencies. Install with `npm install -g gina@latest --allow-scripts=gina`, or allow it once for all global installs with `npm config set allow-scripts=gina --location=user`. (Not needed on npm ≤ 11.)
 
-## What's in 0.7.3
+## What's in 0.7.4
 
-> **Restart your bundles *and* rebuild them.** Two client fixes, focus after a
-> client navigation that closes a popin and a staged upload's `send()`, are
-> browser-bundled, so `gina.min.js` changed and `gina bundle:restart` alone leaves
-> the old client running: rebuild each consuming bundle, then restart it. If your
-> build copies `gina.min.js` into your own static files, rebuild that copy before
-> the restart.
+> **Restart your bundles *and* rebuild them.** The form validator, the staged
+> upload widget, the popin plugin, the `<select>` live check and the routing
+> library's placeholder fill are browser-bundled, so `gina.min.js` changed and
+> `gina bundle:restart` alone leaves the old client running: rebuild each
+> consuming bundle, then restart it. If your build copies `gina.min.js` into your
+> own static files, rebuild that copy before the restart.
 
-> **Read before upgrading — some changes can change an answer.** In production, an
-> `http/2.0` bundle no longer sends 103 Early Hints over HTTP/1.1 unless
-> `settings.json > server.earlyHintsOverHTTP1` is `true`, and its preload hints are
-> limited to `templates.json > preloadHintsMaxSize` bytes, 1,024 by default, so a
-> page that declares many stylesheets and scripts sends fewer hints. `gina start`
-> now exits non-zero when the framework does not start or another program holds
-> its port, a `GINA_VERSION` (or `--version=`) that names no installed framework is
-> refused with exit 1, and a page's own `false` in `templates.json` now overrides a
-> `_common` switch. The [migration notes](https://gina.io/docs/migration) list every
-> behaviour change.
+> **Read before upgrading — some changes can change an answer.** A page template
+> whose path resolves outside the section's template root (`templates.json > html`,
+> `templates/html` by default) now answers 500 — a bundle that renders templates
+> kept outside it widens that root — and a route placeholder filled from the
+> request with a value that would escape as a path component is refused. A route's
+> `cache` field sets `Cache-Control` only while `server.cache.enable` is on and the
+> request is a GET. `gina bundle:start`, `bundle:restart`, `framework:restart` and
+> `gina start --inspect-gina` now exit non-zero when they did not do what they say,
+> and a bundle that cannot bind its port exits 1. A `settings.<env>.json` file is
+> applied for the first time, and the six render-cache switches in the top-level
+> `cache` block of `settings.json` are deprecated there, with a boot warning. The
+> [migration notes](https://gina.io/docs/migration) list every behaviour change.
 
-**The preload-hints release.** It leads with two fixes for pages behind a reverse
-proxy. Since 0.6.28 an `http/2.0` bundle sent its 103 Early Hints over HTTP/1.1
-too, and nginx older than 1.29 (the Ubuntu 22.04 and 24.04 and Debian 12 packages)
-takes an upstream 103 for the final response, so every HTML page behind it failed;
-and a page with many preload hints could outgrow a proxy's header buffer and
-answer 502. The layout scan that feeds those hints now reads each tag on its own,
-three layout shapes that answered 500 now render, and `gina start` reports a
-framework that did not start. Full detail in [CHANGELOG.md](./CHANGELOG.md).
+**The request-isolation release.** Nine security fixes, two of them with an
+advisory: a template path taken from the request could leave the template root,
+through the router's placeholder fill or a controller's `setTemplate()`, and read
+any `.html` file the process can read. Under concurrency, a route middleware, the
+engine's error responder, the context-bearing template filters and an async job
+could answer or render with another request's context. One unauthenticated GET
+could stop a bundle through a bracket field nested in a `null` slot — the whole
+request-data parse, the multipart listeners included, is now guarded. A request
+value could forge a log line, a resolved secret could reach the log unmasked, and
+a `__proto__` query field could change `req.delete`'s prototype. Forty-seven fixes
+follow: the CLI's exit codes and pid files, `Collection`, the staged upload
+widget, the renderers and the validator. Full detail in
+[CHANGELOG.md](./CHANGELOG.md).
 
-- **Fixed — no 103 Early Hints over HTTP/1.1 by default (#B771).** Behind nginx older than 1.29, every HTML page of an `http/2.0` bundle failed (`ERR_HTTP2_PROTOCOL_ERROR` in Chromium). Browsers act on a 103 only over HTTP/2 and HTTP/3, so a browser connected to the bundle over HTTP/2 gets it as before; `server.earlyHintsOverHTTP1: true` brings it back behind a proxy that passes 103 responses on.
-- **Fixed — preload hints are limited to 1,024 bytes (#B765).** A page with many hints was answered 502 « upstream sent too big header » behind a proxy with a small response-header buffer. The hints keep their order and stop at the last entry that fits; `preloadHintsMaxSize` raises the limit (`0` = none) and `preloadHintsEnabled: false` sends none.
-- **Fixed — the stylesheets and scripts written in a layout get a hint, a URL is hinted once, and `self.setEarlyHints([a, b])` sends both entries over HTTP/1.1 (#B766, #B767, #B770).**
-- **Fixed — more of a layout's assets get a hint (#B768, #B769, #B776, #B777).** Tags sharing a line, a one-line `<picture>` and a minified layout are read tag by tag; a URL written with a webroot other than `/`, an image a stylesheet also names in a `url()`, and the assets of a bundle installed under a directory whose name holds `404` get their hints.
-- **Fixed — a page no longer answers 500 because of its layout's assets (#B774, #B775).** A stylesheet linked by hand with an unquoted `url(#id)` or a `url()` with no dot in its path, or a first layout asset that is an `<img>` with a `srcset` and no `src`, made the page answer 500.
-- **Fixed — a page's own `false` overrides a `_common` switch in `templates.json` (#B772).** For `javascriptsDeferEnabled`, such a page's scripts now go before `</body>` without `defer`, as documented.
-- **Fixed — `gina start` exits non-zero when the framework does not start (#B759, #B760, #B761).** It exits with the framework's own exit code, or 128 plus the signal number; another program on the framework port is no longer reported as a running framework; and a warning on standard error no longer aborts the start.
-- **Fixed — a `GINA_VERSION` that names no installed framework is refused (#B584).** It used to migrate `~/.gina` to that version.
-- **Fixed — after a client navigation that closes a popin, focus lands on the swapped region (#B762).**
-- **Fixed — a staged upload's `send()` no longer reads the event being dispatched when it runs (#B758).** Called from your own code, it failed with a TypeError or took another element's upload group.
-- **Fixed — `ginaEnabled` is gone from the framework's `templates.json` baseline and from its reference (#B773).** It never had any effect.
+- **Security — a request-fed template path stays inside the template root (#B833, #B867).** The router refuses a placeholder value that would escape as a path component, and both renderers answer 500 for a page path outside the section's `html` root. Two advisories.
+- **Security — no request answers with another request's context (#B807, #B806, #B519, #B811).** The controller methods a route middleware gets, the engine-level error responder and the `getUrl`/`getWebroot`/`t`/`tIcu` filters each read a process-wide slot that the last request overwrote; each is now bound to its own request, and an async job runs with no render context.
+- **Security — one request can no longer stop a bundle (#B792, #B793, #B843).** A bracket field nested in a `null` slot threw in the parser and a GET exited the bundle; the parse of every request's data, and the multipart listeners, now answer 500 instead.
+- **Security — logs (#B830, #B834, #B838).** A request value can no longer start a log line of its own (CWE-117); a resolved secret is masked whichever writer renders it, quotes and escapes included (CWE-532).
+- **Security — `req.delete` keeps its prototype (#B848).** A `__proto__` query field re-pointed it on the default engine. Related: a request field named `hasOwnProperty` reaches the action (#B837), a logged object can no longer make a log call throw (#B832), and `req.delete` is a plain object with Express 4's `simple` query parser (#B847).
+- **Changed — `Cache-Control` follows the server cache switch (#B744)**, and the top-level `cache` keys the render cache never read are deprecated with a boot warning. The SQLite driver takes Node.js 26.11's `Database` class name (#B829).
+- **Fixed — the CLI says what it did (#B851, #B853, #B854, #B855, #B856, #B850, #B763, #B764, #B780, #B782, #B779).** `bundle:start` exits by outcome and a bundle that cannot bind its port exits 1; `bundle:restart` exits 1 when the bundle did not restart; a second start keeps the running bundle's pid file; a refused start no longer stops the framework; `project:start` leaves the framework's records alone; a worker child no longer takes over its bundle's pid file; `framework:status` and `gina stop` find a framework running on Bun, and `gina stop` signals only the pid it read and keeps other versions' pid files; `--inspect-gina` and `framework:restart` return the real exit code; `image:run` leaves the container name to podman.
+- **Fixed — `Collection` (#B517, #B818, #B819, #B820, #B821, #B822, #B826, #B827).** `filter(fn)` filters; a search option matches the value as text, works on every search and in its object form; a dotted key holding a pattern character matches nothing instead of throwing; `update()` writes each row back in its own place; `delete()` and `notIn()` remove the rows they found; `find()` lists a row once.
+- **Fixed — the staged upload widget (#B858, #B859, #B860, #B861, #B862, #B791).** After a reset the next selection is posted; a reset or a delete reaches a file shown without an image, every file of a multi-file input, a custom preview container and a custom prefix; a replaced file's preview metadata is no longer re-posted.
+- **Fixed — renderers and routing (#B516, #B808, #B825, #B688, #B842, #B783, #B794, #B518, #B812).** `getUrl` degrades with no request; a custom async swig loader renders again and sees `setup.js` registrations; a `:placeholder` in `param.path`, `param.title` or `param.namespace` is written verbatim; an error page whose dispatch fails answers the built-in page instead of overflowing the stack; a `throwError()` fallback answers an XHR request; `redirect()` to a dot-less host works; `throwError(err)` keeps `message` and `ref`; a rejecting async middleware answers 500.
+- **Fixed — settings and cache (#B784, #B785).** `settings.<env>.json` is applied, and the `fs` cache reads its entries back from a custom `server.cache.path`.
+- **Fixed — client (#B585, #B781, #B876).** `reBind()` no longer stacks the validator's listeners and `destroy()` removes them; a `<select>`'s live check shows the whole-form error; a popin trigger no longer loads the popin twice on a page with several popin instances.
 
 ## Documentation
 

@@ -80,13 +80,13 @@ jobs:
       # test.yml does, then bind-mounted into the Bun container at the SAME
       # absolute path so the node_modules/gina self-symlink resolves inside.
       - name: Use Node.js (installs dependencies, runs the gate)
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
 
       - name: Install dev dependencies
         run: |
-          npm install --ignore-scripts
+          npm ci --ignore-scripts   # the tracked lockfile, exactly (#S11)
           ln -sf $(pwd) node_modules/gina
 
       - name: Prepare framework dependencies
@@ -104,7 +104,7 @@ jobs:
           }
           EOF
           fi
-          (cd "${FW_DIR}" && npm install --ignore-scripts)
+          (cd "${FW_DIR}" && npm ci --ignore-scripts)   # the tracked framework lockfile (#S11)
 
       # `--isolate`: a fresh global object per test file, matching node --test's
       # per-file process model (without it, gina's global-mutating tests
@@ -144,7 +144,7 @@ jobs:
       # A red needs the full console (which failure, what it printed); keep it.
       - name: Upload the run artifacts on failure
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: bun-suite-${{ strategy.job-index }}
           path: /tmp/bun-suite/

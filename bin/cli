@@ -532,6 +532,13 @@ async function onExec() {
             }
         );
 
+        // #B851 — the outcome of the command, read from the daemon's frames
+        // (lib/cmd/bundle/inc/start-status.js): with the daemon's header, nothing ends the command
+        // early and the process exits with the code the daemon sends last; without it (a daemon
+        // started before this change and not restarted) the behaviour below is the old one.
+        var cliState = require(frameworkPath + '/lib/cmd/bundle/inc/start-status').createCliState();
+        var debuggerHint = 'If you have previously started a debugger process, you should stop it before.\nIf not running, try to start it then stop it before relaunching your command line.';
+
         client.on('data', function(data) {
 
             //Acknowledging ready state.
@@ -540,10 +547,21 @@ async function onExec() {
                 return
             }
             // printing out
-            process.stdout.write(data.toString());
+            // #B851 — was: process.stdout.write(data.toString());
+            var dataState = cliState.onData(data);
+            if (dataState.print) {
+                process.stdout.write(dataState.print);
+            }
             // intercept printed output
-            if (/address already in use/.test(data)) {
-                console.log('If you have previously started a debugger process, you should stop it before.\nIf not running, try to start it then stop it before relaunching your command line.');
+            // #B851 — was: on any chunk matching /address already in use/, the hint and an
+            // immediate `client.end()` (exit 0): the bundle's own bind error and node's inspector
+            // warning (with which the bundle still starts) both ended the command before the
+            // daemon's outcome. With the daemon's header the hint is printed for the inspector
+            // line only, and the command waits for the outcome.
+            if (dataState.hint) {
+                console.log(debuggerHint);
+            }
+            if (dataState.endNow) {
                 client.end();
                 return
             }
@@ -551,8 +569,19 @@ async function onExec() {
         });
 
         //client end event.
+        // #B851 — was: process.exit(0), for every outcome.
         client.on('end', function() {
-            process.exit(0)
+            var endState = cliState.onEnd();
+            // written synchronously: an asynchronous write on a pipe is lost at process.exit()
+            try {
+                if (endState.print) {
+                    fs.writeSync(1, endState.print);
+                }
+                if (endState.message) {
+                    fs.writeSync(2, endState.message + '\n');
+                }
+            } catch (endWriteErr) { /* stdout or stderr closed: the exit code still tells */ }
+            process.exit(endState.code)
         });
 
         client.on('error', function(err) {

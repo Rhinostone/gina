@@ -59,6 +59,25 @@ Object.defineProperty( Array.prototype, 'inArray', {
     value: function(o){ return this.indexOf(o)!=-1 }
 });
 
+/**
+ * Object.prototype.count — the number of the receiver's own enumerable properties:
+ * the keys of an object, the indices of an array.
+ *
+ * Each key is tested with the built-in `Object.prototype.hasOwnProperty`, reached
+ * through `.call` (#B837). `this.hasOwnProperty(prop)` was an ordinary property
+ * lookup: an own key of that name that is not a function (a request field named
+ * `hasOwnProperty`) made the call throw on the first key, as did an object with no
+ * prototype (`Object.create(null)`, `querystring.parse()`), and the catch returned
+ * the count so far, 0.
+ *
+ * Changes made here must be reflected in:
+ *  - gina/framework/version/helpers/prototypes.js (the copy the browser bundle carries)
+ *
+ * @returns {number} The number of own enumerable properties.
+ * @example
+ * ({ a: 1, b: 2 }).count();                                    // → 2
+ * Object.prototype.count.call({ hasOwnProperty: 'x', a: 1 }); // → 2
+ */
 Object.defineProperty( Object.prototype, 'count', {
     writable:   true,
     enumerable: false,
@@ -69,8 +88,10 @@ Object.defineProperty( Object.prototype, 'count', {
             var self = this;
             if (this instanceof String) self = JSON.parse(this);
             var i = 0;
+            // #B837 — the built-in own-key test, which no own key of the receiver can shadow
+            // was: for (var prop in this) if (this.hasOwnProperty(prop)) ++i;
             for (var prop in this)
-                if (this.hasOwnProperty(prop)) ++i;
+                if (Object.prototype.hasOwnProperty.call(this, prop)) ++i;
 
             return i;
         } catch (err) {
@@ -79,6 +100,18 @@ Object.defineProperty( Object.prototype, 'count', {
     }
 });
 
+/**
+ * Object.prototype.functionCount — the number of the receiver's own enumerable
+ * properties whose value is a function.
+ *
+ * Each key is tested with the built-in `Object.prototype.hasOwnProperty`, reached
+ * through `.call` (#B837): `this.hasOwnProperty(prop)` threw on an object with an own
+ * `hasOwnProperty` key that is not a function and on an object with no prototype.
+ *
+ * @returns {number} The number of own enumerable function-valued properties.
+ * @example
+ * ({ a: function () {}, b: 1 }).functionCount();   // → 1
+ */
 Object.defineProperty( Object.prototype, 'functionCount', {
     writable:   true,
     enumerable: false,
@@ -88,8 +121,10 @@ Object.defineProperty( Object.prototype, 'functionCount', {
         var self = this;
         if (this instanceof String) self = JSON.parse(this);
         var i = 0;
+        // #B837 — the built-in own-key test, which no own key of the receiver can shadow
+        // was: for (var prop in this) if (this.hasOwnProperty(prop) && typeof(this[prop]) == 'function') ++i;
         for (var prop in this)
-            if (this.hasOwnProperty(prop) && typeof(this[prop]) == 'function') ++i;
+            if (Object.prototype.hasOwnProperty.call(this, prop) && typeof(this[prop]) == 'function') ++i;
 
         return i;
     }
