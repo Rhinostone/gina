@@ -684,7 +684,13 @@ function Routing() {
             // attaching routing description for this request
             //request.routing = params; // can be retried in controller with: req.routing
             // && replacing placeholders
-            request.routing = checkRouteParams(params, request[method]);
+            // #B877 — the route's placeholders take the values the route MATCHED: each URL segment,
+            // and each query key a requirement of the rule validated (`request.params`), over the
+            // request data. Fed the request data alone, a query or body key named like a URL-segment
+            // placeholder replaced that segment in `param.file` after it had passed its requirement.
+            // The #B833 guard in checkRouteParams still checks every value it fills.
+            // was: request.routing = checkRouteParams(params, request[method]);
+            request.routing = checkRouteParams(params, fillValuesOf(request[method], request.params));
             foundRoute.request  = request;
         }
 
@@ -763,13 +769,17 @@ function Routing() {
         // if (params.param.file && regex.test(params.param.file)) {
         //     params.param.file = params.param.file.replace(regex, urlVal);
         // }
-        // file is handle like url replacement (path is like pathname)
-        if ( typeof(params.param.file) != 'undefined' && /\:/.test(params.param.file)) {
-            var _regex = new RegExp('(:'+urlVar+'/|:'+urlVar+'$)', 'g');
-            replacement.variable = urlVal;
-            params.param.file = params.param.file.replace( _regex, replacement );
-            _regex = null;
-        }
+        // #B877 — `param.file` is not rewritten here: checkRouteParams fills it once the route has
+        // matched, from the values the route matched (see parseRouting), behind the #B833 guard.
+        // The block below never matched, because `urlVar` already starts with `:` and its pattern
+        // read `::name`; fixing that pattern instead would fill `param.file` before the guard sees
+        // the value.
+        // was: if ( typeof(params.param.file) != 'undefined' && /\:/.test(params.param.file)) {
+        // was:     var _regex = new RegExp('(:'+urlVar+'/|:'+urlVar+'$)', 'g');
+        // was:     replacement.variable = urlVal;
+        // was:     params.param.file = params.param.file.replace( _regex, replacement );
+        // was:     _regex = null;
+        // was: }
 
         //  if custom title, title rewrite (#B688: a function replacer, as for the path above)
         if (params.param.title && regex.test(params.param.title)) {
@@ -1092,6 +1102,40 @@ function Routing() {
     };
 
     /**
+     * #B877 — the values checkRouteParams fills a MATCHED route's placeholders with, on the request
+     * path: the request data (`request[method]`, query and body), overlaid by the values the route
+     * matched (`request.params`: each URL segment, and each query key a requirement of the rule
+     * validated). A query or body key named like a URL-segment placeholder therefore no longer
+     * replaces that segment, and a placeholder the URL does not carry is still filled from the
+     * request data.
+     *
+     * Own keys only, copied as data properties (the rule of the Express adapter's query copy,
+     * #B666), so a key named `__proto__` stays an ordinary property of the copy and never reaches the
+     * prototype setter. An `undefined` value is skipped, so it never hides a defined one. Neither
+     * argument is modified.
+     *
+     * @inner
+     * @param {object} [data] - the request data, `request[method]`
+     * @param {object} [matched] - the values the route matched, `request.params`
+     * @returns {object} a new plain object
+     *
+     * @example
+     * fillValuesOf({ name: 'other', foo: '1' }, { name: 'page' }); // { name: 'page', foo: '1' }
+     * fillValuesOf({ tpl: 'home' }, { 0: '/t' });                  // { tpl: 'home', 0: '/t' }
+     */
+    var fillValuesOf = function(data, matched) {
+        var out = {}, sources = [data, matched], s = 0, k = null;
+        for (; s < sources.length; ++s) {
+            if ( !sources[s] || typeof(sources[s]) != 'object' ) continue;
+            for (k in sources[s]) {
+                if ( !hasOwn(sources[s], k) || typeof(sources[s][k]) == 'undefined' ) continue;
+                Object.defineProperty(out, k, { value: sources[s][k], writable: true, enumerable: true, configurable: true });
+            }
+        }
+        return out;
+    };
+
+    /**
      * checkRouteParams
      *
      * Fills the route's `:placeholders` from `params`: for each `param` entry declared as a
@@ -1103,7 +1147,8 @@ function Routing() {
      * @inner
      * @param {object} route - the route to fill: a copy (getRoute clones the rule, the
      *   request path clones `param` per request)
-     * @param {object} params - placeholder values, keyed by variable name
+     * @param {object} params - placeholder values, keyed by variable name (on the request path:
+     *   the request data overlaid by the matched values, see fillValuesOf, #B877)
      * @return {object} route - updated route object
      *
      * @example
