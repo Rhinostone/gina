@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'A pid file was created empty and filled a moment later, so a gina command running at the same time (its start-up check prunes the run directory) could read it empty and delete it, and every other reader in that moment took the process for not running. Pid files are now written whole, through a temporary file renamed into place, and a pid file that cannot be written is reported instead of being ignored (#B857)'
+time: 2026-10-15T15:15:03+01:00

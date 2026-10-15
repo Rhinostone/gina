@@ -459,9 +459,17 @@ function Proc(bundle, proc, usePidFile){
     }
 
     /**
-     * Save PID file
-     * @param {string} bundle
-     * @param {integer} PID Id of the PID to save
+     * Writes the process's pid file, `<run directory>/<title without "gina: ">.pid`, then emits
+     * `proc#complete-<PID>` on the next tick — `(false, PID)` once the file is in place,
+     * `(err)` when it cannot be written — so a listener attached after the Proc constructor
+     * returns (`onReady()`) still receives it. Since #B857 the pid is written to a dot-named
+     * temporary file in the run directory and renamed into place, synchronously: a reader
+     * finds no file or the complete one, never an empty one, and no run-directory scan reads
+     * the temporary file (they skip dot entries or want a `.pid` suffix). Its inputs come from
+     * `self` (`bundle`, `PID`, `proc.title`, `path`), set by `register()`.
+     *
+     * @returns {void}
+     * @fires proc#complete-<PID>
      *
      * @private
      * */
@@ -479,25 +487,47 @@ function Proc(bundle, proc, usePidFile){
             && typeof(PID) != "undefined" && PID != '' && PID != null
             && typeof(proc) != "undefined" && proc != '' && proc != null
         ) {
+            // #B857 — was:
+            // try {
+            //     file = proc.title.replace(/^gina\:\s+/, '');
+            //     // if ( !/^gina-/.test(file) ) {
+            //     //     e.emit('proc#registered', file);
+            //     // }
+            //     file += '.pid';
+            //
+            //     console.debug('[ PROC ] Now saving `'+file+'`');
+            //     var fileStream = fs.createWriteStream(path + file);
+            //     fileStream.once('open', function(fd) {
+            //         //fileStream.write(bundle);
+            //         fileStream.write(''+PID);
+            //         fileStream.end();
+            //         e.emit('proc#complete-'+self.PID, false, PID)
+            //     });
+            //     fileStream.once('error', function(err) {
+            //     });
+            // } catch (err) {
+            //     e.emit('proc#complete-'+self.PID, err)
+            // }
+            // createWriteStream() created the file EMPTY when it opened, and the pid was written
+            // in the 'open' callback, after the process returned to the event loop: a concurrent
+            // checkRunningPids() (the init chain of any other gina command) read the empty file
+            // and deleted it as garbage, and every other reader took the process for not running.
+            // An open error hit the empty 'error' handler, so the daemon's onReady() never fired.
+            file = proc.title.replace(/^gina\:\s+/, '') + '.pid';
+            var tmp = path + '.' + file + '.' + PID + '.tmp';
             try {
-                file = proc.title.replace(/^gina\:\s+/, '');
-                // if ( !/^gina-/.test(file) ) {
-                //     e.emit('proc#registered', file);
-                // }
-                file += '.pid';
-
                 console.debug('[ PROC ] Now saving `'+file+'`');
-                var fileStream = fs.createWriteStream(path + file);
-                fileStream.once('open', function(fd) {
-                    //fileStream.write(bundle);
-                    fileStream.write(''+PID);
-                    fileStream.end();
+                fs.writeFileSync(tmp, ''+PID);
+                fs.renameSync(tmp, path + file);
+                process.nextTick(function onPidFileSaved() {
                     e.emit('proc#complete-'+self.PID, false, PID)
                 });
-                fileStream.once('error', function(err) {
-                });
             } catch (err) {
-                e.emit('proc#complete-'+self.PID, err)
+                try { fs.unlinkSync(tmp) } catch (tmpErr) { /* nothing left to remove */ }
+                console.warn('[ PROC ] Could not write the pid file `'+ path + file +'`: '+ err.message);
+                process.nextTick(function onPidFileFailed() {
+                    e.emit('proc#complete-'+self.PID, err)
+                });
             }
 
         } else {
