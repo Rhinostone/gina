@@ -705,7 +705,9 @@ function Routing() {
      *
      * Before the requirement test, writes `urlVal` in place of the `urlVar` placeholder in
      * `params.param.path`, `.namespace` and `.title`, verbatim: through a function replacer,
-     * so `$`-patterns in the value are not expanded (#B688).
+     * so `$`-patterns in the value are not expanded (#B688). A `urlVal` that would escape as a
+     * path component (`_isUnsafePathValue`) is not written into `.path` or `.namespace`: their
+     * placeholder is left for checkRouteParams, whose #B833 guard rejects the value (#B883).
      *
      * @param {string} urlVar - the rule's URL segment, e.g. `:id`
      * @param {string} urlVal - the request's URL segment at the same position
@@ -753,14 +755,23 @@ function Routing() {
         // text before the placeholder, `$&` the placeholder, `$'` the text after it, `$$` a `$`):
         // a request to `/user/$%60` turned `"title": "User :id"` into `User User `. The value is
         // now written verbatim, as the URL and `param.file` already were.
+        // #B883 — a value that would escape as a path component (a `..` segment or a leading
+        // separator, `_isUnsafePathValue`) is not written into `param.path` or `param.namespace`
+        // here: the placeholder is left for checkRouteParams, whose #B833 guard rejects the value.
+        // Written here, it reached both fields unchecked, from a URL segment or from a query key
+        // that its requirement folds in as a segment. The value is tested before `regex.test()`:
+        // a passing test moves this `g` regex's `lastIndex` past the match, and a skipped rewrite
+        // would leave it there for the next field's test (only a replace() resets it).
         //  if custom path, path rewrite
-        if (params.param.path && regex.test(params.param.path)) {
+        // was: if (params.param.path && regex.test(params.param.path)) {
+        if (params.param.path && !_isUnsafePathValue(urlVal) && regex.test(params.param.path)) {
             // was: params.param.path = params.param.path.replace(regex, urlVal);
             params.param.path = params.param.path.replace(regex, function () { return urlVal; });
         }
 
         //  if custom namespace, namespace rewrite
-        if (params.param.namespace && regex.test(params.param.namespace)) {
+        // was: if (params.param.namespace && regex.test(params.param.namespace)) {
+        if (params.param.namespace && !_isUnsafePathValue(urlVal) && regex.test(params.param.namespace)) {
             // was: params.param.namespace = params.param.namespace.replace(regex, urlVal);
             params.param.namespace = params.param.namespace.replace(regex, function () { return urlVal; });
         }
@@ -1085,6 +1096,8 @@ function Routing() {
      * separator (an absolute path, which `path.resolve` honours over the root). Developer-authored
      * static prefixes in `param.file` (e.g. `../shared/:template`, reaching a sibling namespace
      * directory) are NOT request values and are never tested here — only the substituted value is.
+     * fitsWithRequirements consults it too, and leaves a flagged URL value out of its early
+     * `param.path` / `param.namespace` rewrite, so the value reaches the guard (#B883).
      *
      * @inner
      * @param {*} value - the request-supplied placeholder value
