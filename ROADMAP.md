@@ -529,7 +529,7 @@ Gina runs on Windows inside WSL2 or a Docker container. Native Windows stops at 
 
 | Status | Feature | Version | Target |
 | --- | --- | --- | --- |
-| 🔄 | **Windows via WSL2 or Docker** — An installation guide section (WSL2 setup, projects kept in the Linux file system, `localhost` access, Docker Desktop), one clear refusal on native Windows at install and at first run, and a dev container in the starter project. | `0.7.x` | Q4 2026 |
+| ✅ | **Windows via WSL2 or Docker** — An installation guide section (WSL2 setup, projects kept in the Linux file system, `localhost` access, Docker Desktop), one clear refusal on native Windows at install and at first run, and a dev container in the [starter project](https://github.com/gina-io/gina-starter#dev-container). | `0.7.5` | 2026-10-15 |
 | 📋 | **Native Windows** — Install scripts, first-run setup, path handling, symlinks, and the bundle lifecycle (start/stop/restart) work on Windows without WSL or Docker, with a Windows CI runner. Built only if there is demand. | post-1.0.0 | — |
 
 ---
