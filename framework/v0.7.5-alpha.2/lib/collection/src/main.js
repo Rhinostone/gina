@@ -278,7 +278,8 @@ function Collection(content, options) {
      * `isCaseSensitive` (`true` or `false`; the texts `'true'` / `'false'` are
      * read as booleans). `skipEval` is a constructor option
      * (`options.searchOptionRules`): as a top-level key of the object it is
-     * accepted and has no effect.
+     * accepted and has no effect, and as the rule of a field, in either form,
+     * it is refused (#B824).
      *
      * @param {object|string} searchOptionObject or searchOptionTargetedProperty - the options keyed by field, or the field name
      * @param {string} [searchRule] - the rule name (three-argument form)
@@ -288,6 +289,7 @@ function Collection(content, options) {
      * @throws {Error} on zero, two or more than three arguments
      * @throws {Error} when a single argument is not an object
      * @throws {Error} `<rule> is not an allowed searchOption !` on an unknown rule name
+     * @throws {Error} when a field is given `skipEval`, in either form: the message names the constructor option
      * @throws {Error} when a field's entry in the object form is not an object of rules
      *
      * @example
@@ -344,6 +346,12 @@ function Collection(content, options) {
                     if ( typeof(searchOptionRules[ruleName]) == 'undefined' )
                         throw new Error(ruleName + ' is not an allowed searchOption !');
 
+                    // #B824 — as in the three-argument form below: a rule that is not a
+                    // table of entries is a constructor option, and set on a field it made
+                    // that field match no row.
+                    if ( !searchOptionRules[ruleName] || typeof(searchOptionRules[ruleName]) != 'object' )
+                        throw new Error('searchOption `' + ruleName + '` cannot be set on a field: it is a constructor option, e.g. new Collection(rows, { searchOptionRules: { ' + ruleName + ': true } })');
+
                     if ( /true|false/i.test(given[prop][ruleName]) ) {
                         normalized[prop][ruleName] = /true/i.test(given[prop][ruleName]) ? true : false
                     } else {
@@ -361,6 +369,12 @@ function Collection(content, options) {
             for (; i < len; ++i) {
                 if ( typeof(searchOptionRules[arguments[1]]) == 'undefined' )
                     throw new Error(arguments[1] + ' is not an allowed searchOption !');
+
+                // #B824 — a rule that is not a table of entries (`skipEval`, a boolean) is a
+                // constructor option. Set on a field, the search looked the value up in the
+                // rule's table, found nothing, and the field matched no row, with no error.
+                if ( !searchOptionRules[arguments[1]] || typeof(searchOptionRules[arguments[1]]) != 'object' )
+                    throw new Error('searchOption `' + arguments[1] + '` cannot be set on a field: it is a constructor option, e.g. new Collection(rows, { searchOptionRules: { ' + arguments[1] + ': true } })');
 
                 if (typeof(localSearchOptions[arguments[0]]) == 'undefined')
                     localSearchOptions[arguments[0]] = {};
@@ -898,9 +912,11 @@ function Collection(content, options) {
      *              .findOne({name: 'my project'})
      *
      *
-     * Available options :
+     * Search option, set with `setSearchOption()` before the call:
      *  isCaseSensitive: [true|false] - set to true by default
-     *  skipEval: [true|false] - set to false by default
+     *
+     * `skipEval` is not a search option: it is a constructor option,
+     * `new Collection(rows, { searchOptionRules: { skipEval: true } })` (#B824).
      *
      * @param {object} filter
      *
