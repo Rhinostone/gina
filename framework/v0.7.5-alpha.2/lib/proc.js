@@ -612,6 +612,25 @@ function Proc(bundle, proc, usePidFile){
         }
     };
 
+    /**
+     * Registers a process: sets its title and its signal handlers (the SIGTERM drain, the
+     * uncaughtException guard, the exit cleanup), writes its pid file in the run directory
+     * when the Proc was built with `usePidFile` (the default), and records it in
+     * `process.list` and `process.pids` (and in `~/.gina/procs.json` for a framework daemon).
+     * A missing run directory is created first; since #B852 the process that creates it is
+     * registered like any other (it used to get no title, no handlers and no pid file). A
+     * process already listed under the same name and pid is removed from the list and
+     * dismissed instead.
+     *
+     * @param {string} bundle - The process name: `<bundle>@<project>`, or `gina-v<version>` for the daemon
+     * @param {number} pid - The process id
+     * @returns {void}
+     *
+     * @example
+     * // called by the constructor's init(): for a bundle this titles the process
+     * // `gina: web@shop` and writes `<run directory>/web@shop.pid`
+     * proc.register('web@shop', process.pid);
+     */
     self.register = function(bundle, pid) {
 
         var processCollection = new Collection(process.list);
@@ -654,14 +673,31 @@ function Proc(bundle, proc, usePidFile){
                 //isBundleMounted(projects, bundlesPath, getContext('bundle'));
             };
 
-            var isReplacementNeeded = false, path = _(pathObj.toUnixStyle(), true);
+            // #B852 — was:
+            // var isReplacementNeeded = false, path = _(pathObj.toUnixStyle(), true);
+            // if ( self.usePidFile && !pathObj.existsSync() ) {
+            //     try {
+            //         pathObj.mkdirSync();
+            //         console.debug('[ PROC ] Path created ('+ path +')');
+            //         isReplacementNeeded = true;
+            //     } catch (pathErr) {
+            //         throw pathErr
+            //     }
+            // }
+            // and the block below ran only `if (!isReplacementNeeded)`: the process that had to
+            // create the run directory got no title, no signal handlers and no pid file, so
+            // `bundle:stop` and `bundle:status` could not find it and an uncaught EPIPE or a
+            // SIGTERM ended it without its drain. Nothing ever read the flag again. The directory
+            // is now created and the registration carries on. helpers/path.js's `mkdirSync()`
+            // RETURNS its error instead of throwing it (the catch above never ran): the error is
+            // logged here, and save() then reports the pid file it cannot write.
+            var path = _(pathObj.toUnixStyle(), true);
             if ( self.usePidFile && !pathObj.existsSync() ) {
-                try {
-                    pathObj.mkdirSync();
+                var mkdirErr = pathObj.mkdirSync();
+                if ( mkdirErr instanceof Error ) {
+                    console.debug('[ PROC ] Could not create the run directory ('+ path +'): '+ mkdirErr.message);
+                } else {
                     console.debug('[ PROC ] Path created ('+ path +')');
-                    isReplacementNeeded = true;
-                } catch (pathErr) {
-                    throw pathErr
                 }
             }
 
@@ -678,14 +714,12 @@ function Proc(bundle, proc, usePidFile){
             // was:         save(bundle, self.PID, self.proc);
             // was:     }
             // was: }
-            if (!isReplacementNeeded) {
-                self.PID    = self.proc.pid;
-                self.path   = path + pathObj.sep;
-                setPID(bundle, self.PID, self.proc);
-                //Add PID file.
-                if (self.usePidFile) {
-                    save(bundle, self.PID, self.proc);
-                }
+            self.PID    = self.proc.pid;
+            self.path   = path + pathObj.sep;
+            setPID(bundle, self.PID, self.proc);
+            //Add PID file.
+            if (self.usePidFile) {
+                save(bundle, self.PID, self.proc);
             }
 
             processRegistration()

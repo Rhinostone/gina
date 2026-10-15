@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'A bundle or service that had to create the run directory while it registered (a container boot whose run directory was not created beforehand, or a bundle started after the directory was removed) ran without its process title, without its SIGTERM, uncaughtException and exit handlers and without a pid file, so `bundle:stop` and `bundle:status` could not find it and a SIGTERM ended it without draining its requests. The process that creates the run directory is now registered like any other (#B852)'
+time: 2026-10-15T15:12:06+01:00

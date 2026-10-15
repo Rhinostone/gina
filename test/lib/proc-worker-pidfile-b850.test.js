@@ -138,12 +138,35 @@ describe('01 - lib/proc.js register(): setPID for every process, save() only wit
         assert.deepEqual(c.save, []);
     });
 
-    it('CONTROL — usePidFile true with a missing run directory: created, and (as before) neither set nor saved (#B852, unchanged here)', function () {
+    // #B852 — this arm pinned the old skip until the fix: « CONTROL — usePidFile true with a
+    // missing run directory: created, and (as before) neither set nor saved (#B852, unchanged
+    // here) », asserting setPID [] and save []. Flipped with Martin Luther ETOUMAN NDAMBWE's
+    // approval at the 2026-10-15 plan gate (answered by 15:08:02 WAT).
+    it('usePidFile true with a missing run directory: created, then titled, handled and saved like any process (#B852)', function () {
         var c = run(true, false);
         assert.equal(c.mkdir, 1);
-        assert.deepEqual(c.setPID, []);
-        assert.deepEqual(c.save, []);
+        assert.deepEqual(c.setPID, [['web@shop', 4242]]);
+        assert.deepEqual(c.save, [['web@shop', 4242]]);
         assert.deepEqual(c.registered, [{ pid: 4242, name: 'web@shop' }]);
+    });
+
+    it('usePidFile true and the run directory cannot be created: still titled and handled, and save() runs to report the write it cannot make (#B852)', function () {
+        var calls = { setPID: [], save: [], mkdir: 0 };
+        var debug = [];
+        process.list = []; process.pids = {};
+        var self = { PID: 4242, path: null, bundle: 'web@shop', bundles: [], proc: { pid: 4242 }, usePidFile: true };
+        var Collection = function () { return { findOne: function () { return null; } }; };
+        // helpers/path.js's mkdirSync() RETURNS its error instead of throwing it
+        var pathObj = { toUnixStyle: function () { return '/tmp/run'; }, existsSync: function () { return false; }, mkdirSync: function () { calls.mkdir++; return new Error('EACCES: permission denied'); }, sep: '/' };
+        var fn = register(self, Collection, function () {}, { debug: function (m) { debug.push(String(m)); } }, function () {}, function () {}, function (p) { return p; }, pathObj,
+            function (b, pid) { calls.setPID.push([b, pid]); },
+            function (b, pid) { calls.save.push([b, pid]); });
+        fn('web@shop', 4242);
+        assert.equal(calls.mkdir, 1);
+        assert.deepEqual(calls.setPID, [['web@shop', 4242]], 'the title and the handlers do not depend on the run directory');
+        assert.deepEqual(calls.save, [['web@shop', 4242]], 'save() runs and reports the pid file it cannot write');
+        assert.ok(debug.some(function (m) { return /Could not create the run directory/.test(m) && /EACCES/.test(m); }), 'the mkdir error is logged, not lost');
+        assert.deepEqual(process.list, [{ pid: 4242, name: 'web@shop' }]);
     });
 });
 
