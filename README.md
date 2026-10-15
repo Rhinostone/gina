@@ -133,7 +133,7 @@ Full installation guide, tutorials, configuration reference, and API docs at **[
 | Package | Description |
 | --- | --- |
 | [@rhinostone/swig](https://github.com/gina-io/swig) | Maintained fork of the Swig template engine (upstream abandoned since 2015). CVE-2023-25345 patched. |
-| [gina-starter](https://github.com/gina-io/gina-starter) | Minimal starter project — one bundle, one route, Docker Compose included |
+| [gina-starter](https://github.com/gina-io/gina-starter) | Minimal starter project — one bundle, one route, a dev container |
 
 ## Governance
 
