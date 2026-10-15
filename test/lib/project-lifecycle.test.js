@@ -357,16 +357,25 @@ describe('09 - project:add handles existing package.json', function() {
         );
     });
 
-    it('createPackageFile branch merges with existing and deletes old file', function() {
+    // #B363 (approved test change, 2026-10-15) — this arm used to pin the merge of
+    // the framework template over an existing package.json; that merge is gone.
+    // Behavioural coverage: test/lib/project-add-package-json-b363.test.js.
+    it('createPackageFile leaves an existing package.json as it is (#B363)', function() {
         var src = getSrc();
+        var fnStart = src.indexOf('var createPackageFile');
+        assert.ok(fnStart > -1, 'createPackageFile definition not found');
+        var fnEnd = src.indexOf('end(true)', fnStart);
+        assert.ok(fnEnd > fnStart, 'createPackageFile must reach end(true)');
+        // Code only: comments may name what the function no longer does.
+        var code = src.slice(fnStart, fnEnd)
+            .replace(/\/\*[\s\S]*?\*\//g, '')
+            .replace(/\/\/[^\n]*/g, '');
         assert.ok(
-            src.indexOf('existingPack = require(target)') > -1,
-            'createPackageFile must load the existing package.json via require(target)'
+            /!\s*\/\^true\$\/i\.test\(\s*isCreatedFromExistingPackage\s*\)/.test(code),
+            'the template write must be guarded by the existing-package flag'
         );
-        assert.ok(
-            /merge\s*\(\s*contentFile\s*,\s*existingPack\s*\)/.test(src),
-            'createPackageFile must merge framework template with existing package'
-        );
+        assert.strictEqual(code.indexOf('merge('), -1, 'the template must not be merged over an existing package.json');
+        assert.strictEqual(code.indexOf('rmSync('), -1, 'an existing package.json must never be removed');
     });
 
     it('createPackageFile ends the process after writing (calls end)', function() {

@@ -19,8 +19,8 @@ var projectNameRule = require('./inc/name');
  * would be unstartable (`MODULE_NOT_FOUND` with no `node_modules/gina` link; a
  * config emerg with no ports). Registration is delegated to the EXISTING,
  * tested commands rather than duplicating their logic:
- *   - `project:add @<name> --path=<to>` — writes the registry entry, recreates the
- *     `node_modules/gina` symlink, and stamps the project name into package.json;
+ *   - `project:add @<name> --path=<to>` — writes the registry entry and recreates the
+ *     `node_modules/gina` symlink; it leaves the restored package.json as it is (#B363);
  *   - `bundle:add <bundle> @<name> --import` per manifest bundle — registers the
  *     already-extracted bundle source and allocates its ports.
  * (`project:import` is NOT usable here — it refuses a not-yet-registered name and
@@ -196,7 +196,7 @@ function Restore(opt, cmd) {
             }
 
             // register the project (writes the registry entry + recreates the
-            // node_modules/gina symlink + stamps the name into package.json)
+            // node_modules/gina symlink; the restored package.json is left as it is, #B363)
             var reg = selfCli(['project:add', '@'+ local.project, '--path='+ local.target]);
             var registered = false;
             try {

@@ -225,8 +225,8 @@ function Add(opt, cmd) {
         if ( !file.existsSync() ) {
             createPackageFile( file.toString() )
         } else {
-            console.warn('[ package.json ] already exists in this location: '+ file + '\nUpdating package.json...');
-            // Merge existing package.json with framework template; createPackageFile calls end()
+            console.warn('[ package.json ] already exists in this location: '+ file + '\nLeaving it as it is.');
+            // #B363: createPackageFile leaves it untouched, then calls end()
             // which writes projects.json and calls process.exit(0). Without this, the process
             // hangs wherever bin/cli has bound its MQ log listener, which keeps the event loop
             // alive (the MQ speaker's socket is unref'd).
@@ -560,44 +560,96 @@ function Add(opt, cmd) {
 
 
     /**
-     * Creates or updates package.json from the framework template, merging
-     * any existing file when isCreatedFromExistingPackage is true.
+     * gina's own Node floor: the lower bound of `engines.node` in gina's
+     * package.json (`>= 22 <27` gives `22`). A new project's package.json
+     * carries it rather than the version of the Node running this command,
+     * which would tie the project to the machine that created it (#B363).
+     *
+     * @inner
+     * @private
+     * @returns {?string} The floor, such as `22`; null when gina's `engines.node` has no `>=` lower bound
+     *
+     * @example
+     * // gina's package.json declares "engines": { "node": ">= 22 <27" }
+     * getNodeFloor(); // → '22'
+     */
+    var getNodeFloor = function() {
+        try {
+            var ginaPack = JSON.parse(fs.readFileSync(String(_(getPath('gina').root + '/package.json', true)), 'utf8'));
+            var range = ( ginaPack.engines && ginaPack.engines.node ) ? String(ginaPack.engines.node) : '';
+            var floor = /^\s*>=\s*v?(\d+(?:\.\d+){0,2})/.exec(range);
+            return ( floor ) ? floor[1] : null;
+        } catch (floorErr) {
+            return null;
+        }
+    }
+
+    /**
+     * Writes a NEW package.json: JSON with a 4-space indent and a final
+     * newline, at mode 0644, through a sibling temp file and a rename so no
+     * reader sees a partial file. It does not use
+     * `lib.generator.createFileFromDataSync`, which writes every file at mode
+     * 0755 and without a final newline (#B363).
+     *
+     * @inner
+     * @private
+     * @param {object} content - The package.json content
+     * @param {string} target - Absolute path to package.json
+     *
+     * @example
+     * writePackageFile({ name: 'myproject', version: '1.0.0' }, '/path/to/myproject/package.json');
+     */
+    var writePackageFile = function(content, target) {
+        var tmp = target + '.' + process.pid + '.tmp';
+        try {
+            fs.writeFileSync(tmp, JSON.stringify(content, null, 4) + '\n');
+            fs.chmodSync(tmp, 0o644);
+            fs.renameSync(tmp, target);
+        } catch (writeErr) {
+            try { fs.unlinkSync(tmp) } catch (unlinkErr) { /* already gone */ }
+            throw writeErr
+        }
+    }
+
+    /**
+     * Writes the project's package.json from the framework template, only
+     * when the project has none, then the `.gitignore`, then ends the command.
+     *
+     * An existing package.json is the project's own manifest and is left as it
+     * is, as the `.gitignore` is (#B258). Up to 0.7.4 it was rewritten with the
+     * template winning every key both defined (`name`, `description`,
+     * `engines.node`), re-indented, without its final newline and at mode
+     * 0755; nothing in gina reads those three fields (#B363). A new
+     * package.json carries gina's own Node floor (getNodeFloor) and is written
+     * by writePackageFile.
      *
      * @inner
      * @private
      * @param {string} target - Absolute path to package.json
-     * @param {boolean} [isCreatedFromExistingPackage] - When true, merge with the existing file
+     * @param {boolean} [isCreatedFromExistingPackage] - When true, the project already has a package.json, which is left untouched
      */
     var createPackageFile = function(target, isCreatedFromExistingPackage) {
 
         loadAssets();
 
-        var conf = _(getPath('gina').core +'/template/conf/package.json', true);
-        var contentFile = requireJSON(conf);
+        if ( !/^true$/i.test(isCreatedFromExistingPackage) ) {
+            var conf = _(getPath('gina').core +'/template/conf/package.json', true);
+            var contentFile = requireJSON(conf);
+            var nodeFloor = getNodeFloor();
+            if ( !nodeFloor ) {
+                delete contentFile.engines
+            }
 
-        var dic = {
-            'project' : self.projectName,
-            'node_version' : GINA_NODE_VERSION.match(/\d+/g).join('.'),
-            'gina_version' : GINA_VERSION
-        };
+            var dic = {
+                'project' : self.projectName,
+                'node_version' : nodeFloor || '',
+                'gina_version' : GINA_VERSION
+            };
 
-        contentFile = whisper(dic, contentFile);//data
+            contentFile = whisper(dic, contentFile);//data
 
-        // Updating package.json if needed
-        if (
-            typeof(isCreatedFromExistingPackage) != 'undefined'
-            && /^true$/i.test(isCreatedFromExistingPackage)
-        ) {
-            var existingPack = require(target);
-            contentFile = merge(contentFile, existingPack);
-            contentFile.version = existingPack.version || "1.0.0";
-            new _(target, true).rmSync()
+            writePackageFile(contentFile, target);
         }
-
-        lib.generator.createFileFromDataSync(
-            contentFile,
-            target
-        );
 
         // #B258 — the project's `.gitignore`, written only when absent. This is
         // the last scaffold step for both the new-project and the import path:
