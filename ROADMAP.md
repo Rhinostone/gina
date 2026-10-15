@@ -94,7 +94,19 @@ This roadmap covers planned features, architectural improvements, new connectors
 | **2027** | `0.7.x` | Performance — remaining measure-gated candidates: multipart & WebSocket fast paths, render/log cleanups, SIMD scanner (the render-path deep-clone & id-mint reduction shipped early in `0.6.2` with a measured 4.4× render-throughput gain; the profiling baseline itself also shipped in `0.6.2`; the per-request configuration view — `getConfig()` without the deep clone — shipped in `0.6.30`) · ISO 27001 supplier evidence — an SBOM attached to every release, once releases are cut by the CI release workflow · Beemaster admin + visual translation editor (moved from `0.6.x`) |
 | **2027** | `0.8.0` | **Swig output auto-escaping on by default** — `settings.swig.autoescape` becomes `true` when a bundle leaves it unset (prepared in `0.7.0`: a boot warning, the scaffold, the asset-tag fix). ⚠️ The financial-messaging content first planned here was **delivered early in `0.6.25` (2026-09-03)**: XML request/response handling · pluggable message-schema validation · IBAN/BIC validation rules · money & ISO 4217 minor-unit utilities · idempotency keys. |
 | **2027** | `0.9.0` | Financial-integration heavyweights — entity-layer datastore transaction seam · message-queue connector family (AMQP / Kafka / IBM MQ) |
-| **Q3 2027** | `1.0.0` | First stable release — Windows alpha compatibility is a hard gate |
+| **Q3 2027** | `1.0.0` | First stable release — see the [1.0 criteria](#10-criteria) |
+
+---
+
+## 1.0 criteria
+
+`1.0.0` is the first stable release. It ships when all of these hold:
+
+- **A published compatibility policy** — what counts as the public API, what a minor or a patch release may change in 1.x, how long a deprecation lasts, and which versions receive security fixes.
+- **Behaviour changes in minor releases only** — a patch release fixes bugs without changing documented behaviour.
+- **A quiet security period** — about 60 days with no HIGH or CRITICAL security advisory, while the security audits continue.
+- **No open bug rated MEDIUM or higher**, and every open bug rated.
+- **Windows supported through WSL2 or Docker** — see [Windows](#windows).
 
 ---
 
@@ -513,11 +525,12 @@ A cold audit of the Couchbase connector identified two critical security vulnera
 
 ## Windows
 
-Windows compatibility is a hard requirement for `1.0.0`. The alpha scope covers all core features: install, scaffold, bundle start/stop, routing, rendering, and basic CLI. Full production-grade parity is post-1.0.0.
+Gina runs on Windows inside WSL2 or a Docker container. Native Windows stops at install, or at the first command after an install that skipped the install scripts, with a message pointing to the [instructions](https://gina.io/docs/getting-started/installation#windows). Supporting Windows through WSL2 or Docker is a requirement for `1.0.0`. Native Windows support comes after 1.0.0, and only if there is demand.
 
 | Status | Feature | Version | Target |
 | --- | --- | --- | --- |
-| 📋 | **Windows alpha compatibility** — Install scripts, path handling, symlinks, and bundle lifecycle (start/stop/restart) work correctly on Windows. `bin/gina.bat` kept in sync with `bin/gina`. CI Windows runner required before this can be marked done. Out of scope for alpha: full build system (bash-based), Windows service integration, production-grade process management. | `1.0.0` | Q3 2027 |
+| 🔄 | **Windows via WSL2 or Docker** — An installation guide section (WSL2 setup, projects kept in the Linux file system, `localhost` access, Docker Desktop), one clear refusal on native Windows at install and at first run, and a dev container in the starter project. | `0.7.x` | Q4 2026 |
+| 📋 | **Native Windows** — Install scripts, first-run setup, path handling, symlinks, and the bundle lifecycle (start/stop/restart) work on Windows without WSL or Docker, with a Windows CI runner. Built only if there is demand. | post-1.0.0 | — |
 
 ---
 
