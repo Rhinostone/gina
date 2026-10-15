@@ -11,12 +11,12 @@ var lib     = require( getPath('gina').lib );// jshint ignore:line
 //var helpers     = require( getPath('gina').helpers );
 var console = lib.logger;
 /**
- * Framework start command - Needs to be launched as [sudo], [admin] or [root]
- *
- * NB.: Another alternative is to set appropriate permissions for `/var/run/gina`
- * e.g. if you have a `gina` user in the `www-data` group
- *  $ sudo mkdir /var/run/gina
- *  $ sudo chown -R gina:www-data /var/run/gina
+ * Framework start command (`gina start` / `gina framework:start`). It runs as
+ * the current user and needs no elevated privileges. Its pid files go where
+ * `getRunDir()` (utils/helper.js) puts them: under the npm prefix, or in
+ * `~/.gina/run` when the prefix is not writable; `GINA_RUNDIR` overrides both.
+ * (#B889: this header used to ask for root and describe a `/var/run/gina` pid
+ * folder that no code uses.)
  *
  * @class Start
  * @constructor
