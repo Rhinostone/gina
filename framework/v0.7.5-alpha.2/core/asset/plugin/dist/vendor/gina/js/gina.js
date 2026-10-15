@@ -20645,6 +20645,41 @@ function ValidatorPlugin(rules, data, formId, culture) {
     }
 
     /**
+     * isCaseConditionTarget
+     * #B884 — tells whether a `_case_<driver>` block of a rule set names `field` in the `rules` of
+     * one of its conditions, i.e. whether a case can make that field required (or give it any rule)
+     * while it has no rule of its own. Only exact field-name keys count: the live case merge in
+     * `forEachField` skips a key that names no collected field (`!$fields[_r]`) before its RegExp
+     * branch, so a RegExp key never applies there.
+     *
+     * @inner
+     * @param {object} rules - the form's bound rule set (`$form.rules`)
+     * @param {string} field - a control's name
+     *
+     * @returns {boolean} true when at least one condition's `rules` names `field`
+     *
+     * @example
+     * isCaseConditionTarget({ _case_kind: { conditions: [{ case: 'b', rules: { extra: { isRequired: true } } }] } }, 'extra'); // true
+     * isCaseConditionTarget({ ref: { isRequired: true } }, 'ref'); // false: a rule of its own, no case names it
+     */
+    var isCaseConditionTarget = function(rules, field) {
+        if ( !rules || typeof(rules) != 'object' || typeof(field) != 'string' || field == '' ) {
+            return false;
+        }
+        for (var c in rules) {
+            if ( !/^\_case\_/.test(c) || !rules[c] || !Array.isArray(rules[c].conditions) ) continue;
+            for (var i = 0, len = rules[c].conditions.length; i < len; ++i) {
+                var condition = rules[c].conditions[i];
+                if ( !condition || !condition.rules || typeof(condition.rules) != 'object' ) continue;
+                if ( Object.prototype.hasOwnProperty.call(condition.rules, field) ) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
      * addLiveForInput
      * Wires one form control for live checking: registers the gina event
      * name(s) the control's validation handler consumes, plus the handler
@@ -20654,6 +20689,12 @@ function ValidatorPlugin(rules, data, formId, culture) {
      * update relays); a radio ALSO registers change.<id> (#B228) because the
      * form-level change proxy is the only dispatcher that fires on a user
      * pick and it only dispatches names that are registered.
+     *
+     * A control is wired when it has a rule, or — since #B884 — when a `_case_` condition names it
+     * (`isCaseConditionTarget`): until the case applies, its field pass finds no rule and the
+     * whole-form pass still re-evaluates the submit trigger. Admitted input types (#B886): radio,
+     * checkbox, text, hidden, password, number, email, tel, url, search, and the date/time family
+     * (date, time, datetime-local, month, week).
      *
      * @inner
      * @param {object} $form - form instance record (`instance.$forms[id]` shape: `.rules`, `.target`)
@@ -20684,18 +20725,28 @@ function ValidatorPlugin(rules, data, formId, culture) {
             isDisabled = false;
         }
         // allowedLiveInputTypes
-        if ( /^(radio|checkbox|text|hidden|password|number|date|email)$/i.test($el.type) && !isDisabled  || isOtherTagAllowed && !isDisabled ) {
+        // #B886 — tel, url, search and the date/time family were left out, so a field of such a
+        // type got no live listener even with a rule: typing never re-evaluated the submit trigger.
+        // range and color stay out (not measured).
+        // was: /^(radio|checkbox|text|hidden|password|number|date|email)$/i
+        if ( /^(radio|checkbox|text|hidden|password|number|date|email|tel|url|search|time|datetime-local|month|week)$/i.test($el.type) && !isDisabled  || isOtherTagAllowed && !isDisabled ) {
             var field = $el.name;
             var localRule = rules[field] || null;
+            // #B884 — a field with no rule of its own that a `_case_` condition names is wired too:
+            // the case writes its rule into the store later (forEachField), and without a listener
+            // typing into it never re-evaluated the submit trigger.
+            var isCaseTarget = ( !localRule ) ? isCaseConditionTarget(rules, field) : false;
             if ( !localRule ) {
                 checkForRuleAlias(rules, $el);
 
-                if ( typeof(rules[field]) == 'undefined' )
+                // was: if ( typeof(rules[field]) == 'undefined' )
+                if ( typeof(rules[field]) == 'undefined' && !isCaseTarget )
                     return;
             }
             // data-gina-form-live-check-enabled
-            // with local rule
-            if ( $form.target.dataset.ginaFormLiveCheckEnabled && localRule) {
+            // with local rule (or, #B884, named by a `_case_` condition)
+            // was: if ( $form.target.dataset.ginaFormLiveCheckEnabled && localRule)
+            if ( $form.target.dataset.ginaFormLiveCheckEnabled && (localRule || isCaseTarget) ) {
 
                 var eventsList = [], _evt = null, _e = 0;
                 if ( !/^(radio|checkbox)$/i.test($el.type) ) {
@@ -21635,8 +21686,11 @@ function ValidatorPlugin(rules, data, formId, culture) {
      *    .getFormById('my-form-id')
      *    .reBind();
      *
-     * @param {string} [formId]
-     * @param {string} [rules]
+     * @param {string} [formId] - ignored when called as a handle method (`$forms[id].reBind()`)
+     * @param {string|object} [rules] - a rule-set name (dot or slash path) or a rule object, applied
+     *  whenever it is given (#B802: it used to apply only once some validation on the page had found
+     *  an error). Without it, the form is re-bound with the rule set a no-rule bind resolves:
+     *  `data-gina-form-rule`, then the form's id (#B879).
      * @param {callback} [cb]
      */
     var reBindForm = function(formId, rules, cb) {
@@ -21663,7 +21717,11 @@ function ValidatorPlugin(rules, data, formId, culture) {
         // Unbind form
         unbindForm($form.target);
         // Bind
-        if ( typeof(rule) != 'undefined' ) {
+        // #B802 — test the `rules` argument. `rule` named no variable in scope: it read a GLOBAL that
+        // the validator leaked on its first validation error (#B880), so the rules handed in applied
+        // only after such an error.
+        // was: if ( typeof(rule) != 'undefined' )
+        if ( typeof(rules) != 'undefined' ) {
             bindForm($form.target, rules);
         } else {
             bindForm($form.target);
@@ -21771,7 +21829,9 @@ function ValidatorPlugin(rules, data, formId, culture) {
      * Handlers registered through `.on()` (the declarative `data-gina-form-event-on-*` hooks
      * included) are left in place — they belong to the form, and `destroy()` removes them.
      *
-     * @param {object} $target - the `<form>` element, or the form record (`$forms[id]`)
+     * @param {object} [$target] - the `<form>` element, or the form record (`$forms[id]`). Omitted
+     *  when called as a handle method (`$forms[id].unbind()`): the handle's own form is unbound
+     *  (#B881: that call threw before 0.7.5).
      *
      * @returns {object} $form - the record, `binded` false
      *
@@ -21783,6 +21843,19 @@ function ValidatorPlugin(rules, data, formId, culture) {
         var $form   = null
             , _id   = null
         ;
+
+        // #B881 — called as a handle method with no argument (`$forms[id].unbind()`), unbind the
+        // handle's own form, as bindForm and reBindForm do. It read `$target.getAttribute` on
+        // undefined and threw « could not unbind form `undefined` ».
+        if (
+            typeof($target) == 'undefined'
+            && this
+            && typeof(this.target) != 'undefined'
+            && this.target
+            && /FORM/i.test(this.target.tagName)
+        ) {
+            $target = this.target;
+        }
 
         try {
             if ( $target.getAttribute && $target.getAttribute('id') ) {
@@ -21796,7 +21869,10 @@ function ValidatorPlugin(rules, data, formId, culture) {
                 $form = $target;
                 _id = ( $target.getAttribute && $target.getAttribute('id') ) ? $form.getAttribute('id') : $form.id;
             } else {
-                throw new Error('Validator::unbindForm($target): `$target` must be a DOM element\n'+err.stack )
+                // #B881 — no `err` exists in this branch: the old message raised a ReferenceError
+                // that the catch below rewrapped.
+                // was: throw new Error('Validator::unbindForm($target): `$target` must be a DOM element\n'+err.stack )
+                throw new Error('Validator::unbindForm($target): `$target` must be a DOM element')
             }
         } catch(err) {
             throw new Error('Validator::unbindForm($target) could not unbind form `'+ $target +'`\n'+err.stack )
@@ -26737,7 +26813,11 @@ function ValidatorPlugin(rules, data, formId, culture) {
                 var errors = d['getErrors']();
                 // adding data attribute to handle display refresh
                 for (var field in errors) {
-                    for (rule in errors[field]) {
+                    // #B880 — declared: the undeclared loop variable wrote a GLOBAL `rule` (sloppy
+                    // mode) on the first validation that found an error, which reBindForm then read
+                    // (#B802). Block-scoped, it shadows nothing else in forEachField.
+                    // was: for (rule in errors[field])
+                    for (let rule in errors[field]) {
                         if (!fieldErrorsAttributes[field]) {
                             fieldErrorsAttributes[field] = ''
                         }

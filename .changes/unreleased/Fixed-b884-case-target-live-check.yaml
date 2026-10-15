@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'A field with no rule of its own that a `_case_` condition makes required (for example `company`, required only when `kind` is `pro`) is live-checked. The validator wired a live listener only on a field with rules of its own, so once the condition applied, typing into such a field never re-checked the form: the submit control kept its gated mark and the click on it was refused. A field that a `_case_` condition names is now wired when the form is bound; until its condition applies, only the whole-form check runs for it. Browser-bundled: restart the bundle and rebuild your bundles (`gina bundle:build`) to pick it up. (#B884)'
+time: 2026-10-15T16:16:14+01:00

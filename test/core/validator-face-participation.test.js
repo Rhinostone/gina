@@ -246,8 +246,9 @@ describe('#CC2 registerForLiveChecking decisions — replica (+ subtract)', func
         return ( /^textarea$/i.test(tagName) ) ? true : isCustomEl(tagName);
     }
     // addLiveForInput enters its live-check body when the type matches OR isOtherTagAllowed
+    // (#B886 added tel, url, search and the date/time family to the type allowlist)
     function addLiveEntersBody(elType, isOtherTagAllowed) {
-        var typeMatch = /^(radio|checkbox|text|hidden|password|number|date|email)$/i.test(elType);
+        var typeMatch = /^(radio|checkbox|text|hidden|password|number|date|email|tel|url|search|time|datetime-local|month|week)$/i.test(elType);
         return ( typeMatch || isOtherTagAllowed );
     }
 

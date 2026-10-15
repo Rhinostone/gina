@@ -1,0 +1,3 @@
+kind: Fixed
+body: '`tel`, `url`, `search`, `time`, `datetime-local`, `month` and `week` fields are live-checked like `text` fields. The live check was wired only on radio, checkbox, text, hidden, password, number, date and email inputs, so typing into a required `<input type="tel">` never re-checked the form: the submit control kept its gated mark and the click on it was refused. `range` and `color` inputs are still not live-checked. Browser-bundled: restart the bundle and rebuild your bundles (`gina bundle:build`) to pick it up. (#B886)'
+time: 2026-10-15T16:16:14+01:00

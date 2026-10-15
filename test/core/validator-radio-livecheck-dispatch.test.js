@@ -101,6 +101,11 @@ var addLiveSrc      = extractFunctionExpression(mainSrc, ADD_LIVE_DECL);
 var changeProxySrc  = extractFunctionExpression(mainSrc, CHANGE_PROXY_DECL);
 var clickProxySrc   = extractFunctionExpression(mainSrc, CLICK_PROXY_DECL);
 var updateRadioSrc  = extractFunctionExpression(mainSrc, UPDATE_RADIO_DECL);
+// #B884 — addLiveForInput's closure gained the `isCaseConditionTarget` helper (a rule-less field
+// that a `_case_` condition names gets its live listener). Its REAL bytes are extracted the same
+// way and handed to the §04 harness, so the rule-less arm keeps driving shipped code.
+var CASE_TARGET_DECL = 'var isCaseConditionTarget = function(rules, field) {';
+var caseTargetSrc    = extractFunctionExpression(mainSrc, CASE_TARGET_DECL);
 
 var addLiveActive     = activeLines(addLiveSrc);
 var changeProxyActive = activeLines(changeProxySrc);
@@ -235,8 +240,10 @@ describe('#B228 §04 registration behavior (extracted addLiveForInput)', functio
             disabled: false,
             form: { getAttribute: function () { return formId; } }
         };
+        // #B884 — the real helper, built from its extracted bytes (it reads only its arguments)
+        var isCaseConditionTarget = new Function('return (' + caseTargetSrc.replace(/^var isCaseConditionTarget\s*=\s*/, '') + ');')();
         var fn = new Function(
-            'instance', 'gina', 'addListener', 'addEventListener', 'checkForRuleAlias', 'console',
+            'instance', 'gina', 'addListener', 'addEventListener', 'checkForRuleAlias', 'console', 'isCaseConditionTarget',
             'return (' + addLiveSrc.replace(/^var addLiveForInput\s*=\s*/, '') + ');'
         )(
             instanceStub,
@@ -244,7 +251,8 @@ describe('#B228 §04 registration behavior (extracted addLiveForInput)', functio
             function (g, el, evts) { calls.addListener.push(Array.isArray(evts) ? evts.slice() : [evts]); },
             function (g, el, evt) { calls.addEventListener.push(evt); },
             function () {},
-            console
+            console,
+            isCaseConditionTarget
         );
         fn($form, $el, null, false);
         return calls;

@@ -68,6 +68,9 @@
  *                                         nested-preview JSON, /upload-save and /upload-unstage
  *                                         acknowledge, /upload-tmp/*.png serves a 1x1 PNG)
  *   GET /js/gina.onload.b459.js        -> built onload with the b459 rules whisper
+ *   GET /js/gina.onload.b884.js        -> built onload with the validator-client-cluster rules
+ *                                         whisper (#B884 / #B880 / #B802 / #B886; the spec
+ *                                         builds its pages through /x76-page, same /ac-sink)
  *   GET /link-gate                     -> fixtures/link-disabled-gate.html (#B310
  *                                         link disabled-gate harness; same sink)
  *   GET /link-shared                   -> fixtures/link-same-url.html (#B287
@@ -243,6 +246,18 @@ const B510_FORMS_JSON = JSON.stringify({ rules: {
 const B459_FORMS_JSON = JSON.stringify({ rules: {
     b459form:     { title: { isRequired: true } },
     b459declared: { title: { isRequired: true } }
+} });
+
+// #B884 / #B880 / #B802 / #B886 — the forms whisper of the validator client-cluster spec
+// (test/e2e/validator-client-cluster-b884.spec.js). `caseform`'s `extra` carries NO rule of its
+// own: it becomes required only through `_case_kind` (#B884). `otherform` is the rule set a
+// reBind() argument names (#B802). `telform` puts the required field in an input whose type the
+// live check used to skip (#B886); the spec sets that type on the page.
+const B884_FORMS_JSON = JSON.stringify({ rules: {
+    acform:    { ref: { isRequired: true } },
+    caseform:  { ref: { isRequired: true }, _case_kind: { conditions: [{ case: 'b', rules: { extra: { isRequired: true } } }] } },
+    otherform: { note: { isRequired: true } },
+    telform:   { phone: { isRequired: true } }
 } });
 // The staging answer the client consumes (guide: `files[]` entries; the NESTED
 // `preview` object is the app-provided variant the client renders from `preview.tmpUri`).
@@ -451,6 +466,11 @@ const server = http.createServer(function (req, res) {
         if (url === '/hidden-first' || url === '/hidden-first.html') {
             return send(res, 200, 'text/html; charset=utf-8',
                 fs.readFileSync(path.join(FIXTURES, 'validator-hidden-first.html')));
+        }
+        // #B884 — the validator client-cluster spec builds its pages itself (/x76-page); this is
+        // its rules whisper. Its submits go to /ac-sink.
+        if (url === '/js/gina.onload.b884.js') {
+            return send(res, 200, 'application/javascript; charset=utf-8', renderOnload(B884_FORMS_JSON));
         }
         // #B459 — the staged-upload preview-fields fixture and its three endpoints.
         if (url === '/js/gina.onload.b459.js') {
