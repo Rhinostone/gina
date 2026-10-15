@@ -62,8 +62,9 @@ MVC framework for Node.js and Bun with built-in HTTP/2, multi-bundle architectur
 npm install -g gina@latest --prefix=~/.npm-global   # or, on the Bun runtime: bun add -g gina
 gina project:add @myproject --path=$(pwd)/myproject
 gina bundle:add api @myproject
+gina start
 gina bundle:start api @myproject
-open https://localhost:3100
+open http://localhost:3100
 ```
 
 > **npm 12+** blocks install scripts by default, and gina's post-install bootstraps `~/.gina` and the framework dependencies. Install with `npm install -g gina@latest --allow-scripts=gina`, or allow it once for all global installs with `npm config set allow-scripts=gina --location=user`. (Not needed on npm ≤ 11.)
