@@ -159,7 +159,8 @@ function List(opt, cmd) {
             let jsonProject  = { project: list[p], status: 'ok' }
             try {
                 path = projects[list[p]].path;
-                bundles = require( _(path +'/manifest.json')).bundles;
+                var manifestFile = _(path +'/manifest.json', true);
+                bundles = parseJSONWithComments(fs.readFileSync(manifestFile, 'utf8'), manifestFile).bundles;   // #B891
                 bundles = orderBundles(bundles);
 
                 str += '------------------------------------\n\r';
@@ -226,7 +227,8 @@ function List(opt, cmd) {
      */
     var listProjectOnly = function () {
         var path = self.projects[self.projectName].path
-            , bundles = require( _(path +'/manifest.json')).bundles
+            , manifestFile = _(path +'/manifest.json', true)
+            , bundles = parseJSONWithComments(fs.readFileSync(manifestFile, 'utf8'), manifestFile).bundles   // #B891
             , b
             , str = ''
             , json = []

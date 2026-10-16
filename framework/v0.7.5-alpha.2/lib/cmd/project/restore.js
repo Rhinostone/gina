@@ -213,7 +213,7 @@ function Restore(opt, cmd) {
             // allocate ports for each bundle by importing its already-extracted source
             var bundles = [];
             try {
-                var manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+                var manifest = parseJSONWithComments(fs.readFileSync(manifestPath, 'utf8'), manifestPath);   // #B891
                 bundles = (manifest && manifest.bundles) ? Object.keys(manifest.bundles) : [];
             } catch (e) { bundles = []; }
 

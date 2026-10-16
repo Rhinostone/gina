@@ -182,6 +182,9 @@ declare global {
     /** Load a JSON file with comment stripping. */
     function requireJSON(filename: string): any;
 
+    /** Parse JSON-with-comments text as requireJSON parses a file; throws an Error naming `filename` instead of exiting. */
+    function parseJSONWithComments(text: string, filename?: string): any;
+
     // -- Task helper --
 
     function run(cmdline: string | string[], opt?: object, cb?: (err: Error | null, result?: any) => void): EventEmitter & OnCompletable;

@@ -134,7 +134,7 @@ function Rename(opt, cmd) {
             self.projects[local.target].path = target;
 
             if ( fs.existsSync( _(target +'/manifest.json') )) {
-                project = require(_(target +'/manifest.json'));
+                project = parseJSONWithComments(fs.readFileSync(_(target +'/manifest.json', true), 'utf8'), _(target +'/manifest.json', true));   // #B891
                 project['name'] = local.target;
                 lib.generator.createFileFromDataSync(
                     project,

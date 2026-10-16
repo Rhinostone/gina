@@ -65,6 +65,38 @@ function stripBlockComments(s) {
     return out.join('');
 }
 
+/**
+ * Strip `// ...` line comments from a JSON-with-comments source, per line, on
+ * the leftmost `//` only. When that `//` is preceded by `:` (URL protocol),
+ * `"` (inside a string value), or `\` (escape), the entire line is treated as
+ * data and left alone — mirrors the original greedy-from-first-match heuristic
+ * so values like "http://host//:rest" round-trip unchanged. Shared by
+ * `requireJSON()` and `parseJSONWithComments()` (#B891).
+ *
+ * @private
+ * @param {string} jsonStr - the source, block comments already stripped
+ * @returns {string} the source with line comments removed
+ *
+ * @example
+ * stripLineComments('{\n  // a note\n  "url": "http://x/y"\n}')
+ * // → '{\n  \n  "url": "http://x/y"\n}'
+ */
+function stripLineComments(jsonStr) {
+    return jsonStr.split('\n').map(function(line) {
+        var idx = line.indexOf('//');
+        if (idx === -1) {
+            return line;
+        }
+        if (idx > 0) {
+            var prev = line.charAt(idx - 1);
+            if (prev === ':' || prev === '"' || prev === '\\') {
+                return line;
+            }
+        }
+        return line.substring(0, idx);
+    }).join('\n');
+}
+
 module.exports = function(){
 
     // `JSON.clone()` is a prototype defined in `GINA_DIR//lib/prototypes.json_clone`
@@ -127,24 +159,8 @@ module.exports = function(){
             jsonStr = stripBlockComments(jsonStr);
         }
 
-        // line style comments — per-line, leftmost `//` only. When the leftmost
-        // `//` on a line is preceded by `:` (URL protocol), `"` (inside a string
-        // value), or `\` (escape), the entire line is treated as data and left
-        // alone — mirrors the original greedy-from-first-match heuristic so
-        // values like "http://host//:rest" round-trip unchanged.
-        jsonStr = jsonStr.split('\n').map(function(line) {
-            var idx = line.indexOf('//');
-            if (idx === -1) {
-                return line;
-            }
-            if (idx > 0) {
-                var prev = line.charAt(idx - 1);
-                if (prev === ':' || prev === '"' || prev === '\\') {
-                    return line;
-                }
-            }
-            return line.substring(0, idx);
-        }).join('\n');
+        // line style comments — per-line, leftmost `//` only (stripLineComments)
+        jsonStr = stripLineComments(jsonStr);
 
         try {
             return JSON.parse(jsonStr)
@@ -180,6 +196,57 @@ module.exports = function(){
                 console.emerg(error.message);
                 process.exit(1);
             }
+            throw error;
+        }
+    };
+
+    /**
+     * Parse JSON-with-comments text the way `requireJSON()` parses a file —
+     * `//` line comments, `/* ... *\/` block comments when the text carries a
+     * `/**` docblock, and a trailing comma before `}`/`]` (with a warning) —
+     * but never exit the process: text that is still not JSON throws an Error
+     * whose message names `filename`. For readers whose failure must stay on
+     * their own error path: a CLI command, the framework daemon,
+     * `gina-container` (#B891, the readers of a project's `manifest.json`).
+     *
+     * @param {string} text - the JSON-with-comments source
+     * @param {string} [filename] - the file the text was read from, named in the error
+     * @returns {*} the parsed value
+     * @throws {Error} `could not parse \`<filename>\`: <reason>`, with the JSON
+     *   SyntaxError as its `cause`
+     *
+     * @example
+     * var file = root + '/manifest.json';
+     * var manifest = parseJSONWithComments(fs.readFileSync(file, 'utf8'), file);
+     * // a comment line in the file is ignored; a missing brace throws:
+     * // Error: could not parse `/path/to/manifest.json`: Expected ',' or '}' …
+     */
+    parseJSONWithComments = function(text, filename) {
+
+        var jsonStr = String(text);
+        var name    = ( typeof(filename) != 'undefined' && filename !== null ) ? filename : 'the given text';
+
+        if ( /\/\*\*/.test(jsonStr) ) {
+            jsonStr = stripBlockComments(jsonStr);
+        }
+        jsonStr = stripLineComments(jsonStr);
+
+        try {
+            return JSON.parse(jsonStr);
+        } catch (parseErr) {
+            // trailing comma tolerance, as in requireJSON()
+            var _stripped = jsonStr.replace(/,(\s*[\}\]])/g, '$1');
+            if (_stripped !== jsonStr) {
+                try {
+                    var _result = JSON.parse(_stripped);
+                    console.warn('[ parseJSONWithComments ] trailing comma in `'+ name +'` — parsed successfully but please fix the file');
+                    return _result;
+                } catch (_retryErr) {
+                    // report the original error below
+                }
+            }
+            var error = new Error('could not parse `'+ name +'`: '+ parseErr.message);
+            error.cause = parseErr;
             throw error;
         }
     };

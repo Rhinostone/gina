@@ -661,7 +661,10 @@ gna.getProjectConfiguration = function (callback){
     if ( fs.existsSync(modulesPackage) ) {
         try {
 
-            var dep = require(modulesPackage);
+            // #B891 — the same comment-tolerant parse as isBundleMounted's requireJSON
+            // (above), where plain require() refused a commented manifest and the boot
+            // died later on an undefined project
+            var dep = parseJSONWithComments(fs.readFileSync(modulesPackage, 'utf8'), modulesPackage);
             //console.log('ENV: ', env );
             //console.log('PROCESS: ', process.argv );
             //console.log(" now loading....", modulesPackage);

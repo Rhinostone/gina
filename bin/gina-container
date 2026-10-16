@@ -247,7 +247,8 @@ var scope = process.env.NODE_SCOPE || projectEntry['def_scope'];
 var appPath = null;
 var isDev   = (projectEntry['dev_env'] === env);
 try {
-    var manifest  = JSON.parse(fs.readFileSync(projectRoot + '/manifest.json', 'utf8'));
+    // #B891 — comments accepted, as every other reader of manifest.json accepts them
+    var manifest  = parseJSONWithComments(fs.readFileSync(projectRoot + '/manifest.json', 'utf8'), projectRoot + '/manifest.json');
     var bundlePkg = manifest.bundles[bundleName];
     if (!bundlePkg) {
         throw new Error('bundle `' + bundleName + '` not found in manifest.json');

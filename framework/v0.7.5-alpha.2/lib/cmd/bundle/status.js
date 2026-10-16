@@ -117,7 +117,8 @@ function Status(opt, cmd) {
         var existsInManifest = false;
         try {
             var path    = self.projects[projectName].path;
-            var bundles = require( _(path + '/manifest.json') ).bundles;
+            var manifestFile = _(path + '/manifest.json', true);
+            var bundles = parseJSONWithComments(fs.readFileSync(manifestFile, 'utf8'), manifestFile).bundles;   // #B891 — comments accepted, as requireJSON accepts them
             existsInManifest = ( typeof(bundles[bundle]) != 'undefined' );
         } catch (err) {
             existsInManifest = false;

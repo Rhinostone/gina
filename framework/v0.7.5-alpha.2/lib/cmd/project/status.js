@@ -104,7 +104,8 @@ function Status(opt, cmd) {
         var out   = [];
         var entry = self.projects[projectName];
         var path  = entry.path;
-        var bundles = require( _(path + '/manifest.json') ).bundles;
+        var manifestFile = _(path + '/manifest.json', true);
+        var bundles = parseJSONWithComments(fs.readFileSync(manifestFile, 'utf8'), manifestFile).bundles;   // #B891
         bundles = orderBundles(bundles);
 
         // Per-project framework version: the projects.json pin (v-prefixed,

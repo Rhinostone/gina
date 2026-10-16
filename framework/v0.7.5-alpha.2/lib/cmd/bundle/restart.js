@@ -366,7 +366,8 @@ function Restart(opt, cmd) {
 
         try {
             //This is mostly for dev.
-            var pkg = require( _(root + '/manifest.json') ).bundles;
+            var manifestFile = _(root + '/manifest.json', true);
+            var pkg = parseJSONWithComments(fs.readFileSync(manifestFile, 'utf8'), manifestFile).bundles;   // #B891
 
             if ( typeof(pkg[bundle].version) == 'undefined' && typeof(pkg[bundle].tag) != 'undefined') {
                 pkg[bundle].version = pkg[bundle].tag
