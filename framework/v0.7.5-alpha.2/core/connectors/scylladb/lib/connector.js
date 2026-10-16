@@ -43,15 +43,16 @@ var settleOnce   = require('./../../settle-once');
  *   }
  * }
  *
- * `keyspace` names both the logical model directory (`models/<keyspace>/entities/`)
- * and the CQL keyspace to connect to.
+ * `keyspace` names the CQL keyspace to connect to and, when the entry sets no
+ * `database`, the logical model directory (`models/<keyspace>/entities/`). An entry
+ * that sets both reads its models from `models/<database>/` (#B909).
  * `contactPoints` accepts either an array of `host:port` strings or a single
  * `host` + `port` pair (legacy schema parity). Default port is 9042.
  *
  * @class ScylladbConnector
  * @constructor
  * @param {object} conf                       - Connector config from connectors.json
- * @param {string} conf.keyspace              - CQL keyspace name (also used as model dir)
+ * @param {string} conf.keyspace              - CQL keyspace name (also the model dir when `database` is absent)
  * @param {string[]|string} [conf.contactPoints] - Array of `host:port` strings, or a single host
  * @param {string} [conf.host]                - Single host (legacy alias when contactPoints is absent)
  * @param {number|string} [conf.port]         - Single port (default: 9042)

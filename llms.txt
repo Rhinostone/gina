@@ -216,6 +216,7 @@ module.exports = UserEntity;
 - Entities extend EventEmitter (via EntitySuper).
 - Entity methods return a native Promise with `.onComplete(cb)` shim for backward compat.
 - `_scope` is set on every entity prototype by the connector from `connectors.json`.
+- The entity directory is `models/<database>/`, named by the entry's `database`; a ScyllaDB entry that sets only `keyspace` uses `models/<keyspace>/` (#B909, 0.7.5). Two entries resolving to one directory each attach their own entity classes, bound to their own connection.
 - `_arguments[trigger]` buffers results for late-binding listeners — cleared in dev mode per call. Buffer is unreachable in Option B (Promise path): connector trigger naming mismatch + `_callbacks` array check prevent `setListener` from firing. Dead consumption code removed (#M5); defensive unconditional clear at Option B entry.
 - Dependency injection: `new MyEntity(conn, caller, { connector: mockConn })` for tests.
 

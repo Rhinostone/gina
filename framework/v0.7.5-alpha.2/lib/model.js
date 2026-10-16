@@ -325,6 +325,31 @@ function ModelUtil() {
     }
 
 
+    /**
+     * Builds the models at boot: one `core/model` Model per connectors.json entry,
+     * then, once every entry of the bundle is connected, the entity classes each
+     * entry's connector factory returns, attached to that entry's model.
+     *
+     * Each factory receives `{ model, bundle, database, scope }`: `model` is the
+     * entry key, and `database` is the entry's `database`, or its `keyspace` when it
+     * sets none (#B909), since the factory reads the entities from
+     * `models/<database>/`. A failure while the models are built ends the boot
+     * (#B617).
+     *
+     * @param {string[]} bundles - the bundles of this process, the starting one first
+     * @param {object} configuration - per bundle and env: `configuration[bundle][env]`,
+     *   whose `content.connectors` holds the entries
+     * @param {string} env - the env whose configuration is read
+     * @param {function} cb - called once, when the models of the first bundle that has
+     *   connectors.json entries are built; a bundle with none passes on to the next,
+     *   and the bundles after the first one with entries are not loaded (#B910)
+     * @returns {void}
+     *
+     * @example
+     * modelUtil.loadAllModels(conf.bundles, config.getInstance(), env, function() {
+     *     // getModel('<entry key>') now carries that entry's entities
+     * });
+     */
     this.loadAllModels = function(bundles, configuration, env, cb) {
 
         var loadModel = function(b, bundles, configuration, env, cb) {
@@ -408,7 +433,11 @@ function ModelUtil() {
                                 connectorPath   = _(GINA_FRAMEWORK_DIR + '/core/connectors/' + conf.content['connectors'][name].connector);
                                 //Getting Entities Manager thru connector.
                                 //entitiesManager = new require( _(modelPath + '/index.js', true) )(conn)[name](conn, { model: name, bundle: bundle, database: conf.content['connectors'][name].database });
-                                entitiesManager = require( _(connectorPath + '/index.js', true) )(conn, { model: name, bundle: bundle, database: conf.content['connectors'][name].database, scope: conf.content['connectors'][name].scope });
+                                // #B909 — `database` names the directory the factory reads the entities
+                                // from (`models/<database>/`). An entry that sets no `database` names it
+                                // with its `keyspace`, as every ScyllaDB example in the guides does; an
+                                // entry that sets `database` keeps it, also alongside `keyspace`.
+                                entitiesManager = require( _(connectorPath + '/index.js', true) )(conn, { model: name, bundle: bundle, database: conf.content['connectors'][name].database || conf.content['connectors'][name].keyspace, scope: conf.content['connectors'][name].scope });
 
                                 self.setConnection(bundle, name, conn);
 
@@ -565,7 +594,9 @@ function ModelUtil() {
      *
      * Each connector factory receives the same `{ model, bundle, database, scope }`
      * infos as at boot. #B624: the reload used to omit `scope`, so a connector whose
-     * entry declares one fell back to `NODE_SCOPE` after a reload.
+     * entry declares one fell back to `NODE_SCOPE` after a reload. #B909: `database`
+     * is the entry's `database`, or its `keyspace` when it sets none, since the
+     * factory reads the entities from `models/<database>/`.
      *
      * @param {object} conf - the bundle's env conf: `conf.content.connectors` and `conf.modelsPath`
      * @param {function(Error|false)} cb - receives `false` once the rebuild completes. A
@@ -616,7 +647,8 @@ function ModelUtil() {
                     try {
                         //entitiesManager = new require( _(conf.modelsPath + '/index.js', true) )(conn)[name](conn, { model: name, bundle: bundle, database: conf.content['connectors'][name].database });
                         // #B624 — the same infos as the boot call in loadAllModels' done(), scope included.
-                        entitiesManager = require( _(connectorPath + '/index.js', true) )(conn, { model: name, bundle: bundle, database: conf.content['connectors'][name].database, scope: conf.content['connectors'][name].scope });
+                        // #B909 — and the same `database`: the entry's `keyspace` when it sets none.
+                        entitiesManager = require( _(connectorPath + '/index.js', true) )(conn, { model: name, bundle: bundle, database: conf.content['connectors'][name].database || conf.content['connectors'][name].keyspace, scope: conf.content['connectors'][name].scope });
                     } catch (err) {
                         cb(err)
                     }
