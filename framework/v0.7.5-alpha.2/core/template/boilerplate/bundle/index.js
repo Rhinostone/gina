@@ -17,8 +17,10 @@ var ${bundle} = require('gina');
 // Do whatever things you need to do before server starts
 // e.g.: register session, set a shared path for your template engine ...
 // This is mostly pre-start configuration
+// `self` is the gina instance. It is set before the callback because a bundle named
+// `event`, `app` or `express` would otherwise get the callback parameter of that name.
+//var self = ${bundle};
 //${bundle}.onInitialize( function(event, app, express){//
-//    var self = ${bundle};
 //    // getting config/app.json would be: self.getConfig('app')
 //    // or self.getConfig().app
 //    var conf = self.getConfig();
