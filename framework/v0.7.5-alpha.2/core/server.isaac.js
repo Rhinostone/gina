@@ -728,7 +728,7 @@ function ServerEngineClass(options) {
                 cert: readSync(options.credentials.certificate)
             };
         } catch(err) {
-            var _credMsg = 'You are trying to start a secured server (https) wihtout suficient credentials: check your `server settings`\n'+ err.stack;
+            var _credMsg = 'You are trying to start a secured server (https) without sufficient credentials: check your `server settings`\n'+ err.stack;
             console.emerg(_credMsg);
             // Guarantee the reason survives process.exit() on an async pipe (e.g. bin/gina-container).
             try { fs.writeSync(2, _credMsg + '\n'); } catch (_e) { /* best-effort */ }
