@@ -3206,6 +3206,26 @@ function Config(opt, contextResetNeeded) {
             conf[bundle][env].content = {}
         }
 
+        // #B900 — a connectors.json entry with no `connector` field whose key names a
+        // built-in connector type takes that type (`"sqlite": { … }` is a SQLite entry):
+        // the convention `connector:add` writes, `connector:list` shows and the schema
+        // states. Before 0.7.5 the model layer read only `connector`, so such an entry
+        // stopped the boot with « No connector found ». Every runtime reader of the
+        // field (the model layer, the job / storage / kv / render-cache / audit / session
+        // store dispatchers, the rate-limit, idempotency and maintenance redis checks)
+        // reads this object, so it is filled here once, on the first load and on
+        // refresh(); a set `connector` always wins.
+        var keyTyped = lib.connectorConfig.applyKeyTypes(
+            conf[bundle][env].content.connectors,
+            lib.connectorRegistry.getDriverTypes().concat(['ai'])
+        );
+        if (keyTyped.length) {
+            console.debug(
+                '[CONFIG][loadBundleConfig] `' + bundle + '`: connector type taken from the key for connectors.json `'
+                + keyTyped.join('`, `') + '`'
+            );
+        }
+
         // #B257 — re-point the `.settings` alias at the POST-substitution copy.
         // `whisper()` above returns a NEW object instead of mutating in place: a plain
         // object's constructor stringifies to '... [native code] ...', so whisper's

@@ -14,7 +14,7 @@
       "properties": {
         "connector": {
           "type": "string",
-          "description": "Connector driver type. Required when the key name does not match a built-in connector name (e.g. key \"session\" with connector \"redis\").",
+          "description": "Connector driver type. Required when the key name does not match a built-in connector name (e.g. key \"session\" with connector \"redis\"). The fallback to the key name needs gina 0.7.5 or later; earlier versions need the field on every entry.",
           "enum": ["couchbase", "mysql", "postgresql", "sqlite", "redis", "ai", "scylladb", "mongodb", "duckdb"]
         },
         "version": {

@@ -29,6 +29,10 @@
  * argument, recursing into nested objects — without poisoning the `requireJSON`
  * cache the parsed JSON came from.
  *
+ * {@link applyKeyTypes} is the one helper the runtime also uses: `core/config.js`
+ * calls it at boot to give a type to entries keyed by their connector type
+ * (#B900).
+ *
  * @example
  * var cfg    = lib.connectorConfig;
  * var shared = requireJSON(_(project.path + '/shared/config/connectors.json', true));
@@ -196,7 +200,54 @@ function isAIConnector(entry, key) {
     return !!(isPlainObject(entry) && ((entry.connector || key) === 'ai'));
 }
 
+/**
+ * Give a connector type to every entry of a `connectors.json` map that names
+ * none, when the entry's key is itself a connector type: `"sqlite": { … }` is
+ * read as `"sqlite": { "connector": "sqlite", … }`. This is the convention
+ * `connector:add` writes (it leaves `connector` out when the name equals the
+ * type), `connector:list` displays and the connectors schema states; the
+ * runtime applies it once, in `core/config.js`, where a bundle's merged
+ * connectors are finalised (#B900).
+ *
+ * An entry whose `connector` is set keeps it, even when its key names another
+ * type. An entry whose key names no type is left alone, and the model layer
+ * still stops the boot on it with « No connector found ». "Names none" is the
+ * CLI's own test, `entry.connector || key`: an empty or `null` field counts as
+ * absent. Only own keys holding plain objects are considered, so `$schema` and
+ * malformed values are skipped. The map is updated in place.
+ *
+ * @memberof module:gina/lib/connector-config
+ * @function applyKeyTypes
+ * @param {*} connectors - The merged `connectors.json` map (updated in place).
+ * @param {string[]} types - The built-in connector types. The runtime passes
+ *                           `lib.connectorRegistry.getDriverTypes()` plus `'ai'`.
+ * @returns {string[]} The keys whose entry took its type from its key, in key
+ *                     order; empty when none did or when an argument is malformed.
+ *
+ * @example
+ * var connectors = { sqlite: { database: 'app' }, myDb: { database: 'x' } };
+ * applyKeyTypes(connectors, ['sqlite', 'redis', 'ai']); // ['sqlite']
+ * connectors.sqlite.connector;                           // 'sqlite'
+ * 'connector' in connectors.myDb;                        // false
+ * applyKeyTypes({ redis: { connector: 'sqlite' } }, ['redis', 'sqlite']); // [] (the field wins)
+ */
+function applyKeyTypes(connectors, types) {
+    var applied = [];
+    if (!isPlainObject(connectors) || !Array.isArray(types)) {
+        return applied;
+    }
+    for (var key in connectors) {
+        if (!Object.prototype.hasOwnProperty.call(connectors, key)) { continue; }
+        var entry = connectors[key];
+        if (!isPlainObject(entry) || entry.connector || types.indexOf(key) === -1) { continue; }
+        entry.connector = key;
+        applied.push(key);
+    }
+    return applied;
+}
+
 module.exports = {
     resolve: resolve,
-    isAIConnector: isAIConnector
+    isAIConnector: isAIConnector,
+    applyKeyTypes: applyKeyTypes
 };

@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'A `connectors.json` entry without a `connector` field now takes its type from its key when the key is a built-in connector type (`couchbase`, `mongodb`, `mysql`, `postgresql`, `sqlite`, `redis`, `scylladb`, `duckdb` or `ai`), as `gina connector:add`, `connector:list`, the connectors schema and the connectors reference already assumed. Such an entry, which `gina connector:add <type>` has written since 0.3.7, stopped the bundle at boot with `[MODEL][<name>] No connector found`. A `connector` you set always wins, and an entry whose key names no type still needs the field. Restart the bundle. (#B900)'
+time: 2026-10-16T13:15:23+01:00
