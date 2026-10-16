@@ -212,10 +212,10 @@ function readConfigJSON(file) {
  * filenames at boot and attaches it to the entity prototype
  * (`core/connectors/sqlite/index.js`).
  *
- * `database` deliberately equals the entry key: two independent code paths
- * auto-create the models dir — one from the entry key (`core/model/index.js`),
- * one from `database` (`core/connectors/sqlite/index.js`) — so a mismatch
- * silently creates two directories and the SQL is loaded into neither.
+ * `database` deliberately equals the entry key: the fixture writes its model
+ * files under `models/<DB_ENTRY>/`, and the SQLite connector reads them from
+ * `models/<database>/` (`core/connectors/sqlite/index.js`), so the two must
+ * match for the entity and its `.sql` methods to be found.
  *
  * `file` is set explicitly rather than left to default (`~/.gina/<v>/<database>.sqlite`)
  * for three reasons: it exercises the `conf.file` branch a real deployment uses,

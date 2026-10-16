@@ -397,8 +397,6 @@ function ModelUtil() {
                         var conn                = null
                             , connectorPath     = null
                             , entitiesManager   = null
-                            , modelPath         = null
-                            , entitiesPath      = null
                             , entitiesObject    = null
                             , foundInitError    = false;
 
@@ -408,8 +406,6 @@ function ModelUtil() {
                             for (var name in self.models[bundle]) {//name as connector name
                                 conn            = self.models[bundle][name]['_connection'];
                                 connectorPath   = _(GINA_FRAMEWORK_DIR + '/core/connectors/' + conf.content['connectors'][name].connector);
-                                modelPath       = _(conf.modelsPath + '/' + name);
-                                entitiesPath    = _(modelPath + '/entities');
                                 //Getting Entities Manager thru connector.
                                 //entitiesManager = new require( _(modelPath + '/index.js', true) )(conn)[name](conn, { model: name, bundle: bundle, database: conf.content['connectors'][name].database });
                                 entitiesManager = require( _(connectorPath + '/index.js', true) )(conn, { model: name, bundle: bundle, database: conf.content['connectors'][name].database, scope: conf.content['connectors'][name].scope });
@@ -591,8 +587,6 @@ function ModelUtil() {
                 , foundInitError    = false
                 , connectorPath     = null
                 , entitiesManager   = null
-                , modelPath         = null
-                , entitiesPath      = null
                 , modelConnectors   = null;
 
 
@@ -616,8 +610,6 @@ function ModelUtil() {
                     conn            = getContext('modelConnectors')[bundle][name].conn;
                     // #B10 fix: conf.connectorsPath is never populated by config.js — use GINA_FRAMEWORK_DIR directly.
                     connectorPath   = _(GINA_FRAMEWORK_DIR + '/core/connectors/' + conf.content['connectors'][name].connector);
-                    modelPath       = _(conf.modelsPath + '/' + name);
-                    entitiesPath    = _(modelPath + '/entities');
 
                     //Getting Entities Manager thru connector.
                     delete require.cache[require.resolve(_(connectorPath + '/index.js', true))];//child

@@ -46,8 +46,6 @@ function Model(namespace, _config) {
     this.i = 0;
     var local = {
         connectorPath: null,
-        modelPath: null,
-        entitiesPath: null,
         connection: null,
         files: {},
         toReload: [],
@@ -67,7 +65,7 @@ function Model(namespace, _config) {
         }
 
         var model, namespace = namespace.split(/\//g);
-        _connector = namespace[1];//Has to be writtien the same for the connetors.json decalration or for the model folder
+        _connector = namespace[1];// the connectors.json entry key; the model folder is named by the entry's `database` (#B901)
         var bundle = namespace[0];
         namespace.shift();
         //Capitalize - Normalize
@@ -102,17 +100,21 @@ function Model(namespace, _config) {
     }
 
     /**
-     * Init
+     * Init — reads the entry's configuration, creates the bundle's models root when
+     * it is missing, then loads the entry's connector and emits `model#ready`.
      *
-     * @param {string} namesapce
+     * It creates no directory per entry (#B901): each ORM connector factory creates
+     * and reads `models/<database>/entities` itself.
      *
+     * @inner
      * @private
+     * @param {function} [reload] - Passed by `reload()`; not read
+     * @returns {Model} self
      * */
     var init = function(reload) {
 
         var bundle          = self.bundle;
         var model           = self.model;
-        var modelDirName    = self.modelDirName;
         var connectorPath   = null;
 
         // this is supposed to happen on load or for dev env; on reload, with a checksum
@@ -128,12 +130,17 @@ function Model(namespace, _config) {
 
             //For now, I just need the F..ing entity name.
             connectorPath       = local.connectorPath = _(GINA_FRAMEWORK_DIR +'/core/connectors/'+ self.connector);
-            var modelPath       = local.modelPath = _(conf.path + '/' + modelDirName);
-            var entitiesPath    = local.entitiesPath = _(modelPath + '/entities');
-            console.debug('[MODEL][' + model +'] Scanning model entities: ', entitiesPath +' - Existing path ? '+ fs.existsSync(entitiesPath) );
-            if (!fs.existsSync(entitiesPath)) {
-                //fs.mkdirSync(entitiesPath) // creating empty path
-                new _(entitiesPath).mkdirSync();
+            // #B901 — an entry's entities are read by its connector's factory, from
+            // `models/<database>/entities`, which the factory creates when missing; the
+            // redis and ai connectors read no directory. This used to create
+            // `models/<entry key>/entities` as well, a directory nothing reads, so an
+            // entry named differently from its database, or one with no models, left an
+            // empty one behind. Only the models root is kept: the Couchbase reconnect
+            // checks that it exists before it reloads the models (connector.v4.js,
+            // connector.v3.js).
+            var modelsPath      = _(conf.path);
+            if ( !fs.existsSync(modelsPath) ) {
+                new _(modelsPath).mkdirSync();
             }
 
             connectorPath   = _(connectorPath + '/lib/connector.js');

@@ -75,10 +75,9 @@ describe('02 - sqlite fixture: connectors.json', function () {
     });
 
     it('sets `database` EQUAL to the entry key', function () {
-        // Two independent code paths auto-create the models dir — one from the
-        // entry key (core/model/index.js), one from `database`
-        // (core/connectors/sqlite/index.js). A mismatch silently creates two
-        // directories and the SQL is loaded into neither.
+        // The fixture writes its model files under models/<DB_ENTRY>/, and the
+        // SQLite connector reads them from models/<database>/
+        // (core/connectors/sqlite/index.js), so the two must match.
         assert.equal(entry.database, CONT.DB_ENTRY);
     });
 
