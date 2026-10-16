@@ -29,6 +29,7 @@
  *   GINA_SHUTDOWN_TIMEOUT — graceful drain window in ms (default: 10000)
  *   NODE_ENV              — override project def_env
  *   NODE_SCOPE            — override project def_scope
+ *   GINA_HOMEDIR          — the ~/.gina root (default: HOME/.gina), as bin/gina-init reads it
  *   GINA_LOG_STDOUT       — container logging preset. Applied as `true` by this
  *                           launcher when unset (JSON lines, MQ transport skipped —
  *                           see step 0b). Set it to `false` to keep the transport.
@@ -104,9 +105,14 @@ shortVersion.splice(2);
 shortVersion = shortVersion.join('.');
 
 // ── 2. Read ~/.gina/<shortVersion>/settings.json ──────────────────────────────
+// #B895 — the home is GINA_HOMEDIR when the environment sets it, as bin/gina-init
+// writes it. getEnvVar() reads `process.gina` only, and this launcher never imports
+// the environment into it, so a GINA_HOMEDIR given to the container was ignored:
+// the launcher read HOME/.gina and stopped on « projects.json not found ». The
+// value reaches the bundle through `process.gina` (step 7).
 var home = getUserHome(); // jshint ignore:line
 if (typeof(getEnvVar('GINA_HOMEDIR')) == 'undefined') { // jshint ignore:line
-    setEnvVar('GINA_HOMEDIR', home + '/.gina'); // jshint ignore:line
+    setEnvVar('GINA_HOMEDIR', process.env.GINA_HOMEDIR || (home + '/.gina')); // jshint ignore:line
 }
 home = getEnvVar('GINA_HOMEDIR'); // jshint ignore:line
 
