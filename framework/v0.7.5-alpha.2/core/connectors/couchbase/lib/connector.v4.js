@@ -152,7 +152,10 @@ function Connector(dbString) {
             if (!self.instance) self.instance = {};
             delete self.instance.reconnecting;
             self.instance.reconnected = self.instance.connected = false;
-            console.debug('[CONNECTOR][' + local.bundle +'] Scope is: '+ process.env.NODE_SCOPE );
+            // #B893 — this printed NODE_SCOPE as « Scope is: », which is not the data scope
+            // when the entry sets one; the factory logs each connector's data scope and its
+            // source when it loads (couchbase/index.js).
+            //console.debug('[CONNECTOR][' + local.bundle +'] Scope is: '+ process.env.NODE_SCOPE );
             console.debug('[CONNECTOR][' + local.bundle +'] Env is: '+ process.env.NODE_ENV );
             console.error('[CONNECTOR][' + local.bundle +'] Couchbase could not be reached !!\n'+ ( err.stack || err.message || err ) );
 
@@ -470,7 +473,12 @@ function Connector(dbString) {
     /**
      * init
      *
-     * @param {object} dbString
+     * Merges the connector's defaults into a COPY of the connectors.json entry and
+     * keeps that copy as `local.options` (#B893): the entry object, which the model
+     * layer shares and later reads `scope` from, is never changed. Then arms the boot
+     * readiness deadline (#B541) and connects.
+     *
+     * @param {object} dbString - the connectors.json entry (left unchanged)
      *
      * @contructor
      * */
@@ -480,7 +488,16 @@ function Connector(dbString) {
             console.debug('[CONNECTOR][' + local.bundle +'][' + dbString.connector +'][' + dbString.database +'] Checking dbString.host: '+ dbString.host);
             // console.debug('[CONNECTOR][' + local.bundle +'][' + dbString.connector +'][' + dbString.database +'] dbString:\n'+ JSON.stringify(dbString, null, 2));
             // console.debug('[CONNECTOR][' + local.bundle +'][' + dbString.connector +'][' + dbString.database +'] local.options:\n'+ JSON.stringify(local.options, null, 2));
-            dbString        = merge(dbString, local.options);
+            // #B893 — merge the defaults into a COPY of the entry. `dbString` is the
+            // connectors.json entry object the model layer shares (core/model/index.js
+            // passes `self.getConfig(_connector)`), and merge() writes into its first argument:
+            // the defaults — among them the SDK collections scope `scope: '_default'` —
+            // landed on that entry, and lib/model.js then handed its `scope` to the
+            // factory as the DATA scope, so an entry without `scope` scoped its entities
+            // to `_default` instead of NODE_SCOPE. The copy is shallow: the defaults are
+            // flat values.
+            //dbString        = merge(dbString, local.options);
+            dbString        = merge(Object.assign({}, dbString), local.options);
             local.options   = dbString;
 
             // #B541 — arm the boot readiness deadline.
@@ -545,7 +562,9 @@ function Connector(dbString) {
 
     /**
      * ping
-     * Heartbeat to keep connection alive
+     * Heartbeat to keep connection alive. When a tick finds the instance not
+     * connected, it reconnects with the connector's merged options
+     * (`local.options`, #B893).
      *
      * @param {string} interval
      * @callback cb
@@ -594,10 +613,16 @@ function Connector(dbString) {
 
                     self.instance.reconnected = false;
                     self.instance.reconnecting = true;
+                    // #B893 — reconnect with the connector's merged options. `dbString`
+                    // here is the constructor's argument, the connectors.json entry
+                    // itself: since init() merges into a copy it no longer carries the
+                    // defaults, and connect() would write `bucketName` into it.
                     if ( typeof(cb) != 'undefined' ) {
-                        self.connect(dbString, cb)
+                        //self.connect(dbString, cb)
+                        self.connect(local.options, cb)
                     } else {
-                        self.connect(dbString)
+                        //self.connect(dbString)
+                        self.connect(local.options)
                     }
 
                 } else {

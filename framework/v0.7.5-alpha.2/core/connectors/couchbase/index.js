@@ -18,8 +18,20 @@ var console         = lib.logger;
 /**
  * Couchbase Class
  *
+ * Builds a connector's entities from `models/<database>/entities` and its N1QL
+ * files. At load it resolves the connector's data scope once — the entry's
+ * `scope`, else NODE_SCOPE (`resolveScope()`, #B608) — and logs it with its
+ * source (#B893).
+ *
  * @package     Connectors.Couchbase
  * @author      Rhinostone
+ *
+ * @param {object} conn - the connected bucket (`sdk`, `_cluster`)
+ * @param {object} infos - `{ model, bundle, database, scope }`, as lib/model.js passes them
+ * @returns {object} the entities, keyed by class name
+ *
+ * @example
+ *   var entities = new Couchbase(conn, { model: 'db', bundle: 'api', database: 'db', scope: 'local' });
  */
 
 function Couchbase(conn, infos) {
@@ -1938,6 +1950,14 @@ function Couchbase(conn, infos) {
         try { fs.writeSync(2, _scopeMsg + '\n'); } catch (_e) { /* best-effort */ }
         process.exit(1);
     }
+
+    // #B893 — say which data scope this connector's entities use, and where it came
+    // from: an entry without `scope` falls back to NODE_SCOPE (until #B893 it silently
+    // took the SDK's `_default`, see connector.v{3,4}.js init()). Logged at every
+    // factory load: at boot, and again when a reconnect rebuilds the models.
+    console.info('[ CONNECTOR ][ couchbase ] connector [ ' + infos.model + ' ] of bundle [ '
+        + infos.bundle + ' ] data scope: `' + resolvedScope + '` (from '
+        + ( infos.scope ? 'connectors.json "scope"' : 'NODE_SCOPE' ) + ')');
 
     return init(conn, infos)
 }
