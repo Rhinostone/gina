@@ -102,11 +102,34 @@ function Start(opt, cmd) {
     }
 
     /**
+     * #B890 — the error this command reports for a project file it cannot use. Its message
+     * names the file and the reason (the reason names the path), and it carries no stack: the
+     * branches that report it print `err.stack` (isRealApp's callback, proceedToStart), and
+     * the frames of a fault the user fixes in that file would only bury the reason.
+     *
+     * @inner
+     * @private
+     * @param {string} name - the file's name as the message shows it (`manifest.json`)
+     * @param {Error} err - the read or parse error (parseJSONWithComments() names the file)
+     * @returns {Error} an Error whose message and stack are « <name> cannot be used: <reason> »
+     *
+     * @example
+     * cb(fileError('package.json', parseErr));
+     * // Error: package.json cannot be used: could not parse `/path/to/package.json`: …
+     */
+    var fileError = function(name, err) {
+        var e = new Error(name +' cannot be used: '+ err.message);
+        e.stack = e.message;
+        return e;
+    };
+
+    /**
      * Checks if the project's node_modules need to be reinstalled due to an arch/platform mismatch.
      * Reinstalls via `npm install` (or `bun install` under Bun) if needed, re-links
      * gina with this install's own `bin/gina framework:link`, run under the current
      * runtime from an argument vector without a shell (#B665), then calls cb(false)
-     * to proceed.
+     * to proceed. A project package.json that cannot be read or parsed calls cb() with
+     * « package.json cannot be used: <reason> » (#B890: requireJSON() ended the daemon).
      * @inner
      * @private
      * @param {object} opt
@@ -151,7 +174,12 @@ function Start(opt, cmd) {
         nodeModulesContentArr = newNodeModulesContentArr.slice();
         newNodeModulesContentArr = null;
 
-        var pack    = requireJSON(packagePath);
+        var pack    = null;
+        try {
+            pack = parseJSONWithComments(fs.readFileSync(packagePath, 'utf8'), packagePath);   // #B890 — requireJSON() ended the daemon on a malformed package.json
+        } catch (packErr) {
+            return cb(fileError('package.json', packErr));
+        }
         var scope   = process.env.NODE_SCOPE || self.defaultScope
         var env     = process.env.NODE_ENV || self.defaultEnv;
 
@@ -314,7 +342,12 @@ function Start(opt, cmd) {
         // terminal.debug('bundle -> ', bundle);
 
         var msg = null;
-        if ( !isBulkStart && !isDefined('bundle', bundle) ) {
+        // #B890 — a bundle the ports registry knows but the manifest does not declare (a
+        // manifest.json rewritten from the template after it went missing) is refused here
+        // too: the lines below read its manifest entry, and threw a TypeError on `def_env`
+        var isDeclared = !!( self.bundlesByProject[self.projectName] && typeof(self.bundlesByProject[self.projectName][bundle]) != 'undefined' );
+        // was: if ( !isBulkStart && !isDefined('bundle', bundle) ) {
+        if ( !isBulkStart && ( !isDefined('bundle', bundle) || !isDeclared ) ) {
             msg = 'Bundle [ '+ bundle +' ] is not registered inside `@'+ self.projectName +'`.\nDid you run `gina bundle:add '+ bundle +' @'+ self.projectName +'` first?';
             terminal.error(msg);
 
@@ -876,6 +909,9 @@ function Start(opt, cmd) {
 
     /**
      * Resolves the bundle's entry point path based on manifest and env, and verifies it exists.
+     * A manifest.json that cannot be read or parsed calls back with « manifest.json cannot be
+     * used: <reason> » (#B890: requireJSON() ended the daemon); loadAssets() has read the same
+     * file just before, so only a file changed in between reaches that branch.
      * @inner
      * @private
      * @param {string} bundle - Bundle name
@@ -893,9 +929,21 @@ function Start(opt, cmd) {
             , bundleInit    = null
         ;
 
+        // #B890 — read outside the try below: its catch falls back to `bundles/<bundle>`,
+        // a path that cannot boot, and requireJSON() ended the daemon before reaching it
+        var manifest        = null
+            , manifestFile  = _(root+ '/manifest.json', true)
+        ;
+        try {
+            manifest = parseJSONWithComments(fs.readFileSync(manifestFile, 'utf8'), manifestFile);
+        } catch (manifestErr) {
+            return callback(fileError('manifest.json', manifestErr));
+        }
+
         try {
             //This is mostly for dev.
-            var pkg = requireJSON( _(root+ '/manifest.json', true) ).bundles;
+            // was: var pkg = requireJSON( _(root+ '/manifest.json', true) ).bundles;
+            var pkg = manifest.bundles;
             if ( typeof(pkg[bundle].version) == 'undefined' && typeof(pkg[bundle].tag) != 'undefined') {
                 pkg[bundle].version = pkg[bundle].tag
             }

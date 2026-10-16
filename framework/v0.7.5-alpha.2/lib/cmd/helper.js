@@ -691,12 +691,63 @@ function CmdHelper(cmd, client, debug) {
     }
 
     /**
+     * #B890 — reads a project's JSON file (manifest.json, env.json) the way requireJSON()
+     * does, comments accepted, but never exits the process. loadAssets() runs inside the
+     * framework daemon for `bundle:start`, where requireJSON()'s `process.exit(1)` on an
+     * unreadable or malformed file ended the daemon (measured). The caller decides what a
+     * failure means.
+     *
+     * @inner
+     * @private
+     * @param {string} file - absolute path of the JSON file
+     * @returns {*} the parsed value
+     * @throws {Error} the read error, which names the path, or parseJSONWithComments()'s
+     *   « could not parse `<file>`: <reason> »
+     *
+     * @example
+     * var manifest = readProjectJSON(projectPath + '/manifest.json');
+     */
+    var readProjectJSON = function(file) {
+        return parseJSONWithComments(fs.readFileSync(file, 'utf8'), file);
+    };
+
+    /**
+     * #B890 — refuses the command because a file of the current project cannot be used:
+     * logs « <name> cannot be used: <reason> », then ends the command as the #B855 refusal
+     * in isCmdConfigured() does: online (`bundle:start`, inside the framework daemon) it ends
+     * only this client, with exit code 1 framed; offline it exits the process with code 1.
+     * The caller returns right after it.
+     *
+     * @inner
+     * @private
+     * @param {string} name - the file's name as the message shows it (`manifest.json`)
+     * @param {Error} err - the error readProjectJSON() threw
+     *
+     * @example
+     * try { cmd.envData = readProjectJSON(cmd.envPath); }
+     * catch (envErr) { return refuseProjectFile('env.json', envErr); }
+     */
+    var refuseProjectFile = function(name, err) {
+        var msg = name +' cannot be used: '+ err.message;
+        console.error(msg);
+        if ( client && client.ginaStatusFrames === true ) {
+            exit(msg);
+            return;
+        }
+        process.exit(1);
+    };
+
+    /**
      * Reads all framework config files (main.json, projects.json, manifest.json,
      * env.json, ports.json, ports.reverse.json) fresh from disk (no require cache).
      * Populates cmd with scopes, envs, protocols, schemes, port maps, and bundle lists.
      * A registered project whose directory exists but whose manifest.json is missing
      * (a stale ~/.gina/projects.json entry) is warned and skipped (#B24) rather than
-     * aborting the whole command.
+     * aborting the whole command; one whose manifest.json cannot be read or parsed is
+     * skipped the same way (#B890). The current project's manifest.json and env.json are
+     * read without requireJSON()'s `process.exit(1)`: a file that cannot be used refuses
+     * the command with « <file> cannot be used: <reason> » (refuseProjectFile()), which
+     * inside the framework daemon (`bundle:start`) ends only that client (#B890).
      * On `project:add`/`project:import`, the current project's bundle list is the
      * UNION of the manifest's declared bundles and the bundle directories found on
      * disk (#B375): declared entries are preserved as-is, disk-only bundles are
@@ -815,10 +866,18 @@ function CmdHelper(cmd, client, debug) {
                         contentFile,
                         _(cmd.projectManifestPath, true)
                     );
-                    cmd.projectData = requireJSON(cmd.projectManifestPath);
+                    try {
+                        cmd.projectData = readProjectJSON(cmd.projectManifestPath);   // #B890
+                    } catch (manifestErr) {
+                        return refuseProjectFile('manifest.json', manifestErr);
+                    }
                 }
             } else {
-                cmd.projectData = requireJSON(cmd.projectManifestPath);
+                try {
+                    cmd.projectData = readProjectJSON(cmd.projectManifestPath);   // #B890 — requireJSON() ended the daemon on an unreadable or malformed file
+                } catch (manifestErr) {
+                    return refuseProjectFile('manifest.json', manifestErr);
+                }
             }
 
             cmd.projectHomedir      = (
@@ -1026,7 +1085,11 @@ function CmdHelper(cmd, client, debug) {
                 delete require.cache[require.resolve(cmd.envPath)]
             }
             console.debug('[ ConfigAssetsLoaderHelper ] envPath ', cmd.envPath);
-            cmd.envData = requireJSON(cmd.envPath);
+            try {
+                cmd.envData = readProjectJSON(cmd.envPath);   // #B890 — a malformed env.json ended the daemon too
+            } catch (envErr) {
+                return refuseProjectFile('env.json', envErr);
+            }
 
             cmd.def_framework = ( typeof(cmd.projects[cmd.projectName].framework) != 'undefined' ) ? (cmd.projects[cmd.projectName].framework.replace(/^v/, '').split(/\./g)).join('.') : (cmd.mainConfig.def_framework.split(/\./g)).join('.');
             cmd.def_framework_short = ( typeof(cmd.projects[cmd.projectName].framework) != 'undefined' ) ? (cmd.projects[cmd.projectName].framework.replace(/^v/, '').split(/\./g).splice(0,2)).join('.') : (cmd.mainConfig.def_framework.split(/\./g).splice(0,2)).join('.');
@@ -1432,7 +1495,19 @@ function CmdHelper(cmd, client, debug) {
                     continue;
                 }
 
-                cmd.bundlesByProject[project]   = (cmd.bundlesByProject[project].count() > 0) ? cmd.bundlesByProject[project] : requireJSON(projectPropertiesPath).bundles;
+                // #B890 — every registered project's manifest is read here, so a malformed one in
+                // ANOTHER project ended the daemon during `bundle:start` (requireJSON() exits). It
+                // is skipped with an error line, as #B24 skips a missing one; the current project's
+                // own manifest was refused earlier in this function.
+                // was: cmd.bundlesByProject[project]   = (cmd.bundlesByProject[project].count() > 0) ? cmd.bundlesByProject[project] : requireJSON(projectPropertiesPath).bundles;
+                if ( cmd.bundlesByProject[project].count() == 0 ) {
+                    try {
+                        cmd.bundlesByProject[project] = readProjectJSON(projectPropertiesPath).bundles;
+                    } catch (manifestErr) {
+                        console.error('[ '+ project +' ] manifest.json cannot be used, the project is skipped: '+ manifestErr.message);
+                        continue;
+                    }
+                }
                 // #B375 — the "additional checks" block below (introduced 2023, absorbed into an
                 // automated version-bump commit, never revisited) compared each project's declared
                 // bundle COUNT against a readdir of `<project>/src` (else `/releases`) and, on ANY

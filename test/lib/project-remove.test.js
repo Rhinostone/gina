@@ -101,7 +101,10 @@ describe('01 - helper.js loadAssets: project:remove/:rm --force tolerates missin
         var loadAssetsIdx = helperSrc.indexOf('loadAssets = function');
         var nextFnIdx     = helperSrc.indexOf('\n    /**', loadAssetsIdx + 100);
         var region        = helperSrc.slice(loadAssetsIdx, nextFnIdx > -1 ? nextFnIdx : loadAssetsIdx + 4000);
-        var readCount     = (region.match(/cmd\.projectData\s*=\s*requireJSON\(cmd\.projectManifestPath\)/g) || []).length;
+        // #B890 — the reads go through readProjectJSON(), which never exits the process
+        // (requireJSON() ended the framework daemon on an unusable manifest); approved
+        // test change, 2026-10-16
+        var readCount     = (region.match(/cmd\.projectData\s*=\s*readProjectJSON\(cmd\.projectManifestPath\)/g) || []).length;
         // The refactored shape pulls L664 into both branches of the if/else
         // (recreate-then-read and exists-then-read). Stub branch does not read.
         assert.equal(readCount, 2, 'expected exactly 2 read sites — recreate-then-read + exists-then-read');
