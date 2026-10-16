@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'A DuckDB `connectors.json` entry that names neither `file` nor `database` now stops the boot: the bundle exits with code 1, and its log names the two keys the entry is missing. It used to open a database file `undefined.duckdb` in the gina home (`~/.gina` by default), or `.duckdb` for an entry with both keys set to empty strings, and the boot went on. Set `database` (it names the model directory and the default file `~/.gina/<database>.duckdb`) or `file` (a path, or `:memory:`); an empty string counts as absent. Data stored through such an entry by an earlier version is in that file: set the entry''s `file` to it before upgrading. Restart the bundle. (#B911)'
+time: 2026-10-16T22:49:20+01:00

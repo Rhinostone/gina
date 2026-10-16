@@ -31,7 +31,9 @@ var inherits     = lib.inherits;
  *
  * `database` names the logical model directory (`models/<database>/entities/`).
  * `file` is the actual DuckDB file path. Defaults to `~/.gina/{database}.duckdb`
- * when absent. Use `':memory:'` for an ephemeral in-process database.
+ * when absent. Use `':memory:'` for an ephemeral in-process database. An entry
+ * that names neither `file` nor `database` (an empty string counts as absent) is
+ * refused: `onReady()` reports the error, and the model layer ends the boot.
  * `readOnly` opens the database in read-only mode (driver `access_mode: 'READ_ONLY'`) —
  * writes are refused by the engine, and any number of read-only PROCESSES can share
  * one file. DuckDB is single-writer across processes: while one process holds a file
@@ -44,7 +46,7 @@ var inherits     = lib.inherits;
  * @class DuckdbConnector
  * @constructor
  * @param {object}  conf             - Connector config from connectors.json
- * @param {string}  conf.database    - Logical database name (models/ directory)
+ * @param {string}  [conf.database]  - Logical database name (models/ directory); required unless `file` is set
  * @param {string}  [conf.file]      - DuckDB file path (defaults to ~/.gina/{database}.duckdb; ':memory:' supported)
  * @param {boolean} [conf.readOnly]  - Open read-only (access_mode READ_ONLY; default false)
  */
@@ -53,7 +55,29 @@ function DuckdbConnector(conf) {
     var _err         = null;
     var _initPromise = null;
 
+    /**
+     * Opens the database the entry names, or records why it cannot: `_err` for a
+     * refused entry or a missing driver, `_initPromise` for the async open.
+     *
+     * @inner
+     * @param {object} conf - Connector config from connectors.json
+     * @returns {void}
+     */
     var init = function(conf) {
+        // #B911 — an entry that names neither `file` nor `database` has no file to
+        // open: the default path below would read `<gina home>/undefined.duckdb`, or
+        // `<gina home>/.duckdb` for two empty strings. Refuse it before the driver is
+        // required, so the boot ends on this message whether or not the driver is
+        // installed.
+        if ( !conf.file && !conf.database ) {
+            _err = new Error(
+                '[DuckdbConnector] The connectors.json entry names neither `file` nor `database`.\n'
+                + 'Set `database` (it names models/<database>/ and the default file ~/.gina/<database>.duckdb), '
+                + 'or `file` (a path, or ":memory:").'
+            );
+            return;
+        }
+
         var duckdb;
         try {
             var duckdbPath = _(getPath('project') + '/node_modules/@duckdb/node-api', true);
