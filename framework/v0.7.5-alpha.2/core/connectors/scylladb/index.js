@@ -61,7 +61,8 @@ var console   = lib.logger;
  * @class Scylladb
  * @constructor
  * @param {object} conn  - cassandra-driver Client from ScylladbConnector.onReady
- * @param {object} infos - { model, bundle, database, scope }
+ * @param {object} infos - { model, bundle, database, scope }; with no `database`
+ *                         (a store-only entry), no model directory is created or read
  * @returns {object}     - Entity class map: { UserEntity: Constructor, … }
  */
 function Scylladb(conn, infos) {
@@ -84,10 +85,14 @@ function Scylladb(conn, infos) {
         }
         EntitySuperClass = require(_(filename, true));
 
-        if (!fs.existsSync(entitiesPath)) {
-            new _(entitiesPath).mkdirSync();
+        // #B907 — an entry that names no `database` (a store-only entry) has no
+        // model directory: none is created or read (this built `models/undefined/`).
+        if (infos.database) {
+            if (!fs.existsSync(entitiesPath)) {
+                new _(entitiesPath).mkdirSync();
+            }
+            files = fs.readdirSync(entitiesPath);
         }
-        files = fs.readdirSync(entitiesPath);
 
         for (var f = 0, fLen = files.length; f < fLen; ++f) {
             if ( /^\./.test(files[f]) || !/\.js$/i.test(files[f]) ) continue;
@@ -116,7 +121,7 @@ function Scylladb(conn, infos) {
         }
 
         var cqlDir = _(getPath('bundle') + '/models/' + infos.database + '/cql');
-        if (fs.existsSync(cqlDir)) {
+        if (infos.database && fs.existsSync(cqlDir)) {
             var cqlEntries = fs.readdirSync(cqlDir);
             for (var s = 0, sLen = cqlEntries.length; s < sLen; s++) {
                 if ( /^\./.test(cqlEntries[s]) ) continue;

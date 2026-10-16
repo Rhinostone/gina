@@ -30,12 +30,15 @@ var inherits        = lib.inherits;
  * `database` names the logical model directory (`models/<database>/entities/`).
  * `file` is the actual SQLite file path. Defaults to `~/.gina/{database}.sqlite`
  * when absent. Use `':memory:'` for an ephemeral in-process database (tests).
+ * An entry that names neither (a store-only entry: the session, job and kv stores
+ * open their own file) gets an in-process `':memory:'` database.
  *
  * @class SqliteConnector
  * @constructor
- * @param {object} conf            - Connector config from connectors.json
- * @param {string} conf.database   - Logical database name (models/ directory)
- * @param {string} [conf.file]     - SQLite file path (defaults to ~/.gina/{database}.sqlite)
+ * @param {object} conf             - Connector config from connectors.json
+ * @param {string} [conf.database]  - Logical database name (models/ directory)
+ * @param {string} [conf.file]      - SQLite file path (defaults to ~/.gina/{database}.sqlite,
+ *                                    or `':memory:'` when `database` is absent too)
  */
 function SqliteConnector(conf) {
     var self = this;
@@ -53,8 +56,10 @@ function SqliteConnector(conf) {
             return;
         }
 
-        // Resolve file path: conf.file > ~/.gina/{database}.sqlite
-        var dbFile = conf.file || _(getPath('gina').home + '/' + conf.database + '.sqlite', true);
+        // Resolve file path: conf.file > ~/.gina/{database}.sqlite > ':memory:'.
+        // #B907 — an entry that names neither (a store-only entry) opened
+        // `<gina home>/undefined.sqlite`; it gets an in-process database instead.
+        var dbFile = conf.file || ( conf.database ? _(getPath('gina').home + '/' + conf.database + '.sqlite', true) : ':memory:' );
 
         try {
             _conn = new DatabaseSync(dbFile);

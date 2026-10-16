@@ -27,7 +27,8 @@ var console         = lib.logger;
  * @author      Rhinostone
  *
  * @param {object} conn - the connected bucket (`sdk`, `_cluster`)
- * @param {object} infos - `{ model, bundle, database, scope }`, as lib/model.js passes them
+ * @param {object} infos - `{ model, bundle, database, scope }`, as lib/model.js passes them;
+ *   with no `database` (a store-only entry), no model directory is created or read
  * @returns {object} the entities, keyed by class name
  *
  * @example
@@ -411,7 +412,7 @@ function Couchbase(conn, infos) {
         var isCacheless         = (process.env.NODE_ENV_IS_DEV == 'false') ? false : true;
         var path                = getPath('bundle') + '/models/'+ infos.database +'/entities'
             , n1qlDefault       = __dirname + '/lib'
-            , files             = null
+            , files             = []
             , entities          = {}
             , entityName        = ''
             , Entity            = null
@@ -419,14 +420,18 @@ function Couchbase(conn, infos) {
             , filename          = null
         ;
 
-        // #B894 — the model layer creates `models/<entry key>/entities`, so an entry named
+        // #B894 — the model layer created `models/<entry key>/entities`, so an entry named
         // differently from its bucket finds no `models/<database>/entities` on a project
         // that has none, and reading it aborted the boot (ENOENT). Create it first, as the
         // other ORM factories do.
-        if ( !fs.existsSync(path) ) {
-            new _(path).mkdirSync();
+        // #B907 — an entry that names no `database` (a store-only entry) has no model
+        // directory: none is created or read (this built `models/undefined/`).
+        if ( infos.database ) {
+            if ( !fs.existsSync(path) ) {
+                new _(path).mkdirSync();
+            }
+            files = fs.readdirSync(path);
         }
-        files = fs.readdirSync(path);
 
 
         // superEntity
@@ -490,7 +495,7 @@ function Couchbase(conn, infos) {
 
         // loading N1QL
         var dir = _( getPath('bundle') + '/models/'+ infos.database +'/n1ql' );
-        if ( fs.existsSync(dir) ) {
+        if ( infos.database && fs.existsSync(dir) ) {
             f           = 0;
             files       = fs.readdirSync(dir);
             filename    = null;

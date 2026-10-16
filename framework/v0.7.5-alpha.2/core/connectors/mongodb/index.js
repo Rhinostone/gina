@@ -70,7 +70,8 @@ var console  = lib.logger;
  * @class Mongodb
  * @constructor
  * @param {object} conn  - mongodb Db instance from MongodbConnector.onReady
- * @param {object} infos - { model, bundle, database, scope }
+ * @param {object} infos - { model, bundle, database, scope }; with no `database`
+ *                         (a store-only entry), no model directory is created or read
  * @returns {object}     - Entity class map: { UserEntity: Constructor, … }
  */
 function Mongodb(conn, infos) {
@@ -136,10 +137,14 @@ function Mongodb(conn, infos) {
         }
         EntitySuperClass = require(_(filename, true));
 
-        if (!fs.existsSync(entitiesPath)) {
-            new _(entitiesPath).mkdirSync();
+        // #B907 — an entry that names no `database` (a store-only entry) has no
+        // model directory: none is created or read (this built `models/undefined/`).
+        if (infos.database) {
+            if (!fs.existsSync(entitiesPath)) {
+                new _(entitiesPath).mkdirSync();
+            }
+            files = fs.readdirSync(entitiesPath);
         }
-        files = fs.readdirSync(entitiesPath);
 
         for (var f = 0, fLen = files.length; f < fLen; ++f) {
             if ( /^\./.test(files[f]) || !/\.js$/i.test(files[f]) ) continue;
@@ -172,7 +177,7 @@ function Mongodb(conn, infos) {
         }
 
         var pipelinesDir = _(getPath('bundle') + '/models/' + infos.database + '/pipelines');
-        if (fs.existsSync(pipelinesDir)) {
+        if (infos.database && fs.existsSync(pipelinesDir)) {
             var entries = fs.readdirSync(pipelinesDir);
             for (var s = 0, sLen = entries.length; s < sLen; s++) {
                 if ( /^\./.test(entries[s]) ) continue;

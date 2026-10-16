@@ -59,7 +59,8 @@ var console   = lib.logger;
  * @class Sqlite
  * @constructor
  * @param {object} conn  - DatabaseSync instance from SqliteConnector.onReady
- * @param {object} infos - { model, bundle, database, scope }
+ * @param {object} infos - { model, bundle, database, scope }; with no `database`
+ *                         (a store-only entry), no model directory is created or read
  * @returns {object}     - Entity class map: { UserEntity: Constructor, … }
  */
 function Sqlite(conn, infos) {
@@ -94,10 +95,14 @@ function Sqlite(conn, infos) {
         EntitySuperClass = require(_(filename, true));
 
         // Entity JS files ─────────────────────────────────────────────────────
-        if (!fs.existsSync(entitiesPath)) {
-            new _(entitiesPath).mkdirSync();
+        // #B907 — an entry that names no `database` (a store-only entry) has no
+        // model directory: none is created or read (this built `models/undefined/`).
+        if (infos.database) {
+            if (!fs.existsSync(entitiesPath)) {
+                new _(entitiesPath).mkdirSync();
+            }
+            files = fs.readdirSync(entitiesPath);
         }
-        files = fs.readdirSync(entitiesPath);
 
         for (var f = 0, fLen = files.length; f < fLen; ++f) {
             if ( /^\./.test(files[f]) || !/\.js$/i.test(files[f]) ) continue;
@@ -127,7 +132,7 @@ function Sqlite(conn, infos) {
 
         // SQL method files ────────────────────────────────────────────────────
         var sqlDir = _(getPath('bundle') + '/models/' + infos.database + '/sql');
-        if (fs.existsSync(sqlDir)) {
+        if (infos.database && fs.existsSync(sqlDir)) {
             var sqlEntries = fs.readdirSync(sqlDir);
             for (var s = 0, sLen = sqlEntries.length; s < sLen; s++) {
                 if ( /^\./.test(sqlEntries[s]) ) continue;
