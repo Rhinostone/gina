@@ -4,6 +4,8 @@ const {spawn}       = require('child_process');
 // const {execSync}    = require('child_process');
 const { execFileSync } = require('child_process');
 var CmdHelper       = require('./../helper');
+// #B905 — a failed link-node-modules child's message, with the child's own reason
+var describeChildFailure = require('./inc/child-failure');
 var console        = lib.logger;
 /**
  * @module gina/lib/cmd/framework/link
@@ -119,7 +121,10 @@ var console        = lib.logger;
                     // was: execSync('"'+ process.execPath +'" "'+ cli +'" link-node-modules @'+ self.projectName);
                     execFileSync(process.execPath, [cli, 'link-node-modules', '@' + self.projectName]);
                 } catch (linkErr) {
-                    var errOutput = (linkErr.stderr) ? linkErr.stderr.toString().trim() : (linkErr.message || linkErr.stack);
+                    // #B905 — the child writes its error on stdout, so its stderr was empty and
+                    // the command ended on a bare `Error`, without the child's reason
+                    // was: var errOutput = (linkErr.stderr) ? linkErr.stderr.toString().trim() : (linkErr.message || linkErr.stack);
+                    var errOutput = describeChildFailure(linkErr, 'gina framework:link-node-modules @'+ self.projectName);
                     console.warn('[link] '+ errOutput);
                     return end(new Error(errOutput), 'error')
                 }

@@ -12,6 +12,8 @@ var helpers     = require( getPath('gina').helpers);
 var escapeRegex = require('./bundle/inc/name-rewrite').escapeRegex;
 // #B855 — the framed exit code exit() sends an online command's client
 var startStatus = require('./bundle/inc/start-status');
+// #B905 — a failed link child's message, never empty (an empty one framed exit code 0)
+var describeChildFailure = require('./framework/inc/child-failure');
 /**
  * @module gina/lib/cmd/helper
  */
@@ -1337,7 +1339,11 @@ function CmdHelper(cmd, client, debug) {
                         // was: execSync('"'+ process.execPath +'" "'+ selfCli +'" link-node-modules @'+cmd.projectName +cmd.paramsStringified, …);
                         execFileSync(process.execPath, [selfCli, 'link-node-modules', '@' + cmd.projectName].concat(cmd.paramsArgv), { env: _linkEnv });
                     } catch (linkErr) {
-                        var linkErrOutput = (linkErr.stderr) ? linkErr.stderr.toString().trim() : (linkErr.message || linkErr.stack);
+                        // #B905 — the child writes its error on stdout (gina's logger), so its stderr
+                        // was an empty Buffer, the message '' and exit('') framed exit code 0:
+                        // `bundle:start` reported success with nothing started (measured)
+                        // was: var linkErrOutput = (linkErr.stderr) ? linkErr.stderr.toString().trim() : (linkErr.message || linkErr.stack);
+                        var linkErrOutput = describeChildFailure(linkErr, 'gina framework:link-node-modules @'+ cmd.projectName);
                         console.error(linkErrOutput);
                         return exit(linkErrOutput);
                     }
@@ -1348,7 +1354,9 @@ function CmdHelper(cmd, client, debug) {
                         // was: console.debug(execSync('"'+ process.execPath +'" "'+ selfCli +'" link @'+cmd.projectName +cmd.paramsStringified, …).toString().trim());
                         console.debug(execFileSync(process.execPath, [selfCli, 'link', '@' + cmd.projectName].concat(cmd.paramsArgv), { env: _linkEnv }).toString().trim());
                     } catch (err) {
-                        var errOutput = (err.stderr) ? err.stderr.toString().trim() : (err.message || err.stack);
+                        // #B905 — the same empty-message exit code 0 as the link-node-modules child above
+                        // was: var errOutput = (err.stderr) ? err.stderr.toString().trim() : (err.message || err.stack);
+                        var errOutput = describeChildFailure(err, 'gina framework:link @'+ cmd.projectName);
                         console.emerg(errOutput);
                         return exit(errOutput);
                     }
