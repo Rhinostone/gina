@@ -411,13 +411,22 @@ function Couchbase(conn, infos) {
         var isCacheless         = (process.env.NODE_ENV_IS_DEV == 'false') ? false : true;
         var path                = getPath('bundle') + '/models/'+ infos.database +'/entities'
             , n1qlDefault       = __dirname + '/lib'
-            , files             = fs.readdirSync(path)
+            , files             = null
             , entities          = {}
             , entityName        = ''
             , Entity            = null
             , className         = null
             , filename          = null
         ;
+
+        // #B894 — the model layer creates `models/<entry key>/entities`, so an entry named
+        // differently from its bucket finds no `models/<database>/entities` on a project
+        // that has none, and reading it aborted the boot (ENOENT). Create it first, as the
+        // other ORM factories do.
+        if ( !fs.existsSync(path) ) {
+            new _(path).mkdirSync();
+        }
+        files = fs.readdirSync(path);
 
 
         // superEntity
