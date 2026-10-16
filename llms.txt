@@ -691,7 +691,7 @@ gina cache:clear <bundle> @<project> [--dry-run] [--format=json]  # Flush ONLY t
 gina cache:clear @<project> --event=<name>   # Evict just what routes registered via cache.invalidateOnEvents (in-heap pass only) — THE cross-bundle invalidation path
 gina help [<group>]                          # Global or per-group command help
 gina version                                 # Version banner (+ Middleware / Template engine lines); also -v / --version
-gina-container                          # Foreground launcher for Docker/K8s
+gina-container                          # Foreground launcher for Docker/K8s; the image must hold the project's manifest.json (absent: exit 1, naming project:add + bundle:add --import)
 gina-init                               # Bootstrap ~/.gina/ from env vars (containers)
 ```
 

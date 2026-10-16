@@ -17,6 +17,10 @@
  * No framework socket server (port 8124) is required — project config is read
  * directly from ~/.gina/{shortVersion}/settings.json and projects.json.
  *
+ * The project root must contain manifest.json: the bundle reads it at boot. A
+ * missing or unusable manifest stops the launcher with exit code 1 and a
+ * message naming the commands that create it (step 6).
+ *
  * Usage (Dockerfile CMD or entrypoint script):
  *   node /path/to/gina/bin/gina-container <bundle> @<project>
  *   gina-container <bundle> @<project>          # if installed globally
@@ -233,7 +237,7 @@ var projectRoot = projectEntry.path;
 var env   = process.env.NODE_ENV   || projectEntry['def_env'];
 var scope = process.env.NODE_SCOPE || projectEntry['def_scope'];
 
-// ── 6. Resolve bundle entry point (mirrors isRealApp() in lib/cmd/bundle/start.js) ──
+// ── 6. Resolve bundle entry point (isRealApp() in lib/cmd/bundle/start.js, without its fallback) ──
 var appPath = null;
 var isDev   = (projectEntry['dev_env'] === env);
 try {
@@ -251,9 +255,22 @@ try {
         appPath = projectRoot + '/releases/' + bundleName + '/' + scope + '/' + env + '/' + bundlePkg.version + '/index.js';
     }
 } catch (err) {
-    // fallback: bundles/<bundle>/index.js (mirrors start.js catch block)
-    out('[ gina-container ] manifest.json warning: ' + (err.message || err) + '\n');
-    appPath = projectRoot + '/bundles/' + bundleName + '/index.js';
+    // No fallback entry point (#K8s7). The bundle reads manifest.json itself at
+    // boot (isBundleMounted() in core/gna.js), so starting another entry without
+    // it only moved the failure into the bundle. The fallback was the bundle's
+    // mount link, which a checkout does not have, so the error named a path the
+    // project never had. Stop here and say what is missing.
+    if (err && err.code === 'ENOENT') {
+        out(
+            '[ gina-container ] manifest.json not found in ' + projectRoot + '\n' +
+            '  The bundle reads it at boot. Commit it with the project, or create it in the image:\n' +
+            '    gina project:add @' + projectName + ' --path=' + projectRoot + '\n' +
+            '    gina bundle:add ' + bundleName + ' @' + projectName + ' --import\n'
+        );
+    } else {
+        out('[ gina-container ] manifest.json cannot be used: ' + ((err && err.message) || err) + '\n');
+    }
+    process.exit(1);
 }
 
 if (!fs.existsSync(appPath)) {
