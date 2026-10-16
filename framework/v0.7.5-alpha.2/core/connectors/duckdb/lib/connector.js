@@ -36,7 +36,7 @@ var inherits     = lib.inherits;
  * writes are refused by the engine, and any number of read-only PROCESSES can share
  * one file. DuckDB is single-writer across processes: while one process holds a file
  * read-write, no other process can open it at all (not even read-only). Within one
- * process, re-opening the same file is fine (merged-process bundles share cleanly).
+ * process, re-opening the same file is fine.
  *
  * Unlike the SQLite connector (synchronous `node:sqlite`), the DuckDB driver is
  * natively async — `onReady()` resolves after the instance + connection handshake.

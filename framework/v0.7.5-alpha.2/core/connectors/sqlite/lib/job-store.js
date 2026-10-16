@@ -65,11 +65,11 @@ function noop() {}
  * @param {object}  connConf        - Resolved `connectors.json` entry for this store.
  * @param {string}  [connConf.file] - Path to the SQLite file, or `':memory:'` (volatile —
  *                                    only useful in tests). Defaults to
- *                                    `~/.gina/{version}/jobs-{bundle}.db`.
+ *                                    `~/.gina/jobs-{bundle}.db`.
  *                                    `file` is the PATH key by the sqlite DB-connector
  *                                    convention — the model layer scans every
  *                                    connectors.json entry at boot and treats `database`
- *                                    as a NAME (`~/.gina/{version}/{database}.sqlite`),
+ *                                    as a NAME (`~/.gina/{database}.sqlite`),
  *                                    so a path in `database` fails the boot before this
  *                                    store is even built.
  * @param {string}  bundle          - Bundle name — used for the default file name.

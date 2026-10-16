@@ -72,7 +72,7 @@ var DEFAULT_SWEEP_MS = 30000;
  * @param {object} connConf                 - Resolved `connectors.json` entry.
  * @param {string} [connConf.file]          - SQLite file path, or `':memory:'` (volatile —
  *                                            only useful in tests). Defaults to
- *                                            `~/.gina/{version}/kv-{bundle}.db`.
+ *                                            `~/.gina/kv-{bundle}.db`.
  * @param {number} [connConf.sweepInterval] - Expired-row sweep cadence in ms (default 30000).
  * @param {string} bundle                   - Bundle name — used for the default file name.
  * @param {string} namespaceName            - KV namespace this store backs (the `ns` column).

@@ -70,7 +70,7 @@ describe('01 - DuckDB connector: lib/connector.js source', function () {
         assert.ok(src.indexOf('Run: npm install @duckdb/node-api') > -1);
     });
 
-    it('defaults the file path to ~/.gina/{version}/{database}.duckdb', function () {
+    it('defaults the file path to ~/.gina/{database}.duckdb', function () {
         assert.ok(src.indexOf("conf.file || _(getPath('gina').home + '/' + conf.database + '.duckdb', true)") > -1);
     });
 
