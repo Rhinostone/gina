@@ -40,6 +40,7 @@
  *   GINA_LOGDIR         log dir                               (default: GINA_HOMEDIR/log)
  *   GINA_TMPDIR         tmp dir                               (default: os.tmpdir())
  *   GINA_LOG_LEVEL      log level                             (default: info)
+ *   GINA_LOG_STDOUT     container logging preset              (default: true when unset; false keeps the MQ transport)
  *   GINA_TIMEZONE       timezone                              (default: TZ env or UTC)
  *   GINA_CULTURE        culture code                          (default: en_US)
  *   GINA_ISO_SHORT      ISO 3166-1 alpha-2 country code       (default: us)
@@ -74,6 +75,19 @@ var os   = require('os');
 
 var binPath   = __dirname;
 var ginaPath  = binPath.replace(/\/bin$/, '');
+
+// Container logging preset (#B892), as bin/gina-container applies it (#B524).
+// gina-init runs at container start, where no MQ listener exists, so the
+// logger's default `mq` flow dialled the MQ port (« [MQSpeaker] Error: connect
+// ECONNREFUSED 127.0.0.1:8125 » on every start), and in a pod, whose containers
+// share localhost, a sidecar listening on that port would have received this
+// process's log frames. Apply `GINA_LOG_STDOUT=true` (JSON lines, MQ transport
+// skipped) unless the operator set the variable: a raw `process.env` write, read
+// by the logger when the utils/helper require below starts it. gina-init's own
+// `[gina-init]` lines are raw stdout writes and do not change.
+if (typeof(process.env.GINA_LOG_STDOUT) == 'undefined') {
+    process.env.GINA_LOG_STDOUT = 'true';
+}
 
 // Bootstrap utils/helper — injects globals: _, setEnvVar, getEnvVar, getUserHome, etc.
 require(ginaPath + '/utils/helper'); // jshint ignore:line
