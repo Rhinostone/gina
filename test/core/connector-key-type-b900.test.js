@@ -59,6 +59,8 @@ var POLL_INTERVAL_MS = 250;
 
 var CHILD_ENV = Object.assign({}, process.env, { HOME: TMP, GINA_LOG_STDOUT: 'true' });
 delete CHILD_ENV.GINA_HOMEDIR;   // the home must derive from HOME, not inherit the runner's
+delete CHILD_ENV.NODE_ENV;       // `bun test` injects NODE_ENV=test, and a non-dev env makes
+                                 // gina-container look for a release build; the project's def_env applies
 
 
 // ---------------------------------------------------------------------------
