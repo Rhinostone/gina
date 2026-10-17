@@ -187,7 +187,19 @@ if (fs.existsSync(_mainJsonPath)) {
             if (_mainData.frameworks[shortVersion].indexOf(version) < 0) {
                 _mainData.frameworks[shortVersion].push(version);
             }
-            fs.writeFileSync(_mainJsonPath, JSON.stringify(_mainData, null, 4));
+            // #B687 — written whole: a temp file in the same directory, renamed into
+            // place, so a process reading ~/.gina meanwhile (another container sharing
+            // it) never finds main.json empty or half written, the #B43 shape. The file
+            // keeps its mode; a failure removes the temp file and reaches the warning below.
+            var _mainTmp = _mainJsonPath + '.' + process.pid + '.tmp';
+            try {
+                fs.writeFileSync(_mainTmp, JSON.stringify(_mainData, null, 4));
+                fs.chmodSync(_mainTmp, fs.statSync(_mainJsonPath).mode & 0o777);
+                fs.renameSync(_mainTmp, _mainJsonPath);
+            } catch (writeErr) {
+                try { fs.unlinkSync(_mainTmp); } catch (unlinkErr) { /* already gone */ }
+                throw writeErr;
+            }
         }
     } catch(e) {
         out('[gina-container] warn: could not sync def_framework — ' + (e.message || e) + '\n');

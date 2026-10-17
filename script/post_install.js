@@ -972,6 +972,29 @@ function PostInstall() {
         }
 
 
+        /**
+         * Writes a main.json whole (#B687): a temp file in the same directory, renamed
+         * into place, so a gina process reading `~/.gina` during the install (another
+         * container sharing it, a CLI command) never finds it empty or half written,
+         * the #B43 shape. The file keeps its mode. A failure removes the temp file and
+         * rethrows, to the warning of the block that called it.
+         *
+         * @inner
+         * @param {string} target - main.json or <short>/main.json, which exists
+         * @param {object} data   - its content, written as 4-space JSON
+         */
+        var _writeMainJSON = function(target, data) {
+            var _tmp = target + '.' + process.pid + '.tmp';
+            try {
+                fs.writeFileSync(_tmp, JSON.stringify(data, null, 4));
+                fs.chmodSync(_tmp, fs.statSync(target).mode & 0o777);
+                fs.renameSync(_tmp, target);
+            } catch (writeErr) {
+                try { fs.unlinkSync(_tmp); } catch (unlinkErr) { /* already gone */ }
+                throw writeErr;
+            }
+        };
+
         // Sync main.json def_framework to the installed version.
         // post_install is the canonical moment when a new version lands on disk — keep
         // def_framework in sync here so the CLI, cmd handlers, and framework:init all
@@ -1004,7 +1027,7 @@ function PostInstall() {
                     if ( _mainData.frameworks[self.shortVersion].indexOf(self.version) < 0 ) {
                         _mainData.frameworks[self.shortVersion].push(self.version);
                     }
-                    fs.writeFileSync(_mainJsonPath, JSON.stringify(_mainData, null, 4));
+                    _writeMainJSON(_mainJsonPath, _mainData);
                 } else if ( _isRegression ) {
                     console.info(
                         'Skipping def_framework update: installed ' + self.version +
@@ -1015,7 +1038,7 @@ function PostInstall() {
                     if ( !_mainData.frameworks[self.shortVersion] ) { _mainData.frameworks[self.shortVersion] = []; }
                     if ( _mainData.frameworks[self.shortVersion].indexOf(self.version) < 0 ) {
                         _mainData.frameworks[self.shortVersion].push(self.version);
-                        fs.writeFileSync(_mainJsonPath, JSON.stringify(_mainData, null, 4));
+                        _writeMainJSON(_mainJsonPath, _mainData);
                     }
                 }
             } catch(e) {
@@ -1042,7 +1065,7 @@ function PostInstall() {
                 if ( !_rootData.def_global_mode ) { _rootData.def_global_mode = {}; }
                 if ( _rootData.def_global_mode[self.shortVersion] !== _gmResolved ) {
                     _rootData.def_global_mode[self.shortVersion] = _gmResolved;
-                    fs.writeFileSync(_mainJsonPath, JSON.stringify(_rootData, null, 4));
+                    _writeMainJSON(_mainJsonPath, _rootData);
                 }
             }
 
@@ -1053,7 +1076,7 @@ function PostInstall() {
                 var _existing = _verData.def_global_mode[self.shortVersion];
                 if ( typeof(_existing) != 'boolean' || _existing !== _gmResolved ) {
                     _verData.def_global_mode[self.shortVersion] = _gmResolved;
-                    fs.writeFileSync(_versionMainPath, JSON.stringify(_verData, null, 4));
+                    _writeMainJSON(_versionMainPath, _verData);
                 }
             }
         } catch(e) {

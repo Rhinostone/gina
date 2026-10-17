@@ -375,11 +375,11 @@ describe('05 - gina-container: def_framework sync block (§3b)', function() {
         );
     });
 
-    it('writes the updated main.json via fs.writeFileSync', function() {
+    it('writes the updated main.json through a temp file renamed into place (#B687)', function() {
         var src = fs.readFileSync(CONTAINER_SOURCE, 'utf8');
         assert.ok(
-            /fs\.writeFileSync\(_mainJsonPath/.test(src),
-            'expected fs.writeFileSync(_mainJsonPath...) in gina-container §3b'
+            /fs\.renameSync\(_mainTmp,\s*_mainJsonPath\)/.test(src),
+            'expected fs.renameSync(_mainTmp, _mainJsonPath) in gina-container §3b'
         );
     });
 

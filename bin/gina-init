@@ -447,10 +447,27 @@ dirsToCreate.forEach(function(dir) {
 });
 
 // ── Write output files ─────────────────────────────────────────────────────────
+var _writeSeq = 0;
+
+/**
+ * Writes one state file whole (#B687): a temp file in the same directory, renamed
+ * into place, so a process reading `~/.gina` meanwhile (another container sharing
+ * it, a CLI command) never finds the file empty or half written, the #B43 shape.
+ * An existing file keeps its mode. A failure removes the temp file and ends the
+ * run, as before.
+ *
+ * @inner
+ * @param {string} filePath - the state file to write
+ * @param {object} data     - its content, written as 4-space JSON and a newline
+ */
 function writeJSON(filePath, data) {
+    var tmp = filePath + '.' + process.pid + '.' + (_writeSeq++) + '.tmp';
     try {
-        fs.writeFileSync(filePath, JSON.stringify(data, null, 4) + '\n', 'utf8');
+        fs.writeFileSync(tmp, JSON.stringify(data, null, 4) + '\n', 'utf8');
+        try { fs.chmodSync(tmp, fs.statSync(filePath).mode & 0o777); } catch (statErr) { /* a new file keeps the default mode */ }
+        fs.renameSync(tmp, filePath);
     } catch (writeErr) {
+        try { fs.unlinkSync(tmp); } catch (unlinkErr) { /* already gone */ }
         process.stdout.write('[gina-init] failed to write ' + filePath + ': ' + writeErr.message + '\n');
         process.exit(1);
     }
