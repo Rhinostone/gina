@@ -752,9 +752,9 @@ declare namespace gina {
         ttl?: number;
         /** Redis: cluster node list */
         cluster?: Array<{ host: string; port: number }>;
-        /** Couchbase: keep connection alive */
+        /** Couchbase: run the keep-alive timer, which reads the connector's own connection flag and sends nothing to the cluster (default `true`) */
         keepAlive?: boolean;
-        /** Couchbase: ping interval (e.g. `"2m"`) */
+        /** Couchbase: interval of the `keepAlive` timer (e.g. `"2m"`, the default) */
         pingInterval?: string;
         /** Couchbase: use scopes and collections */
         useScopeAndCollections?: boolean;

@@ -21,8 +21,11 @@ var settleOnce      = require('./../../settle-once');
  *
  * Options :
  *  - keepAlive (default: true)
- *      if set to `true`, will ping based on `pingInterval`
- *      if set to `false`, will not ping the database server
+ *      if set to `true`, runs a timer every `pingInterval` once connected:
+ *      each tick reads this connector's own `connected` flag, which only a
+ *      failed connect attempt sets to `false`, and reconnects when it is
+ *      `false`. It sends no request to the cluster (#D69).
+ *      if set to `false`, no timer runs
  *  - pingInterval (default: 2m)
  *      `30s` will set the ping interval to 30 seconds
  *      `1m` will set the ping interval to 1 minute
@@ -199,7 +202,8 @@ function Connector(dbString) {
                 //Reload models.
                 , modelsPath = _(conf.modelsPath)// jshint ignore:line
             ;
-            // will send heartbeat every 4 minutes if keepAlive == `true`
+            // #D69 — while keepAlive is `true`, arms the keep-alive timer (ping() below): it
+            // reads `self.instance.connected` every `pingInterval` and sends nothing to the cluster.
             self.ping(options.pingInterval, cb, function onPing(cb){
 
                 local.bundle    = bundle;
@@ -211,6 +215,12 @@ function Connector(dbString) {
 
                     // CB-PERF-3 fix: first setConnection call was redundant (identical args, outside the existsSync guard)
                     // modelUtil.setConnection(bundle, name, self.instance);
+                    // #B908 — latent: `name` is the bucket, while lib/model.js keys every model by
+                    // its connectors.json entry key, so for an entry named differently from its
+                    // bucket reloadModels() would throw a TypeError reading a connector that was
+                    // never set. Only a connect() given a callback reaches this branch, and with
+                    // SDK 3 or 4 nothing starts one after boot (the classifier arms are inert,
+                    // #B204). Register under the entry key before that reconnect is ever activated.
                     if ( fs.existsSync(modelsPath) ) {
                         modelUtil.setConnection(bundle, name, self.instance);
                         modelUtil.reloadModels(
@@ -562,12 +572,22 @@ function Connector(dbString) {
 
     /**
      * ping
-     * Heartbeat to keep connection alive. When a tick finds the instance not
-     * connected, it reconnects with the connector's merged options
-     * (`local.options`, #B893).
+     * Keep-alive timer, armed by onConnect() while `keepAlive` is `true`. It
+     * sends no request to the cluster (#D69): every `interval`, a tick reads
+     * `self.instance.connected`, which only a failed connect attempt sets to
+     * `false`. When it is `false`, the tick reconnects with the connector's
+     * merged options (`local.options`, #B893), passing `cb`; otherwise it
+     * re-arms the timer. With `keepAlive` off, ping() does nothing.
      *
-     * @param {string} interval
-     * @callback cb
+     * @param {string} interval - e.g. `"2m"` or `"30s"`; falls back to `pingInterval`
+     * @param {function} [cb] - the callback of the connect() that armed the timer
+     * @param {function} ncb - called with `cb` each time the timer is armed
+     * @returns {void}
+     *
+     * @example
+     * self.ping(options.pingInterval, cb, function onPing(cb) {
+     *     // `cb` is undefined unless the connect() that armed the timer had one
+     * });
      * */
     this.ping = function(interval, cb, ncb) {
         var options = local.options;

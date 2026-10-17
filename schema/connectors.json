@@ -139,12 +139,12 @@
         },
         "keepAlive": {
           "type": "boolean",
-          "description": "Couchbase only. Enable TCP keep-alive. Defaults to true.",
+          "description": "Couchbase only. Runs a timer every pingInterval once connected; each tick reads the connector's own connection flag and reconnects only if a connection attempt has failed. It sends no request to the cluster and keeps no connection open. Defaults to true.",
           "default": true
         },
         "pingInterval": {
           "type": "string",
-          "description": "Couchbase only. Interval to keep the connection alive (e.g. \"2m\", \"30s\").",
+          "description": "Couchbase only. Interval of the keepAlive timer (e.g. \"2m\", \"30s\"). Defaults to \"2m\".",
           "examples": ["2m", "30s", "1h"]
         },
         "readyTimeout": {
