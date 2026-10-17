@@ -80,6 +80,12 @@ function ContextHelper(contexts) {
             self = ContextHelper.instance;
         } else {
             // Get system environment variable
+            // #B896 — `which printenv` prints the binary's path, not the environment, and
+            // the keys below carry a `$` that whisper()'s lookups strip, so sysEnvVars
+            // resolves `~/` only: whisper() leaves every `$NAME` token as written (measured
+            // 2026-10-17). Left as is on purpose: resolving them would substitute OS values
+            // into every whispered string. Environment values reach bundle config through
+            // `${secret:KEY}` (lib/secrets) instead.
             self.contexts['sysEnvVars'] = { '~/': getUserHome() +'/' };
             var sysEnvVars = null;
             try {
@@ -957,6 +963,10 @@ function ContextHelper(contexts) {
      *  3. Embedded tokens inside a larger string (e.g. `~/.${projectName}`) via a manual
      *     replace to avoid infinite recursion on the regex engine.
      *
+     * Then `~/` expands to the user's home directory. `$NAME` tokens are left as
+     * written: the OS passes look them up in `sysEnvVars`, which holds `~/` only
+     * (#B896). Environment values reach bundle config through `${secret:KEY}`.
+     *
      * Unknown keys are left untouched silently — earlier revisions logged a
      * "Whisper Error" on every first-run CLI command when a default had not yet
      * been seeded (see #B12). Callers that need strict-mode behaviour must
@@ -968,6 +978,11 @@ function ContextHelper(contexts) {
      * @param {Object|string} replaceable - Object or JSON-serialisable value containing `${key}` tokens.
      * @param {RegExp} [rule] - Optional custom replace rule; when provided, short-circuits the three-pass logic.
      * @returns {Object|string} The interpolated object or string. Unknown tokens are preserved verbatim.
+     *
+     * @example
+     * whisper({ name: 'Alice' }, 'Hello ${name}');  // → 'Hello Alice'
+     * whisper({}, '~/config/app.json');             // → '/Users/alice/config/app.json'
+     * whisper({}, '$HOME/app');                     // → '$HOME/app' (left as written, #B896)
      */
     global.whisper = function(dictionary, replaceable, rule) {
         // 1. Inline rule
@@ -1021,7 +1036,8 @@ function ContextHelper(contexts) {
                 // first-run CLI command was noisy and misleading (see #B12).
                 return s;
             })
-            // OS Environment Variables
+            // OS Environment Variables: only `~/` resolves. sysEnvVars holds `~/` alone, so
+            // these two passes leave every `$NAME` token as written (#B896).
             .replace(/\"\~\/\"|\"\$([_A-Z0-9]+)\"/g, function(s, key) {
                 // Safe access to external self.contexts
                 const envs = (typeof self !== 'undefined' && self.contexts) ? self.contexts['sysEnvVars'] : process.env;
