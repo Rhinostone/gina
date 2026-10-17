@@ -14,8 +14,10 @@
  * (`new Model(bundle + '/' + key, conf).onReady(cb)`), with the real redis no-op
  * connector and the real SQLite connector on `:memory:`; where an arm needs the
  * directory a factory reads, the REAL SQLite factory runs after it with the infos
- * lib/model.js passes. `gina` and `core/config` are stubbed in require.cache (the
- * bootstrap of couchbase-entities-dir-b894.test.js). Each arm has its own temp root.
+ * lib/model.js passes (`database`, or `keyspace` when the entry sets none, since
+ * #B909). `gina` and `core/config` are stubbed in require.cache (the bootstrap of
+ * couchbase-entities-dir-b894.test.js). Each arm has its own temp root, and fails
+ * with a message naming its entry when model#ready does not fire within 5 s.
  *
  *   §00 controls: the listing sees a directory it is given; init creates the models
  *       root when it is missing and reaches model#ready with the connection
@@ -113,6 +115,16 @@ function listDirs(root) {
 }
 
 /**
+ * How long runModel waits for model#ready. Ready takes milliseconds here, so a model
+ * layer that never gets ready fails the arm with a named message instead of hanging
+ * it until the suite's --test-timeout.
+ *
+ * @constant
+ * @type {number}
+ */
+var READY_TIMEOUT_MS = 5000;
+
+/**
  * Runs the model layer for one connectors.json entry, as lib/model.js does at boot,
  * in a temp root of its own, then, when `withFactory` is set, the SQLite factory with
  * the connection and infos lib/model.js passes it.
@@ -123,6 +135,8 @@ function listDirs(root) {
  * @param {object}  entry        - the connectors.json entry
  * @param {boolean} [withFactory] - also run the SQLite factory
  * @returns {Promise<{models: string, err: (Error|false|null), name: string, conn: *, debug: string[]}>}
+ *   rejects with an Error naming the entry when model#ready does not fire within
+ *   READY_TIMEOUT_MS
  */
 function runModel(label, key, entry, withFactory) {
     var root   = path.join(TMP, label);
@@ -136,10 +150,14 @@ function runModel(label, key, entry, withFactory) {
     var conf = { env: 'dev', bundle: 'app', content: { connectors: connectors }, modelsPath: models };
 
     debugLines = [];
-    return new Promise(function(resolve) {
+    return new Promise(function(resolve, reject) {
+        var guard = setTimeout(function() {
+            reject(new Error('#B901 harness: model#ready did not fire within ' + READY_TIMEOUT_MS + ' ms (entry « ' + key + ' »)'));
+        }, READY_TIMEOUT_MS);
         new Model('app/' + key, conf).onReady(function(err, bundle, name, conn) {
+            clearTimeout(guard);
             if (!err && withFactory) {
-                require(SQLITE)(conn, { model: name, bundle: bundle, database: entry.database, scope: entry.scope });
+                require(SQLITE)(conn, { model: name, bundle: bundle, database: entry.database || entry.keyspace, scope: entry.scope });
             }
             resolve({ models: models, err: err, name: name, conn: conn, debug: debugLines.slice() });
         });
