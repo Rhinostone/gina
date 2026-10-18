@@ -12430,7 +12430,9 @@ function ValidatorPlugin(rules, data, formId, culture) {
      * @param {object} $formOrElement - ${form|element}.target (DOMObject)
      * @param {object} fields
      * @param {object} $fields
-     * @param {object} rules
+     * @param {object} rules - the rule set to apply. The pass works on a copy of it (#B885): a
+     *   `_case_` application, an exclusion or a RegExp alias found during the pass never reaches
+     *   the object the caller holds
      * @param {callback} cb
      * @param {string} [culture] // #i18n — server form-body path only; forwarded to FormValidator
      */
@@ -12453,6 +12455,20 @@ function ValidatorPlugin(rules, data, formId, culture) {
                 && /true/i.test($formOrElement.form.dataset.ginaFormLiveCheckEnabled)
             ) ? true : false;
             rules = getDynamisedRules(stringifiedRules, fields, $fields, isLiveCheckingOnASingleElement)
+        } else {
+            // #B885 — a pass works on its own copy of the rules, as the `$` branch above already
+            // does (getDynamisedRules parses one from the string). forEachField writes into the
+            // rule set it is handed: a matching `_case_` condition's rules over the field's own
+            // (`rules[_r] = …`, three sites), `{ exclude: true }` over an unchecked optional
+            // checkbox, a RegExp alias under the field's name — and merge() mutates its first
+            // argument, the condition's own rule object. Written into the caller's object, those
+            // outlived the pass: a case rule stayed applied after its driver changed back and the
+            // form refused a valid submit; a checkbox ticked after a pass stayed excluded from the
+            // data (#B913); and through the registry object the click and submit passes read,
+            // one form's state reached another form bound to the same rule set. JSON.clone
+            // copies plain objects and arrays and keeps anything else (a RegExp condition) by
+            // reference.
+            rules = JSON.clone(rules);
         }
         var id                  = null
             , evt               = null
@@ -12957,6 +12973,26 @@ function ValidatorPlugin(rules, data, formId, culture) {
         }
 
         var allRules = ( typeof(rules) !=  'undefined' ) ? JSON.clone(rules) : {};
+        /**
+         * Adjudicate the collected fields of one pass against `rules`, applying the `_case_`
+         * conditions on the way; a driver's matching condition recurses with that condition's
+         * own rules. It writes into `rules` (a matching condition's rules over a field's own,
+         * `{ exclude: true }` over an unchecked optional checkbox), which is why validate()
+         * hands it a copy (#B885). A radio or checkbox group that a matching condition requires
+         * and the pass never collected is entered as '' and adjudicated once (#B914).
+         *
+         * @inner
+         * @param {object} $formOrElement - the form, or the element of a single-element pass
+         * @param {object} allFields - every collected value of the form; the drivers' values are read here
+         * @param {object} allRules - the pass-entry copy of the rules, unchanged by a recursion
+         * @param {object} fields - the collected values this level walks
+         * @param {object} $fields - the controls by name (a group's first member); null on the server path
+         * @param {object} rules - the rules this level applies (a condition's own rules inside a recursion)
+         * @param {function} [cb] - the pass callback, dispatched with `validated.<id>`
+         * @param {number} i - recursion depth, 0 at the top level
+         * @returns {{isValid: function, error: object, data: object}|undefined} the result, when the
+         *   last level runs with no callback
+         */
         var forEachField = function($formOrElement, allFields, allRules, fields, $fields, rules, cb, i) {
 
 
@@ -13337,6 +13373,34 @@ function ValidatorPlugin(rules, data, formId, culture) {
                                                 localRuleObj = ( typeof(rules[c].conditions[_c].rules[_r]) != 'undefined' ) ? rules[c].conditions[_c].rules[_r] : {};
                                                 //rules[_r] = merge(rules[c].conditions[_c].rules[_r], localRuleObj);
                                                 rules[_r] = localRuleObj;
+                                            }
+
+                                            // #B914 — a radio or checkbox group this matching condition
+                                            // requires, which the pass never collected: the collector leaves
+                                            // an unchecked group out unless the field's OWN rule says
+                                            // isRequired (#B221), so a group required only through the case
+                                            // reached the check below with no value and was never refused on
+                                            // the pass. It was refused from the second pass on, once the case
+                                            // rule had been written into the stored rules (the #B885
+                                            // persistence) and the collector read it there; a `$`-bearing
+                                            // rule set, which always worked on a copy, never refused it. Enter
+                                            // it as '', the value #B221 collects, so isRequired adjudicates it
+                                            // here, once per pass: a group the engine already holds (`d[_r]`:
+                                            // collected, or entered by an earlier field's scan) is left alone.
+                                            // A staged file input is also uncollected and is left out: its
+                                            // data travels in its hidden fields. A condition that does not
+                                            // match, or does not require the group, enters nothing, so the
+                                            // posted data is unchanged. The guard above already skips the
+                                            // driver and a name with no control in `$fields`.
+                                            if (
+                                                typeof(fields[_r]) == 'undefined'
+                                                && typeof(d[_r]) == 'undefined'
+                                                && /^(radio|checkbox)$/i.test($fields[_r].type)
+                                                && localRuleObj
+                                                && /^true$/i.test(localRuleObj.isRequired)
+                                            ) {
+                                                fields[_r] = '';
+                                                d.addField(_r, fields[_r]);
                                             }
 
                                             // check each field against rule only if rule exists 2/3

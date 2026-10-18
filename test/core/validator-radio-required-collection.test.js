@@ -401,7 +401,9 @@ describe('05 - dist fidelity: the arm is in the shipped browser bundle', functio
         // Existence control on a pre-existing neighbor so a wrong path/read
         // cannot false-zero silently:
         assert.ok(min.indexOf('.isBoolean') > -1, 'control: the isBoolean property chain must exist');
-        var hits = min.match(/\/\^true\$\/i\.test\([^)]{0,80}?\.isRequired\)/g) || [];
+        // The gate reads a member (`rules[name].isRequired`, minified `x[y].isRequired`); the
+        // `]` keeps out the #B914 site in forEachField, which tests `localRuleObj.isRequired`.
+        var hits = min.match(/\/\^true\$\/i\.test\([^)]{0,80}?\]\.isRequired\)/g) || [];
         assert.equal(hits.length, 2,
             'the truthy-isRequired gate must appear once per collector in the minified bundle');
     });
