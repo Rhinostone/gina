@@ -26219,9 +26219,11 @@ function ValidatorPlugin(rules, data, formId, culture) {
          * Adjudicate the collected fields of one pass against `rules`, applying the `_case_`
          * conditions on the way; a driver's matching condition recurses with that condition's
          * own rules. It writes into `rules` (a matching condition's rules over a field's own,
-         * `{ exclude: true }` over an unchecked optional checkbox), which is why validate()
-         * hands it a copy (#B885). A radio or checkbox group that a matching condition requires
-         * and the pass never collected is entered as '' and adjudicated once (#B914).
+         * `{ exclude: true }` over a disabled checkbox or an unticked value-carrying one whose
+         * rule says isRequired: false), which is why validate() hands it a copy (#B885). An
+         * unticked boolean checkbox keeps its own rule and posts `false` (#B916). A radio or
+         * checkbox group that a matching condition requires and the pass never collected is
+         * entered as '' and adjudicated once (#B914).
          *
          * @inner
          * @param {object} $formOrElement - the form, or the element of a single-element pass
@@ -26283,11 +26285,15 @@ function ValidatorPlugin(rules, data, formId, culture) {
                         && $fields[field].tagName.toLowerCase() == 'input'
                         && /^(checkbox)$/i.test(localFieldType)
                     ) {
+                        // #B916: an unticked boolean checkbox keeps its own rule, so it posts its
+                        // live state, `false` (#49). Only a disabled box, or an unticked value-carrying
+                        // one whose rule says isRequired: false, is left out of the data.
                         if (
                             !$fields[field].checked
                                 && typeof(rules[field]) != 'undefined'
                                 && typeof(rules[field].isRequired) != 'undefined'
                                 && /^(false)$/i.test(rules[field].isRequired)
+                                && !isBooleanCheckbox($fields[field], rules[field])
                             ||
                             $fields[field].disabled
                         ) {

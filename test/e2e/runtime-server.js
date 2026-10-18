@@ -74,6 +74,9 @@
  *   GET /js/gina.onload.b885.js        -> built onload with the case-rules rules whisper
  *                                         (#B885 / #B913 / #B914 / #B915; the spec builds its
  *                                         pages through /x76-page, same /ac-sink)
+ *   GET /js/gina.onload.b916.js        -> built onload with the optional-boolean-checkbox
+ *                                         rules whisper (#B916; the spec builds its pages
+ *                                         through /x76-page, same /ac-sink)
  *   GET /link-gate                     -> fixtures/link-disabled-gate.html (#B310
  *                                         link disabled-gate harness; same sink)
  *   GET /link-shared                   -> fixtures/link-same-url.html (#B287
@@ -278,6 +281,16 @@ const B885_FORMS_JSON = JSON.stringify({ rules: {
     radioform:       { ref: { isRequired: true }, _case_kind: { conditions: [{ case: 'b', rules: { choice: { isRequired: true } } }] } },
     radiodriverform: { ref: { isRequired: true }, _case_mode: { conditions: [{ case: 'b', rules: { choice: { isRequired: true } } }] } },
     selform:         { ref: { isRequired: true }, other: { isRequired: false }, choice: { isRequired: true } }
+} });
+
+// #B916 — the forms whisper of the optional-boolean-checkbox spec
+// (test/e2e/validator-optional-boolean-checkbox-b916.spec.js). `optform` holds a checkbox whose rule
+// declares `isBoolean` with `isRequired: false`, the one shape that reached forEachField's exclusion
+// arm; `reqfform` says only `isRequired: false` (the collector rewrites that rule, so the box already
+// posted `false`), and with a `value` that is not true/false it holds a value-carrying checkbox.
+const B916_FORMS_JSON = JSON.stringify({ rules: {
+    optform:  { ref: { isRequired: true }, agree: { isRequired: false, isBoolean: true } },
+    reqfform: { ref: { isRequired: true }, agree: { isRequired: false } }
 } });
 // The staging answer the client consumes (guide: `files[]` entries; the NESTED
 // `preview` object is the app-provided variant the client renders from `preview.tmpUri`).
@@ -496,6 +509,11 @@ const server = http.createServer(function (req, res) {
         // (/x76-page); this is its rules whisper. Its submits go to /ac-sink.
         if (url === '/js/gina.onload.b885.js') {
             return send(res, 200, 'application/javascript; charset=utf-8', renderOnload(B885_FORMS_JSON));
+        }
+        // #B916 — the optional-boolean-checkbox spec builds its pages itself (/x76-page); this is
+        // its rules whisper. Its submits go to /ac-sink.
+        if (url === '/js/gina.onload.b916.js') {
+            return send(res, 200, 'application/javascript; charset=utf-8', renderOnload(B916_FORMS_JSON));
         }
         // #B459 — the staged-upload preview-fields fixture and its three endpoints.
         if (url === '/js/gina.onload.b459.js') {

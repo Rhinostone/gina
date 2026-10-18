@@ -28,7 +28,7 @@
  *      the other                                                      (RED: gated, 0 sends)
  *   06 #B913 — an optional boolean checkbox ticked after a pass is posted
  *                                                                     (RED: the body lacks it)
- *   07 CONTROL — the same checkbox left unticked is not posted
+ *   07 CONTROL — the same checkbox left unticked posts false (#B916)
  *   08 #B914 — a select driver, live check on: refused until a member is picked
  *                                       (passes before the fix too: it guards the copy alone)
  *   09 #B914 — live check off: the first click is refused             (RED: the first click sends)
@@ -223,7 +223,7 @@ test.describe('validator case rules — #B885, #B913, #B914, #B915', function ()
         expect(run.errors).toEqual([]);
     });
 
-    for (const [num, label, tick] of [['06', '#B913: ticked after a pass, it is posted', true], ['07', 'CONTROL: left unticked, it is not posted', false]]) {
+    for (const [num, label, tick] of [['06', '#B913: ticked after a pass, it is posted', true], ['07', 'CONTROL: left unticked, it posts false (#B916)', false]]) {
         test(num + ' - ' + label, async ({ page }) => {
             const run = await open(page, formOf(1, 'cbform', CHECKBOX_FIELDS), ['b885-form-1']);
             await typeInto(page, '#ref-1', 'x');
@@ -232,7 +232,7 @@ test.describe('validator case rules — #B885, #B913, #B914, #B915', function ()
                 await page.waitForTimeout(LIVE_CHECK_WAIT);
             }
             expect(await clickSends(page, run, 1)).toBe(1);
-            expect(JSON.parse(run.posts[0])).toEqual(tick ? { ref: 'x', agree: true } : { ref: 'x' });
+            expect(JSON.parse(run.posts[0])).toEqual(tick ? { ref: 'x', agree: true } : { ref: 'x', agree: false });
             expect(run.errors).toEqual([]);
         });
     }
