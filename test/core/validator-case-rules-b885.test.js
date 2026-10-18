@@ -1,6 +1,6 @@
 'use strict';
 /**
- * The validator fixes #B885, #B913 and #B914, pinned in the source and executed on the shipped
+ * The validator fixes #B885, #B913, #B914 and #B915, pinned in the source and executed on the shipped
  * bytes. The behaviour is driven end-to-end on the real bundle by
  * `test/e2e/validator-case-rules-b885.spec.js`.
  *
@@ -13,9 +13,13 @@
  *  - #B914 — a radio or checkbox group that a matching `_case_` condition requires, which the pass
  *    never collected (the collector reads only the field's own rule, #B221), is entered as '' so
  *    isRequired adjudicates it, once per pass.
+ *  - #B915 — the whole-form pass that follows a select's live check collects the form with the
+ *    form's own rules. It used bindForm's `rules`, the rule registry keyed by rule-set name, so no
+ *    field had a rule there and an unpicked required radio group was not collected.
  *
  *   §01 extraction + controls (the slicers can fail; the harness reaches the code under test)
- *   §02 source pins (comment-stripped) and the premises they rest on
+ *   §02 source pins (comment-stripped) and the premises they rest on (#B915: source pin only;
+ *       its behaviour is driven by the e2e spec)
  *   §03 the validate() prologue on the real bytes (#B885 / #B913)
  *   §04 forEachField on the real bytes (#B914)
  *   §05 dist fidelity (both bundles carry both changes)
@@ -105,6 +109,10 @@ var CHECK_2_3   = '// check each field against rule only if rule exists 2/3';
 function sliceCaseSpan(src) {
     return between(src, CASE_WRITE, CHECK_2_3, 'case write → 2/3 check');
 }
+
+// #B915 — updateSelect, from its declaration to its whole-form pass's callback.
+var UPDATE_SELECT_DECL = 'var updateSelect = function($el, $form) {';
+var UPDATE_SELECT_END  = "console.debug('[updateSelect]: onSilentGlobalLiveValidation: '";
 
 var prologueSrc = slicePrologue(SRC);
 var feSrc       = sliceForEachField(SRC);
@@ -381,6 +389,16 @@ describe('validator-case-rules-b885 §02 — source pins', function () {
         assert.match(fn, /\n\s*delete fields\[field\];\n/,
             'why the #B914 guard also reads d[_r]: after the check, fields[_r] is gone and a later field\'s scan would re-enter the group');
     });
+
+    it('02.5 - #B915: updateSelect\'s whole-form pass collects with the form\'s own rules', function () {
+        var span = activeLines(between(SRC, UPDATE_SELECT_DECL, UPDATE_SELECT_END, 'updateSelect'));
+        var formIdAt = span.indexOf("var formId = $gForm.getAttribute('id');");
+        assert.ok(formIdAt > -1, 'the form id is read in the pass');
+        assert.ok(span.indexOf('getFormValidationInfos($gForm, instance.$forms[formId].rules)') > formIdAt,
+            'the collection reads the rule set the pass then validates with');
+        assert.equal(span.indexOf('getFormValidationInfos($gForm, rules)'), -1,
+            '`rules` there is bindForm\'s rule registry, keyed by rule-set name');
+    });
 });
 
 // ---------------------------------------------------------------------------
@@ -531,5 +549,17 @@ describe('validator-case-rules-b885 §05 — dist fidelity', function () {
         var block = min.match(/typeof\s+([A-Za-z_$][\w$]*)\s*\[\s*([A-Za-z_$][\w$]*)\s*\]\s*==\s*'undefined'\s*&&\s*typeof\s+([A-Za-z_$][\w$]*)\s*\[\s*\2\s*\]\s*==\s*'undefined'\s*&&\s*\/\^\(radio\|checkbox\)\$\/i\.test\(\s*[A-Za-z_$][\w$]*\s*\[\s*\2\s*\]\s*\.type\s*\)\s*&&\s*([A-Za-z_$][\w$]*)\s*&&\s*\/\^true\$\/i\.test\(\s*\4\s*\.isRequired\s*\)\s*&&\s*\(\s*\1\s*\[\s*\2\s*\]\s*=\s*''\s*,\s*\3\s*\.addField\(\s*\2\s*,\s*\1\s*\[\s*\2\s*\]\s*\)\s*\)/g) || [];
         assert.equal(copy.length, 1, 'gina.min.js is what browsers run: the prologue copy');
         assert.equal(block.length, 1, 'gina.min.js is what browsers run: the #B914 block');
+    });
+
+    it('05.3 - #B915: both bundles collect with the form\'s own rules after a select change', function () {
+        var raw = fs.readFileSync(path.join(DIST_DIR, 'gina.js'), 'utf8');
+        assert.equal(raw.split('getFormValidationInfos($gForm, instance.$forms[formId].rules)').length - 1, 1,
+            'gina.js carries the call');
+        var min = fs.readFileSync(path.join(DIST_DIR, 'gina.min.js'), 'utf8');
+        // Measured emission (build of 2026-10-18), identifier-agnostic:
+        //   Cb=Sa.getAttribute('id');Pa=cc(Xb(Sa,l.$forms[Cb].rules))
+        // It reads 0 on the bundle built before the change, which collected with `Yb(Sa,q)`.
+        var hits = min.match(/([A-Za-z_$][\w$]*)\s*=\s*([A-Za-z_$][\w$]*)\.getAttribute\(\s*'id'\s*\)\s*;\s*[A-Za-z_$][\w$]*\s*=\s*[A-Za-z_$][\w$]*\(\s*[A-Za-z_$][\w$]*\(\s*\2\s*,\s*[A-Za-z_$][\w$]*\.\$forms\[\s*\1\s*\]\.rules\s*\)\s*\)/g) || [];
+        assert.equal(hits.length, 1, 'gina.min.js is what browsers run');
     });
 });

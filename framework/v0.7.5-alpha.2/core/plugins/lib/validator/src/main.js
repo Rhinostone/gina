@@ -9717,7 +9717,8 @@ function ValidatorPlugin(rules, data, formId, culture) {
         /**
          * Live-checks a <select> after its `change`: validates the select alone, then, in that
          * pass's callback, the whole form, and displays each pass's error for this select only.
-         * The element is always `$el`, never the global `event` (#B781).
+         * The element is always `$el`, never the global `event` (#B781). The whole-form pass
+         * collects and validates with the form's own rules (#B915).
          *
          * @inner
          * @private
@@ -9772,10 +9773,17 @@ function ValidatorPlugin(rules, data, formId, culture) {
 
                     // Global check required: on all fields
                     var $gForm = $localForm, gFields = null, $gFields = null, gRules = null;
-                    var gValidatorInfos = excludeWithheldAutofill(getFormValidationInfos($gForm, rules)); // #B478
+                    var formId = $gForm.getAttribute('id');
+                    // #B915 — collect with the form's own rules, the rule set the pass below validates
+                    // with. `rules` here is bindForm's: the rule REGISTRY, keyed by rule-set name, so
+                    // `rules[<field>]` was undefined for every field and #B221's arm never collected an
+                    // unchecked required radio group: the pass read valid and the submit trigger opened
+                    // after a select change. addLiveForInput's pass collects with the form's rules (its
+                    // own `var rules = $form.rules`).
+                    // was: var gValidatorInfos = excludeWithheldAutofill(getFormValidationInfos($gForm, rules)); // #B478
+                    var gValidatorInfos = excludeWithheldAutofill(getFormValidationInfos($gForm, instance.$forms[formId].rules)); // #B478
                     gFields  = gValidatorInfos.fields;
                     $gFields = gValidatorInfos.$fields;
-                    var formId = $gForm.getAttribute('id');
                     gRules   = instance.$forms[formId].rules;
                     // Don't be tempted to revome fields that has already been validated
                     instance.$forms[formId].isValidating = true;

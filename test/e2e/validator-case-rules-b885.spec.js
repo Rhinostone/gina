@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Playwright RUNTIME e2e for the validator fixes #B885, #B913 and #B914 (the real built gina
+ * Playwright RUNTIME e2e for the validator fixes #B885, #B913, #B914 and #B915 (the real built gina
  * bundle, real forms, real clicks).
  *
  *  - #B885 — validate() wrote into the rule set it was handed: a matching `_case_` condition's
@@ -10,6 +10,9 @@
  *    form's case also reached another form bound to the same rule set.
  *  - #B913 — the same writes replaced an unchecked optional checkbox's rule with `{ exclude: true }`,
  *    so the checkbox ticked afterwards was left out of the posted data.
+ *  - #B915 — the whole-form pass after a select change collected the form with the rule registry
+ *    instead of the form's own rules, so a required radio group left unpicked was not collected, the
+ *    pass read valid and the submit trigger opened.
  *  - #B914 — a radio or checkbox group required only through a `_case_` was collected only once an
  *    earlier pass had written the case rule into the stored rules, so the first click after the case
  *    applied posted without it (the select-driver shape with live check on was refused only because
@@ -34,6 +37,8 @@
  *   11 CONTROL — the case does not apply: the click sends, with no `choice` in the body
  *   12 #B914 — a value-carrying checkbox, live check off: the first click is refused
  *                                                                     (RED: the first click sends)
+ *   13 #B915 — a select change keeps the trigger gated while a required radio group is unpicked
+ *                                                                     (RED: the trigger opens)
  *
  * Scene: inline pages served by the runtime server (`/x76-page?b64=`) with the case-rules rules
  * whisper (`/js/gina.onload.b885.js`); submits go to /ac-sink, which answers {}.
@@ -149,9 +154,13 @@ const CHECKBOX_CASE_FIELDS = '<input type="text" id="ref-{n}" name="ref" value="
 const RADIO_DRIVER_FIELDS = '<input type="text" id="ref-{n}" name="ref" value="">'
     + '<input type="radio" id="mode-a-{n}" name="mode" value="a"><input type="radio" id="mode-b-{n}" name="mode" value="b">'
     + '<input type="radio" id="choice-x-{n}" name="choice" value="x"><input type="radio" id="choice-y-{n}" name="choice" value="y">';
+const SELECT_FIELDS = '<input type="text" id="ref-{n}" name="ref" value="">'
+    + '<input type="text" id="other-{n}" name="other" value="">'
+    + '<select id="kind-{n}" name="kind"><option value="a" selected>a</option><option value="b">b</option></select>'
+    + '<input type="radio" id="choice-x-{n}" name="choice" value="x"><input type="radio" id="choice-y-{n}" name="choice" value="y">';
 const LIVE_CHECK_OFF = ' data-gina-form-live-check-enabled="false"';
 
-test.describe('validator case rules — #B885, #B913, #B914', function () {
+test.describe('validator case rules — #B885, #B913, #B914, #B915', function () {
 
     for (const [num, label, rule] of [['01', '#B885', 'caseform'], ['02', 'CONTROL (a `$` in the rule set)', 'caseformdollar']]) {
         test(num + ' - ' + label + ': kind a→b→a — the trigger opens and one click sends', async ({ page }) => {
@@ -255,6 +264,22 @@ test.describe('validator case rules — #B885, #B913, #B914', function () {
         await typeInto(page, '#ref-1', 'x');
         expect(await clickSends(page, run, 1)).toBe(1);
         expect(JSON.parse(run.posts[0])).toEqual({ ref: 'x', kind: 'a' });
+        expect(run.errors).toEqual([]);
+    });
+
+    test('13 - #B915: a select change keeps the trigger gated while a required radio group is unpicked', async ({ page }) => {
+        const run = await open(page, formOf(1, 'selform', SELECT_FIELDS), ['b885-form-1']);
+        await typeInto(page, '#ref-1', 'x');
+        expect(await gate(page, 1), 'choice is required and unpicked').toEqual(GATED);
+        await page.selectOption('#kind-1', 'b');
+        await page.waitForTimeout(LIVE_CHECK_WAIT);
+        expect(await gate(page, 1), 'the select\'s whole-form check still sees the unpicked group').toEqual(GATED);
+        expect(await clickSends(page, run, 1), 'nothing is sent while the group is unpicked').toBe(0);
+        await page.check('#choice-x-1');
+        await page.waitForTimeout(LIVE_CHECK_WAIT);
+        expect(await gate(page, 1), 'picked').toEqual(OPEN);
+        expect(await clickSends(page, run, 1)).toBe(1);
+        expect(JSON.parse(run.posts[0]).choice).toBe('x');
         expect(run.errors).toEqual([]);
     });
 });
