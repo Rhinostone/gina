@@ -12990,7 +12990,8 @@ function ValidatorPlugin(rules, data, formId, culture) {
          * unticked boolean checkbox keeps its own rule and posts `false` (#B916). A radio or
          * checkbox group that a matching condition requires and the pass never collected is
          * entered as '' and adjudicated once (#B914). Every condition of a block is matched
-         * against its driver's value (#B920).
+         * against its driver's value (#B920); a `case` written `/pattern/flags` is a regular
+         * expression tested against that value (#B918).
          *
          * @inner
          * @param {object} $formOrElement - the form, or the element of a single-element pass
@@ -13014,6 +13015,42 @@ function ValidatorPlugin(rules, data, formId, culture) {
             var localFieldType  = null;
             var caseValueBackup = null; // #B229 — see the `caseName == field` arm below
             var baseValueBackup = null; // #B230 — see the base-rule restore below
+            var caseRegExp      = null; // #B918 — see getCaseRegExp and the condition filter below
+
+            /**
+             * getCaseRegExp
+             * #B918 — reads a condition's `case` written `/pattern/flags` (e.g. `"/^individual$/"`)
+             * and returns the regular expression it describes; any other `case` (a value, an Array of
+             * values, a string without a closing slash) returns null and is compared as a value. The
+             * pattern is taken as written: unlike a RegExp rule KEY, whose square brackets are escaped
+             * because it matches field names such as `items[0]`, a case pattern matches the driver's
+             * value, so `[ab]` stays a character class. A pattern the browser rejects warns and
+             * returns null, so it is compared as a value, as every slash-delimited case was before.
+             * Declared here, inside forEachField, so the function stays self-contained.
+             *
+             * @inner
+             * @param {*} caseDef - a condition's `case`
+             * @returns {RegExp|null} the regular expression, or null when `caseDef` is not one
+             *
+             * @example
+             * getCaseRegExp('/^(a|b)$/i').test('A'); // true
+             * getCaseRegExp('a');                    // null: compared as a value
+             */
+            var getCaseRegExp = function(caseDef) {
+                if ( typeof(caseDef) != 'string' ) {
+                    return null;
+                }
+                var m = caseDef.match(/^\/(.*)\/([a-z]*)$/);
+                if ( !m ) {
+                    return null;
+                }
+                try {
+                    return new RegExp(m[1], m[2]);
+                } catch (err) {
+                    console.warn('[ ginaFormValidator ] the `_case_` condition `'+ caseDef +'` is not a valid regular expression ('+ err.message +'): it is compared as a value');
+                    return null;
+                }
+            };
 
             //console.debug('parsing ', fields, $fields, rules);
             if ( typeof(rules) != 'undefined' ) {
@@ -13283,13 +13320,29 @@ function ValidatorPlugin(rules, data, formId, culture) {
                             // filtering conditions
                             for (var _c = 0, _cLen = rules[c].conditions.length; _c < _cLen; ++_c) {
 
+                                // #B918 — a `case` written `/pattern/flags` is tested against the
+                                // driver's value. It was compared as a string, so it never matched
+                                // and neither its requirements nor its excludes applied. A value or
+                                // an Array of values is compared as before.
+                                // was:
+                                // if (
+                                //     Array.isArray(rules[c].conditions[_c].case)
+                                //         && rules[c].conditions[_c].case.indexOf(caseValue) == -1
+                                //     ||
+                                //     !Array.isArray(rules[c].conditions[_c].case)
+                                //         && rules[c].conditions[_c].case != caseValue
+                                // ) {
+                                caseRegExp = getCaseRegExp(rules[c].conditions[_c].case);
                                 if (
                                     Array.isArray(rules[c].conditions[_c].case)
                                         && rules[c].conditions[_c].case.indexOf(caseValue) == -1
                                     ||
+                                    caseRegExp
+                                        && !caseRegExp.test(caseValue)
+                                    ||
                                     !Array.isArray(rules[c].conditions[_c].case)
+                                        && !caseRegExp
                                         && rules[c].conditions[_c].case != caseValue
-
                                 ) {
                                     continue;
                                 }

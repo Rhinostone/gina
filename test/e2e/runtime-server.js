@@ -80,6 +80,9 @@
  *   GET /js/gina.onload.b920.js        -> built onload with the later-condition rules whisper
  *                                         (#B920; the spec builds its pages through /x76-page,
  *                                         same /ac-sink)
+ *   GET /js/gina.onload.b918.js        -> built onload with the regex-case rules whisper
+ *                                         (#B918; the spec builds its pages through /x76-page,
+ *                                         same /ac-sink)
  *   GET /link-gate                     -> fixtures/link-disabled-gate.html (#B310
  *                                         link disabled-gate harness; same sink)
  *   GET /link-shared                   -> fixtures/link-same-url.html (#B287
@@ -314,6 +317,28 @@ const B920_FORMS_JSON = JSON.stringify({ rules: {
         { case: 'a', rules: { choice: { isRequired: true } } }
     ] } }
 } });
+// #B918 — the forms whisper of the regex-case spec (test/e2e/validator-regex-case-b918.spec.js).
+// In `regexform` the radio driver `mode` has three conditions: 'c' (a value) requires g2,
+// '/^(A|B)$/i' requires g1 and excludes x (the `i` flag lets it match a and b), and '/^z$/' never
+// matches and requires g3. `classform` uses a character class; in `nlform` the regex-case driver is
+// not the last `_case_` block, so a second scan also reaches it. `plainform` is the control.
+const B918_FORMS_JSON = JSON.stringify({ rules: {
+    regexform: { ref: { isRequired: true }, _case_mode: { conditions: [
+        { case: 'c', rules: { g2: { isRequired: true } } },
+        { case: '/^(A|B)$/i', rules: { g1: { isRequired: true }, x: { exclude: true } } },
+        { case: '/^z$/', rules: { g3: { isRequired: true } } }
+    ] } },
+    classform: { ref: { isRequired: true }, _case_mode: { conditions: [
+        { case: '/^[ab]$/', rules: { g1: { isRequired: true } } }
+    ] } },
+    nlform:    { _case_mode: { conditions: [ { case: '/^(a|b)$/', rules: { g1: { isRequired: true } } } ] },
+                 ref: { isRequired: true }, _case_ref: { conditions: [ { case: 'never', rules: { x: { isString: true } } } ] } },
+    plainform: { ref: { isRequired: true }, _case_mode: { conditions: [
+        { case: 'c', rules: { g2: { isRequired: true } } },
+        { case: 'a', rules: { g1: { isRequired: true }, x: { exclude: true } } },
+        { case: 'z', rules: { g3: { isRequired: true } } }
+    ] } }
+} });
 // The staging answer the client consumes (guide: `files[]` entries; the NESTED
 // `preview` object is the app-provided variant the client renders from `preview.tmpUri`).
 const B459_STAGE_JSON = JSON.stringify({ files: [{
@@ -539,6 +564,9 @@ const server = http.createServer(function (req, res) {
         }
         if (url === '/js/gina.onload.b920.js') {
             return send(res, 200, 'application/javascript; charset=utf-8', renderOnload(B920_FORMS_JSON));
+        }
+        if (url === '/js/gina.onload.b918.js') {
+            return send(res, 200, 'application/javascript; charset=utf-8', renderOnload(B918_FORMS_JSON));
         }
         // #B459 — the staged-upload preview-fields fixture and its three endpoints.
         if (url === '/js/gina.onload.b459.js') {
