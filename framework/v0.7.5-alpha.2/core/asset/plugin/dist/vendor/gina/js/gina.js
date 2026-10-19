@@ -26223,7 +26223,8 @@ function ValidatorPlugin(rules, data, formId, culture) {
          * rule says isRequired: false), which is why validate() hands it a copy (#B885). An
          * unticked boolean checkbox keeps its own rule and posts `false` (#B916). A radio or
          * checkbox group that a matching condition requires and the pass never collected is
-         * entered as '' and adjudicated once (#B914).
+         * entered as '' and adjudicated once (#B914). Every condition of a block is matched
+         * against its driver's value (#B920).
          *
          * @inner
          * @param {object} $formOrElement - the form, or the element of a single-element pass
@@ -26588,7 +26589,16 @@ function ValidatorPlugin(rules, data, formId, culture) {
                                             // depending on the case value, replace/merge original rule with condition rule
                                             //caseField = c.replace(/^\_case\_/, '');
                                             caseField = _r;
-                                            caseValue = fields[caseField];
+                                            // #B920 — this branch no longer writes `caseValue`. It stored
+                                            // the named field's value there (a boolean when that field's
+                                            // rule says isBoolean) and nothing here read it: the next reader
+                                            // was the filter of the block's NEXT condition, which then
+                                            // compared its `case` with this field's value instead of the
+                                            // driver's, so a later condition whose case equalled it
+                                            // applied. `caseValue` keeps the driver's value for every
+                                            // condition of the block.
+                                            // was:
+                                            // caseValue = fields[caseField];
 
                                             if ( typeof($fields[caseField]) == 'undefined' ) {
                                                 console.warn('ignoring case `'+ caseField +'`: field `'+ +'` not found in your DOM');
@@ -26600,15 +26610,16 @@ function ValidatorPlugin(rules, data, formId, culture) {
                                             // }
                                             // caseValue =  allFields[caseField];
                                             // boolean caseValue
-                                            if (
-                                                isGFFCtx
-                                                && /^(true|false)$/i.test(caseValue)
-                                                && typeof(rules[caseField]) != 'undefined'
-                                                && typeof(rules[caseField].isBoolean) != 'undefined'
-                                                && /^(true)$/i.test(rules[caseField].isBoolean)
-                                            ) {
-                                                caseValue = ( /^(true)$/i.test(caseValue) ) ? true : false;
-                                            }
+                                            // #B920 — was (the coercion of the value written above):
+                                            // if (
+                                            //     isGFFCtx
+                                            //     && /^(true|false)$/i.test(caseValue)
+                                            //     && typeof(rules[caseField]) != 'undefined'
+                                            //     && typeof(rules[caseField].isBoolean) != 'undefined'
+                                            //     && /^(true)$/i.test(rules[caseField].isBoolean)
+                                            // ) {
+                                            //     caseValue = ( /^(true)$/i.test(caseValue) ) ? true : false;
+                                            // }
 
                                             if (
                                                 //rules[c].conditions[_c].case == caseValue

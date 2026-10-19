@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Each condition of a `_case_` block is matched against the value of its driving field. Once a condition had matched, the validator compared the next conditions of the same block with the value of a field the matched condition names (as a boolean when that field''s own rule says `isBoolean`), so a later condition whose `case` equalled that value applied although the driving field did not match it: a field it requires refused the submit, and a field it excludes was left out of the posted data. A later condition that matches the driving field still applies. Browser-bundled: restart the bundle and rebuild your bundles (`gina bundle:build`) to pick it up. (#B920)'
+time: 2026-10-19T10:32:41+01:00

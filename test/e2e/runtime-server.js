@@ -77,6 +77,9 @@
  *   GET /js/gina.onload.b916.js        -> built onload with the optional-boolean-checkbox
  *                                         rules whisper (#B916; the spec builds its pages
  *                                         through /x76-page, same /ac-sink)
+ *   GET /js/gina.onload.b920.js        -> built onload with the later-condition rules whisper
+ *                                         (#B920; the spec builds its pages through /x76-page,
+ *                                         same /ac-sink)
  *   GET /link-gate                     -> fixtures/link-disabled-gate.html (#B310
  *                                         link disabled-gate harness; same sink)
  *   GET /link-shared                   -> fixtures/link-same-url.html (#B287
@@ -291,6 +294,25 @@ const B885_FORMS_JSON = JSON.stringify({ rules: {
 const B916_FORMS_JSON = JSON.stringify({ rules: {
     optform:  { ref: { isRequired: true }, agree: { isRequired: false, isBoolean: true } },
     reqfform: { ref: { isRequired: true }, agree: { isRequired: false } }
+} });
+// #B920 — the forms whisper of the later-condition spec
+// (test/e2e/validator-case-later-condition-b920.spec.js). In `laterform` the first condition of
+// `_case_mode` matches mode a and names `note`; the second requires the radio group `choice` when
+// the case is 'nv'. In `laterboolform` the first names the boolean checkbox `flag`, whose own rule
+// says isBoolean, and the second's case is true. `matchform` is the control: both conditions match a.
+const B920_FORMS_JSON = JSON.stringify({ rules: {
+    laterform:     { ref: { isRequired: true }, _case_mode: { conditions: [
+        { case: 'a', rules: { note: { isString: true } } },
+        { case: 'nv', rules: { choice: { isRequired: true } } }
+    ] } },
+    laterboolform: { ref: { isRequired: true }, flag: { isBoolean: true }, _case_mode: { conditions: [
+        { case: 'a', rules: { flag: { isBoolean: true } } },
+        { case: true, rules: { choice: { isRequired: true } } }
+    ] } },
+    matchform:     { ref: { isRequired: true }, _case_mode: { conditions: [
+        { case: 'a', rules: { note: { isString: true } } },
+        { case: 'a', rules: { choice: { isRequired: true } } }
+    ] } }
 } });
 // The staging answer the client consumes (guide: `files[]` entries; the NESTED
 // `preview` object is the app-provided variant the client renders from `preview.tmpUri`).
@@ -514,6 +536,9 @@ const server = http.createServer(function (req, res) {
         // its rules whisper. Its submits go to /ac-sink.
         if (url === '/js/gina.onload.b916.js') {
             return send(res, 200, 'application/javascript; charset=utf-8', renderOnload(B916_FORMS_JSON));
+        }
+        if (url === '/js/gina.onload.b920.js') {
+            return send(res, 200, 'application/javascript; charset=utf-8', renderOnload(B920_FORMS_JSON));
         }
         // #B459 — the staged-upload preview-fields fixture and its three endpoints.
         if (url === '/js/gina.onload.b459.js') {
