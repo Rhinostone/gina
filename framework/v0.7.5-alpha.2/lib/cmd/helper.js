@@ -240,11 +240,19 @@ function CmdHelper(cmd, client, debug) {
      * Validates the command context, filters argv, and loads all project/bundle
      * configuration assets into `cmd`. Must be called once at the top of a
      * handler's `init()`. Delegates to getParams() then loadAssets().
+     * `~/.gina/main.json` and `projects.json` are read without requireJSON()'s
+     * `process.exit(1)` (#B906): a file that cannot be read or parsed refuses the command with
+     * « <file> cannot be used: <reason> » (refuseProjectFile()), which inside the framework
+     * daemon (`bundle:start`) ends only that client, and the function returns false.
      * Assigns itself to the global `isCmdConfigured` so all cmd handlers can call it.
      *
      * @global
      * @async
      * @returns {boolean} True when configuration loaded successfully; false on error
+     *
+     * @example
+     * isCmdConfigured();
+     * if (self.cmdExited) return false;   // a refusal inside the daemon marks the command
      */
     isCmdConfigured = async function() {
 
@@ -265,7 +273,18 @@ function CmdHelper(cmd, client, debug) {
             if ( typeof(require.cache[cmd.mainConfigPath]) != 'undefined') {
                 delete require.cache[require.resolve(cmd.mainConfigPath)]
             }
-            cmd.mainConfig  = requireJSON( cmd.mainConfigPath );
+            // #B906 — main.json and projects.json are read without requireJSON()'s
+            // `process.exit(1)`: `bundle:start` runs inside the framework daemon, where a
+            // malformed or unreadable projects.json ended the daemon (measured). A file that
+            // cannot be used refuses the command (refuseProjectFile()), which inside the daemon
+            // ends only this client.
+            // was: cmd.mainConfig  = requireJSON( cmd.mainConfigPath );
+            try {
+                cmd.mainConfig  = readProjectJSON( cmd.mainConfigPath );
+            } catch (mainErr) {
+                refuseProjectFile('main.json', mainErr);
+                return false;
+            }
 
             // projects
             cmd.projectConfigPath = _(GINA_HOMEDIR + '/projects.json', true);
@@ -273,7 +292,13 @@ function CmdHelper(cmd, client, debug) {
                 delete require.cache[require.resolve(cmd.projectConfigPath)]
             }
 
-            cmd.projects    = requireJSON( cmd.projectConfigPath );
+            // was: cmd.projects    = requireJSON( cmd.projectConfigPath );
+            try {
+                cmd.projects    = readProjectJSON( cmd.projectConfigPath );   // #B906
+            } catch (projectsErr) {
+                refuseProjectFile('projects.json', projectsErr);
+                return false;
+            }
             var pIndex      = 0;
             for (let p in cmd.projects) {
                 // #B59 — a corrupt registration (empty / undefined / too-short `.path`,
@@ -697,7 +722,9 @@ function CmdHelper(cmd, client, debug) {
      * does, comments accepted, but never exits the process. loadAssets() runs inside the
      * framework daemon for `bundle:start`, where requireJSON()'s `process.exit(1)` on an
      * unreadable or malformed file ended the daemon (measured). The caller decides what a
-     * failure means.
+     * failure means. #B906 — gina's own state files are read with it too: `~/.gina/main.json`
+     * and `projects.json` in isCmdConfigured(), `ports.json` and `ports.reverse.json` in
+     * loadAssets().
      *
      * @inner
      * @private
@@ -714,15 +741,16 @@ function CmdHelper(cmd, client, debug) {
     };
 
     /**
-     * #B890 — refuses the command because a file of the current project cannot be used:
-     * logs « <name> cannot be used: <reason> », then ends the command as the #B855 refusal
-     * in isCmdConfigured() does: online (`bundle:start`, inside the framework daemon) it ends
-     * only this client, with exit code 1 framed; offline it exits the process with code 1.
-     * The caller returns right after it.
+     * #B890 — refuses the command because a file of the current project cannot be used, or
+     * (#B906) one of gina's own state files: logs « <name> cannot be used: <reason> », then
+     * ends the command as the #B855 refusal in isCmdConfigured() does: online (`bundle:start`,
+     * inside the framework daemon) it ends only this client, with exit code 1 framed; offline
+     * it exits the process with code 1. The caller returns right after it.
      *
      * @inner
      * @private
-     * @param {string} name - the file's name as the message shows it (`manifest.json`)
+     * @param {string} name - the file's name as the message shows it (`manifest.json`,
+     *   `projects.json`)
      * @param {Error} err - the error readProjectJSON() threw
      *
      * @example
@@ -749,7 +777,8 @@ function CmdHelper(cmd, client, debug) {
      * skipped the same way (#B890). The current project's manifest.json and env.json are
      * read without requireJSON()'s `process.exit(1)`: a file that cannot be used refuses
      * the command with « <file> cannot be used: <reason> » (refuseProjectFile()), which
-     * inside the framework daemon (`bundle:start`) ends only that client (#B890).
+     * inside the framework daemon (`bundle:start`) ends only that client (#B890). So do
+     * `~/.gina/ports.json` and `ports.reverse.json`, at each of their reads here (#B906).
      * On `project:add`/`project:import`, the current project's bundle list is the
      * UNION of the manifest's declared bundles and the bundle directories found on
      * disk (#B375): declared entries are preserved as-is, disk-only bundles are
@@ -819,17 +848,29 @@ function CmdHelper(cmd, client, debug) {
                     // down sits BEFORE the canonical ports load, and `remove.js` end() rewrites
                     // ports.json / ports.reverse.json unconditionally — so without loading them
                     // the maps would be the empty `{}` defaults and EVERY project's ports would
-                    // be wiped. Mirror the canonical load (see the `cmd.portsData = requireJSON`
+                    // be wiped. Mirror the canonical load (see the `cmd.portsData = readProjectJSON`
                     // site later in this function); the port paths are already set at `:563-564`.
+                    // #B906 — a ports file that cannot be used refuses the command here too: an
+                    // empty map written back would wipe every project's ports.
                     cmd.projectLocation = _(cmd.projects[cmd.projectName].path, true);
                     if ( typeof(require.cache[cmd.portsPath]) != 'undefined') {
                         delete require.cache[require.resolve(cmd.portsPath)]
                     }
-                    cmd.portsData          = requireJSON(cmd.portsPath) || {};
+                    // was: cmd.portsData          = requireJSON(cmd.portsPath) || {};
+                    try {
+                        cmd.portsData          = readProjectJSON(cmd.portsPath) || {};
+                    } catch (portsErr) {
+                        return refuseProjectFile('ports.json', portsErr);
+                    }
                     if ( typeof(require.cache[cmd.portsReversePath]) != 'undefined') {
                         delete require.cache[require.resolve(cmd.portsReversePath)]
                     }
-                    cmd.portsReverseData   = requireJSON(cmd.portsReversePath) || {};
+                    // was: cmd.portsReverseData   = requireJSON(cmd.portsReversePath) || {};
+                    try {
+                        cmd.portsReverseData   = readProjectJSON(cmd.portsReversePath) || {};
+                    } catch (portsReverseErr) {
+                        return refuseProjectFile('ports.reverse.json', portsReverseErr);
+                    }
                     return;
                 } else if ( ! fs.existsSync(cmd.projects[cmd.projectName].path) ) {
                     // #B59 — the project DIRECTORY itself is gone (a valid-length path pointing
@@ -1253,12 +1294,25 @@ function CmdHelper(cmd, client, debug) {
             if ( typeof(require.cache[cmd.portsPath]) != 'undefined') {
                 delete require.cache[require.resolve(cmd.portsPath)]
             }
-            cmd.portsData          = requireJSON(cmd.portsPath) || {};
+            // #B906 — read without requireJSON()'s `process.exit(1)`, which ended the framework
+            // daemon for `bundle:start` (measured): a ports file that cannot be used refuses the
+            // command (refuseProjectFile()), which inside the daemon ends only this client.
+            // was: cmd.portsData          = requireJSON(cmd.portsPath) || {};
+            try {
+                cmd.portsData          = readProjectJSON(cmd.portsPath) || {};
+            } catch (portsErr) {
+                return refuseProjectFile('ports.json', portsErr);
+            }
 
             if ( typeof(require.cache[cmd.portsReversePath]) != 'undefined') {
                 delete require.cache[require.resolve(cmd.portsReversePath)]
             }
-            cmd.portsReverseData   = requireJSON(cmd.portsReversePath) || {};
+            // was: cmd.portsReverseData   = requireJSON(cmd.portsReversePath) || {};
+            try {
+                cmd.portsReverseData   = readProjectJSON(cmd.portsReversePath) || {};
+            } catch (portsReverseErr) {
+                return refuseProjectFile('ports.reverse.json', portsReverseErr);
+            }
 
 
 
@@ -1422,8 +1476,20 @@ function CmdHelper(cmd, client, debug) {
             delete require.cache[require.resolve(cmd.portsPath)]
         }
 
-        ports = requireJSON(cmd.portsPath);
-        portsReverse = requireJSON(cmd.portsReversePath);
+        // #B906 — read without requireJSON()'s `process.exit(1)`, as above; this second read
+        // sits outside the project block, so it also runs when no project is named
+        // was: ports = requireJSON(cmd.portsPath);
+        // was: portsReverse = requireJSON(cmd.portsReversePath);
+        try {
+            ports = readProjectJSON(cmd.portsPath);
+        } catch (portsErr) {
+            return refuseProjectFile('ports.json', portsErr);
+        }
+        try {
+            portsReverse = readProjectJSON(cmd.portsReversePath);
+        } catch (portsReverseErr) {
+            return refuseProjectFile('ports.reverse.json', portsReverseErr);
+        }
 
         // protocols list
         if (cmd.protocols.length == 0)

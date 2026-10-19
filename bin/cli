@@ -223,7 +223,12 @@ async function onExec() {
         if ( /^(bundle|project):(start|restart)$/.test(process.argv[2]) ) {
             var _mainJsonPath = home + '/main.json';
             try {
-                var _mainData = requireJSON(_mainJsonPath);// jshint ignore:line
+                // #B906 — parseJSONWithComments() throws where requireJSON() calls
+                // `process.exit(1)`, which this catch could not stop: a main.json that cannot be
+                // read or parsed is now only warned about here, and for `bundle:start` the
+                // framework daemon then refuses the command with « main.json cannot be used ».
+                // was: var _mainData = requireJSON(_mainJsonPath);// jshint ignore:line
+                var _mainData = parseJSONWithComments(fs.readFileSync(_mainJsonPath, 'utf8'), _mainJsonPath);// jshint ignore:line
                 if ( _mainData.def_framework !== version ) {
                     process.stdout.write('[gina] def_framework: ' + (_mainData.def_framework || 'unset') + ' → ' + version + '\n');
                     _mainData.def_framework = version;
