@@ -9923,8 +9923,8 @@ function ValidatorPlugin(rules, data, formId, culture) {
 
         // group dependencies handling
         /**
-         * Sets the fields whose `data-gina-form-element-group` holds the checkbox `elId` (matched as a
-         * substring, #B923; radios and checkboxes among them are skipped) to the checkbox's state:
+         * Sets the fields whose `data-gina-form-element-group` holds the checkbox `elId` (as one of its
+         * space-separated ids, #B923; radios and checkboxes among them are skipped) to the checkbox's state:
          * enabled and included while it is ticked, disabled and excluded otherwise. Called when a
          * grouped checkbox is clicked (`excluded` decides) and, through updateGroupChildrenState, for
          * each checkbox grouped under a master (`isCalledHasDependency`: the checkbox's own state
@@ -9966,7 +9966,10 @@ function ValidatorPlugin(rules, data, formId, culture) {
                     continue;
 
                 let hasBeenUpdated = false;
-                re = new RegExp(namedId);
+                // #B923 — a group lists whole ids separated by spaces, so `elId` is matched as one of
+                // them, never inside a longer id: the checkbox `doc` drove the fields of `doc-2`.
+                // was: re = new RegExp(namedId);
+                re = new RegExp('(^|\\s)' + namedId + '(\\s|$)');
                 re2 = new RegExp(group);
 
                 if (
@@ -10082,7 +10085,9 @@ function ValidatorPlugin(rules, data, formId, culture) {
             var checked     = $el.checked;
 
             var checkBoxGroup   = $el.getAttribute('data-gina-form-element-group') || null;
-            var re              = new RegExp($el.id.replace(/\-|\_|\@|\#|\.|\[|\]/g, '\\$&'));
+            // #B923 — matched as one whole id of a group, never inside a longer one (`cb-1` drove `cb-10`'s fields).
+            // was: var re              = new RegExp($el.id.replace(/\-|\_|\@|\#|\.|\[|\]/g, '\\$&'));
+            var re              = new RegExp('(^|\\s)' + $el.id.replace(/\-|\_|\@|\#|\.|\[|\]/g, '\\$&') + '(\\s|$)');
             // set to checked if not checked: false -> true
             if ( !checked || checked == 'null' || checked == 'false' || checked == '' ) {
 
@@ -10134,7 +10139,9 @@ function ValidatorPlugin(rules, data, formId, culture) {
         };
 
         var updateGroupChildrenState = function($groupMaster) {
-            var re = new RegExp($groupMaster.id.replace(/\-|\_|\@|\#|\.|\[|\]/g, '\\$&'));
+            // #B923 — matched as one whole id of a group, never inside a longer one.
+            // was: var re = new RegExp($groupMaster.id.replace(/\-|\_|\@|\#|\.|\[|\]/g, '\\$&'));
+            var re = new RegExp('(^|\\s)' + $groupMaster.id.replace(/\-|\_|\@|\#|\.|\[|\]/g, '\\$&') + '(\\s|$)');
             // Handle extended groups
             for (let id in allFormGroupedElements) {
                 if (
@@ -10149,7 +10156,7 @@ function ValidatorPlugin(rules, data, formId, culture) {
 
         /**
          * Applies the radio `$el`'s state to the fields that depend on it: every grouped element
-         * whose `data-gina-form-element-group` holds `$el`'s id (matched as a substring, #B923) is
+         * whose `data-gina-form-element-group` holds `$el`'s id (as one of its space-separated ids, #B923) is
          * enabled and included while `$el` is checked, disabled and excluded otherwise; then each
          * checkbox among them passes its own state on to the fields that name it
          * (updateGroupChildrenState). updateRadio runs it for every radio at bind, for the clicked
@@ -10176,7 +10183,9 @@ function ValidatorPlugin(rules, data, formId, culture) {
             ;
             // parse grouped elements: allFormGroupedElements
             // init
-            re = new RegExp(extendedGroupName);
+            // #B923 — matched as one whole id of a group, never inside a longer one (`opt` drove `opt-2`'s fields).
+            // was: re = new RegExp(extendedGroupName);
+            re = new RegExp('(^|\\s)' + extendedGroupName + '(\\s|$)');
             for (let id in allFormGroupedElements) {
                 // #B919 — was: the branch below disabled, and excluded, EVERY grouped field that is
                 // not a radio or a checkbox, whichever radio this runs for; only the next branch
@@ -10321,7 +10330,9 @@ function ValidatorPlugin(rules, data, formId, culture) {
                     && allFormGroupNames.indexOf($inputs[i].id) > -1
                 ) {
                     // updateGroupChildrenState($inputs[i]);
-                    let re = new RegExp( $inputs[i].id.replace(/\-|\_|\@|\#|\.|\[|\]/g, '\\$&') );
+                    // #B923 — matched as one whole id of a group, never inside a longer one.
+                    // was: let re = new RegExp( $inputs[i].id.replace(/\-|\_|\@|\#|\.|\[|\]/g, '\\$&') );
+                    let re = new RegExp( '(^|\\s)' + $inputs[i].id.replace(/\-|\_|\@|\#|\.|\[|\]/g, '\\$&') + '(\\s|$)' );
                     for (let childElement in allFormGroupedElements ) {
                         if ( re.test(allFormGroupedElements[childElement].group) ) {
                             allFormGroupedElements[childElement].target.disabled = true;
