@@ -22028,6 +22028,10 @@ function ValidatorPlugin(rules, data, formId, culture) {
      * rule set); else the form's id, `-` and `/` read as `.`. A form matching none of them is
      * bound with an empty rule set.
      *
+     * The record's rules are its own copy of the resolved set (#B931): what this binding and the
+     * form's checks write into them — `exclude` on its grouped fields, `isBoolean` on a boolean
+     * checkbox, a RegExp key's alias — never reaches another form bound to the same rule set.
+     *
      * @param {object} [$target] - DOM element
      * @param {object|string} [customRule] - a rule object, or the name of a known rule set
      *
@@ -22172,7 +22176,24 @@ function ValidatorPlugin(rules, data, formId, culture) {
                 rule = getRuleObjByName(_id.replace(/\-|\//g, '.'))
             }
 
-            $form.rules = rule;
+            // #B931 — the record holds its OWN copy of the rule set. `rule` is a shared object
+            // whichever way it came: `getRuleObjByName` caches the object it builds and returns
+            // it to every caller, and the boot scan passes `instance.rules[name]`, which `init`
+            // chains from one form to the next through `merge`. What this binding and the form's
+            // own checks write into the rules — `exclude` on its grouped fields (below and in
+            // the group handlers), the collector's `isBoolean` on a boolean checkbox, a RegExp
+            // key's alias — is this form's state, derived from its own markup; shared, it
+            // reached every form bound to the same rule set: a form posted without a ticked
+            // value-carrying checkbox because another form's hidden field of that name had been
+            // excluded first, or posted a boolean in place of a value. The submit and click
+            // passes read the record's copy too.
+            // was: $form.rules = rule;
+            $form.rules = JSON.clone(rule);
+            // where validateFormById set the singular `rule`, it keeps naming the form's own
+            // rules object, as it did
+            if ( typeof($form.rule) != 'undefined' ) {
+                $form.rule = $form.rules;
+            }
             if ( envIsDev && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
                 // update toolbar
                 if (!gina.forms.rules)
@@ -24305,10 +24326,19 @@ function ValidatorPlugin(rules, data, formId, culture) {
                 } else {
                     // update rule in case the current event is triggered outside the main sequence
                     // e.g.: form `id` attribute rewritten on the fly
+                    // #B931 — the record's own copy first: that is where this form's checks and
+                    // its binding wrote the state they derived from its markup (`exclude` on
+                    // grouped fields, `isBoolean` on a boolean checkbox). Resolving by name read
+                    // the registry object instead, which every form bound to the rule set used
+                    // to share and which the copy no longer feeds. By name only when no record
+                    // answers to the current id.
                     _id = $target.getAttribute('id');
                     var customRule = $target.getAttribute('data-gina-form-rule');
 
-                    if ( customRule ) { // 'data-gina-form-rule'
+                    // was: if ( customRule ) { rule = getRuleObjByName(<the attribute, dotted>) } else { rule = getRuleObjByName(<_id, dotted>) }
+                    if ( typeof(instance.$forms[_id]) != 'undefined' && typeof(instance.$forms[_id].rules) != 'undefined' ) {
+                        rule = instance.$forms[_id].rules;
+                    } else if ( customRule ) { // 'data-gina-form-rule'
                         rule = getRuleObjByName(customRule.replace(/\-|\//g, '.'))
                     } else {
                         rule = getRuleObjByName(_id.replace(/\-/g, '.'))
@@ -24653,9 +24683,14 @@ function ValidatorPlugin(rules, data, formId, culture) {
             } else {
                 // update rule in case the current event is triggered outside the main sequence
                 // e.g.: form `id` attribute rewritten on the fly
+                // #B931 — the record's own copy first, by name only when no record answers to
+                // the current id: see the click proxy above for the reason.
                 var customRule = $target.getAttribute('data-gina-form-rule');
 
-                if ( customRule ) { // 'data-gina-form-rule'
+                // was: if ( customRule ) { rule = getRuleObjByName(<the attribute, dotted>) } else { rule = getRuleObjByName(<id, dotted>) }
+                if ( $formInstance && typeof($formInstance.rules) != 'undefined' ) {
+                    rule = $formInstance.rules;
+                } else if ( customRule ) { // 'data-gina-form-rule'
                     rule = getRuleObjByName(customRule.replace(/\-|\//g, '.'))
                 } else {
                     rule = getRuleObjByName(id.replace(/\-/g, '.'))

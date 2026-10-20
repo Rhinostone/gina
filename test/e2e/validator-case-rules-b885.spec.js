@@ -24,8 +24,8 @@
  *   03 #B885 — live check off: back at kind a, the click sends       (RED: 0 sends)
  *   04 #B885 — two forms bound at boot: the last form's case does not refuse the other's click
  *                                                                     (RED: 0 sends)
- *   05 #B885 — two forms bound by bindRegion share one rule object: one form's case does not gate
- *      the other                                                      (RED: gated, 0 sends)
+ *   05 #B885 — two forms bound by bindRegion, each with its own copy of the rules since #B931: one
+ *      form's case does not gate the other                            (RED: gated, 0 sends)
  *   06 #B913 — an optional boolean checkbox ticked after a pass is posted
  *                                                                     (RED: the body lacks it)
  *   07 CONTROL — the same checkbox left unticked posts false (#B916)
@@ -211,8 +211,9 @@ test.describe('validator case rules — #B885, #B913, #B914, #B915', function ()
             return window.gina.validator.bindRegion($r);
         }, formOf(3, 'caseform', CASE_FIELDS) + formOf(4, 'caseform', CASE_FIELDS));
         expect(bound).toBe(2);
+        // #B931 — each record holds its own copy of the rule set; they used to share the registry object
         expect(await page.evaluate(() => window.gina.validator.$forms['b885-form-3'].rules === window.gina.validator.$forms['b885-form-4'].rules),
-            'forms bound after boot share the registry rule object').toBe(true);
+            'each form holds its own copy of the rule set (#B931)').toBe(false);
         await typeInto(page, '#ref-3', 'x');
         await page.selectOption('#kind-3', 'b');
         await page.waitForTimeout(LIVE_CHECK_WAIT);

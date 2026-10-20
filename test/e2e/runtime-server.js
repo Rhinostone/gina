@@ -88,6 +88,8 @@
  *                                         same /ac-sink)
  *   GET /js/gina.onload.b922.js        -> built onload with the case-target submit-control whisper
  *   GET /js/gina.onload.b926.js        -> built onload with the required value-carrying checkbox whisper
+ *   GET /js/gina.onload.b931.js        -> built onload with the shared-rule-set whisper (#B931; the spec
+ *                                         builds its pages through /x76-page, same /ac-sink)
  *                                         (#B922; the spec builds its pages through /x76-page,
  *                                         same /ac-sink)
  *   GET /link-gate                     -> fixtures/link-disabled-gate.html (#B310
@@ -386,6 +388,14 @@ const B926_FORMS_JSON = JSON.stringify({ rules: {
         agree: { isRequired: true }
     }
 } });
+// #B931 — the forms whisper of the shared-rule-set spec (test/e2e/validator-shared-rules-b931.spec.js).
+// `shared` and `other`: two rule sets with the same one rule, so two forms can be bound to one set
+// or to one each; `boolreq`: a required valueless checkbox, the control whose `false` must still pass.
+const B931_FORMS_JSON = JSON.stringify({ rules: {
+    shared:  { ref: { isRequired: true } },
+    other:   { ref: { isRequired: true } },
+    boolreq: { ref: { isRequired: true }, agree: { isRequired: true } }
+} });
 // The staging answer the client consumes (guide: `files[]` entries; the NESTED
 // `preview` object is the app-provided variant the client renders from `preview.tmpUri`).
 const B459_STAGE_JSON = JSON.stringify({ files: [{
@@ -623,6 +633,9 @@ const server = http.createServer(function (req, res) {
         }
         if (url === '/js/gina.onload.b926.js') {
             return send(res, 200, 'application/javascript; charset=utf-8', renderOnload(B926_FORMS_JSON));
+        }
+        if (url === '/js/gina.onload.b931.js') {
+            return send(res, 200, 'application/javascript; charset=utf-8', renderOnload(B931_FORMS_JSON));
         }
         // #B459 — the staged-upload preview-fields fixture and its three endpoints.
         if (url === '/js/gina.onload.b459.js') {
