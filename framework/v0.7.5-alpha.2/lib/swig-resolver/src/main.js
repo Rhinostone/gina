@@ -29,7 +29,8 @@
  *     multi-flavor release as `@rhinostone/swig`), without re-keying
  *     anything. Only `@rhinostone/swig` has a framework copy to fall back
  *     to, so another package needs `useProject: true` and a project install
- *     that passes gates 2 and 3 (#B925). A project that only has the
+ *     that passes gates 2 and 3; without one, load() throws
+ *     SWIG_PACKAGE_UNAVAILABLE (#B925). A project that only has the
  *     abandoned upstream `"swig"` in node_modules gets the framework copy
  *     (CVE-2023-25345 is also blocked at the controller layer); naming
  *     `swig` itself fails gate 2, its last release being 1.4.2.
@@ -76,6 +77,15 @@ var DEFAULT_PACKAGE = '@rhinostone/swig';
  * @type {string}
  */
 var DEFAULT_MIN = '2.0.0';
+
+/**
+ * `code` of the Error {@link load} throws when a package other than
+ * {@link DEFAULT_PACKAGE} has no usable project copy (#B925).
+ *
+ * @constant
+ * @type {string}
+ */
+var UNAVAILABLE_CODE = 'SWIG_PACKAGE_UNAVAILABLE';
 
 /**
  * Known warning codes emitted by {@link resolve}. A non-null `warning` on the
@@ -314,6 +324,52 @@ function resolve(projectPath, options) {
 }
 
 /**
+ * Builds the Error {@link load} throws when a package other than
+ * {@link DEFAULT_PACKAGE} has no usable project copy (#B925). The framework
+ * ships only `@rhinostone/swig`, so there is nothing to fall back to: the
+ * message names the package, the reason (`swig.useProject` not true, or the
+ * gate that rejected the project copy, with the path it probed) and the
+ * install line, and the decision record rides along, the shape of the
+ * nunjucks resolver's NUNJUCKS_NOT_INSTALLED.
+ *
+ * @inner
+ * @param   {string|null|undefined} projectPath
+ * @param   {string}                pkgName
+ * @param   {ResolverOptions}       options
+ * @param   {ResolverDecision}      decision
+ * @returns {Error} `code: 'SWIG_PACKAGE_UNAVAILABLE'`, with `decision` attached.
+ *
+ * @example
+ * unavailableError('/srv/app', '@rhinostone/swig-twig', { useProject: true }, decision).message;
+ * // '[swig-resolver] settings.swig.package is @rhinostone/swig-twig, but the project has no
+ * //  usable copy (not-installed; expected at /srv/app/node_modules/@rhinostone/swig-twig).
+ * //  The framework ships only @rhinostone/swig, so this package needs swig.useProject: true
+ * //  and a copy in the project: cd /srv/app && npm install @rhinostone/swig-twig@^2.0.0'
+ */
+function unavailableError(projectPath, pkgName, options, decision) {
+    var reason;
+    if (options.useProject !== true) {
+        reason = 'swig.useProject is not true';
+    } else if (!projectPath) {
+        reason = 'no project path was given';
+    } else {
+        reason = 'the project has no usable copy ('
+            + decision.warning
+            + (decision.version ? ', project pinned ' + decision.version : '')
+            + '; expected at ' + nodePath.join(projectPath, 'node_modules', pkgName) + ')';
+    }
+    var err = new Error(
+        '[swig-resolver] settings.swig.package is ' + pkgName + ', but ' + reason + '.'
+        + ' The framework ships only ' + DEFAULT_PACKAGE + ', so this package needs swig.useProject: true'
+        + ' and a copy in the project: cd ' + (projectPath || '<project>')
+        + ' && npm install ' + pkgName + '@^' + (options.min || DEFAULT_MIN)
+    );
+    err.code     = UNAVAILABLE_CODE;
+    err.decision = decision;
+    return err;
+}
+
+/**
  * Resolves + loads the swig module for the running bundle. Idempotent within
  * a single process: the loaded module is cached on `process.gina._swig` so
  * that (a) repeated calls during bundle startup return the same instance and
@@ -327,10 +383,16 @@ function resolve(projectPath, options) {
  * `[swig-resolver]` warning and keep the already-loaded copy. Split the
  * process (one bundle per port) if you need per-bundle swig isolation.
  *
+ * Only `@rhinostone/swig` has a framework copy to fall back to. Another
+ * package with no usable project copy throws (#B925).
+ *
  * @memberof module:gina/lib/swig-resolver
  * @param   {string|null|undefined} projectPath
  * @param   {ResolverOptions}       [options]
  * @returns {*} The loaded swig module (or whatever `require()` returned for the project package).
+ * @throws  {Error} `code: 'SWIG_PACKAGE_UNAVAILABLE'`, with `decision` attached, when
+ *                  `options.package` is not `@rhinostone/swig` and no usable project copy
+ *                  was found (`useProject` not true, or a safety gate rejected the copy).
  *
  * @example
  * var swig = require('lib/swig-resolver').load('/srv/app', {
@@ -364,6 +426,12 @@ function load(projectPath, options) {
     }
 
     var decision = resolve(projectPath, options);
+    // #B925 — only @rhinostone/swig has a framework copy. Another package with
+    // no usable project copy stops here with a named error; the fallback
+    // require() below threw a bare MODULE_NOT_FOUND for it.
+    if (decision.source !== 'project' && pkgName !== DEFAULT_PACKAGE) {
+        throw unavailableError(projectPath, pkgName, options, decision);
+    }
     var swig;
     if (decision.source === 'project') {
         swig = require(decision.path);
