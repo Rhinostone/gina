@@ -9901,6 +9901,22 @@ function ValidatorPlugin(rules, data, formId, culture) {
         }// EO binding select
 
         // group dependencies handling
+        /**
+         * Sets the fields whose `data-gina-form-element-group` holds the checkbox `elId` (matched as a
+         * substring, #B923; radios and checkboxes among them are skipped) to the checkbox's state:
+         * enabled and included while it is ticked, disabled and excluded otherwise. Called when a
+         * grouped checkbox is clicked (`excluded` decides) and, through updateGroupChildrenState, for
+         * each checkbox grouped under a master (`isCalledHasDependency`: the checkbox's own state
+         * decides, and a disabled checkbox counts as unticked, #B919).
+         *
+         * @inner
+         * @param {string} elId - the checkbox's id; it must be a grouped element of the form
+         * @param {string} group - the checkbox's own group
+         * @param {boolean} excluded - the state applied when `isCalledHasDependency` is false
+         * @param {boolean} [isCalledHasDependency=false] - true when the checkbox's own state decides
+         * @returns {undefined}
+         * @throws {Error} when `elId` is not a grouped element of the form
+         */
         var updateReletadItems = function(elId, group, excluded, isCalledHasDependency) {
 
             if ( typeof(isCalledHasDependency) == 'undefined' ) {
@@ -9917,7 +9933,11 @@ function ValidatorPlugin(rules, data, formId, culture) {
                 , namedId = elId.replace(/\-|\_|\@|\#|\.|\[|\]/g, '\\$&')
                 //, name = $el.getAttribute('name').replace(/\-|\_|\@|\#|\.|\[|\]/g, '\\$&')
             ;
-            elIdIsChecked = allFormGroupedElements[elId].target.checked;
+            // #B919 — a checkbox that is disabled counts as unticked: when its own master is switched
+            // off (handleGroupDependencies disables it), the fields that name it follow it off, though
+            // it may still be ticked. The branch #B919 removed from handleGroupDependencies hid this.
+            // was: elIdIsChecked = allFormGroupedElements[elId].target.checked;
+            elIdIsChecked = allFormGroupedElements[elId].target.checked && !allFormGroupedElements[elId].target.disabled;
             //console.debug('current id ', elId, excluded);
             for (let id in allFormGroupedElements) {
                 // ignore triggers
@@ -10106,10 +10126,26 @@ function ValidatorPlugin(rules, data, formId, culture) {
             }
         }
 
-        // When binding children element to the radio, you must used the radio.id as the element group
-        // Because the name attribute of the radio can also be used to group multiple radio field
-        // On master: <input type="radio" id="invoice-type-balance" name="action[addFromExisting]" value="balanceFlow">
-        // On children: <input type="checkbox" data-gina-form-element-group="invoice-type-balance" value="someValue">
+        /**
+         * Applies the radio `$el`'s state to the fields that depend on it: every grouped element
+         * whose `data-gina-form-element-group` holds `$el`'s id (matched as a substring, #B923) is
+         * enabled and included while `$el` is checked, disabled and excluded otherwise; then each
+         * checkbox among them passes its own state on to the fields that name it
+         * (updateGroupChildrenState). updateRadio runs it for every radio at bind, for the clicked
+         * radio, and for each peer a checked radio unchecks. The fields of other masters, and a
+         * field whose group names no element, are left as they are (#B919).
+         *
+         * A dependent field names the master's id, not its name: the name groups the radios.
+         *
+         * @example
+         * <input type="radio" id="plan-annual" name="plan" value="annual">
+         * <input type="hidden" name="discountCode" value="A10" data-gina-form-element-group="plan-annual">
+         *
+         * @inner
+         * @param {HTMLInputElement} $el - the radio
+         * @param {boolean} [isOnResetMode] - passed for a peer the click unchecked; not otherwise used
+         * @returns {undefined}
+         */
         var handleGroupDependencies = function($el, isOnResetMode) {
             isOnResetMode = ( typeof(isOnResetMode) != 'undefined' && isOnResetMode) ? true: false;
 
@@ -10121,14 +10157,19 @@ function ValidatorPlugin(rules, data, formId, culture) {
             // init
             re = new RegExp(extendedGroupName);
             for (let id in allFormGroupedElements) {
-                if (!/checkbox|radio/i.test(allFormGroupedElements[id].target.type)) {
-                    allFormGroupedElements[id].target.disabled = true;
-                    // adding custom rule for this case
-                    if ( typeof($form.rules[ allFormGroupedElements[id].name ]) == 'undefined' ) {
-                        $form.rules[ allFormGroupedElements[id].name ] = {}
-                    }
-                    $form.rules[ allFormGroupedElements[id].name ].exclude = true;
-                }
+                // #B919 — was: the branch below disabled, and excluded, EVERY grouped field that is
+                // not a radio or a checkbox, whichever radio this runs for; only the next branch
+                // re-enabled the fields of $el's own group. So a radio click, or the bind of a later
+                // radio, turned off the fields of every other checked master (a checkbox master's too)
+                // and of a group naming no element. A field now changes only with a master it names.
+                // if (!/checkbox|radio/i.test(allFormGroupedElements[id].target.type)) {
+                //     allFormGroupedElements[id].target.disabled = true;
+                //     // adding custom rule for this case
+                //     if ( typeof($form.rules[ allFormGroupedElements[id].name ]) == 'undefined' ) {
+                //         $form.rules[ allFormGroupedElements[id].name ] = {}
+                //     }
+                //     $form.rules[ allFormGroupedElements[id].name ].exclude = true;
+                // }
 
                 if (
                     re.test(allFormGroupedElements[id].group)

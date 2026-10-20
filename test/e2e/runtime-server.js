@@ -83,6 +83,9 @@
  *   GET /js/gina.onload.b918.js        -> built onload with the regex-case rules whisper
  *                                         (#B918; the spec builds its pages through /x76-page,
  *                                         same /ac-sink)
+ *   GET /js/gina.onload.b919.js        -> built onload with the element-group rules whisper
+ *                                         (#B919; the spec builds its pages through /x76-page,
+ *                                         same /ac-sink)
  *   GET /link-gate                     -> fixtures/link-disabled-gate.html (#B310
  *                                         link disabled-gate harness; same sink)
  *   GET /link-shared                   -> fixtures/link-same-url.html (#B287
@@ -339,6 +342,12 @@ const B918_FORMS_JSON = JSON.stringify({ rules: {
         { case: 'z', rules: { g3: { isRequired: true } } }
     ] } }
 } });
+// #B919 — the forms whisper of the element-group spec (test/e2e/validator-element-group-b919.spec.js).
+// One rule set for every page: `ref` is required, so each form is bound with rules; no grouped
+// field has a rule of its own.
+const B919_FORMS_JSON = JSON.stringify({ rules: {
+    groupform: { ref: { isRequired: true } }
+} });
 // The staging answer the client consumes (guide: `files[]` entries; the NESTED
 // `preview` object is the app-provided variant the client renders from `preview.tmpUri`).
 const B459_STAGE_JSON = JSON.stringify({ files: [{
@@ -567,6 +576,9 @@ const server = http.createServer(function (req, res) {
         }
         if (url === '/js/gina.onload.b918.js') {
             return send(res, 200, 'application/javascript; charset=utf-8', renderOnload(B918_FORMS_JSON));
+        }
+        if (url === '/js/gina.onload.b919.js') {
+            return send(res, 200, 'application/javascript; charset=utf-8', renderOnload(B919_FORMS_JSON));
         }
         // #B459 — the staged-upload preview-fields fixture and its three endpoints.
         if (url === '/js/gina.onload.b459.js') {
