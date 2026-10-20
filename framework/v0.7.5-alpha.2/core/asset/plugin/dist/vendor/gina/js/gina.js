@@ -20663,9 +20663,11 @@ function ValidatorPlugin(rules, data, formId, culture) {
      * isCaseConditionTarget
      * #B884 — tells whether a `_case_<driver>` block of a rule set names `field` in the `rules` of
      * one of its conditions, i.e. whether a case can make that field required (or give it any rule)
-     * while it has no rule of its own. Only exact field-name keys count: the live case merge in
-     * `forEachField` skips a key that names no collected field (`!$fields[_r]`) before its RegExp
-     * branch, so a RegExp key never applies there.
+     * while it has no rule of its own. An exact field-name key counts, and since #B921 a RegExp key
+     * (`"/^item[/"`) that matches `field` counts too, read as `forEachField`'s expandCaseRegExpKeys reads
+     * it (`[` and `]` literal, the flags kept, the block's driver left out, an invalid pattern skipped).
+     * Before #B921 only exact keys counted: the live case merge skipped a RegExp key, so it never
+     * applied there.
      *
      * @inner
      * @param {object} rules - the form's bound rule set (`$form.rules`)
@@ -20676,6 +20678,7 @@ function ValidatorPlugin(rules, data, formId, culture) {
      * @example
      * isCaseConditionTarget({ _case_kind: { conditions: [{ case: 'b', rules: { extra: { isRequired: true } } }] } }, 'extra'); // true
      * isCaseConditionTarget({ ref: { isRequired: true } }, 'ref'); // false: a rule of its own, no case names it
+     * isCaseConditionTarget({ _case_kind: { conditions: [{ case: 'b', rules: { '/^item[/': { isRequired: true } } }] } }, 'item[0][id]'); // true
      */
     var isCaseConditionTarget = function(rules, field) {
         if ( !rules || typeof(rules) != 'object' || typeof(field) != 'string' || field == '' ) {
@@ -20688,6 +20691,20 @@ function ValidatorPlugin(rules, data, formId, culture) {
                 if ( !condition || !condition.rules || typeof(condition.rules) != 'object' ) continue;
                 if ( Object.prototype.hasOwnProperty.call(condition.rules, field) ) {
                     return true;
+                }
+                // #B921 — a RegExp key that matches the field, as forEachField expands it
+                if ( c.replace(/^\_case\_/, '') == field ) continue;
+                for (var key in condition.rules) {
+                    if ( !/^\//.test(key) ) continue;
+                    try {
+                        var keyPattern = key.match(/\/(.*)\//).pop();
+                        var keyRe = new RegExp(keyPattern.replace(/\[/g, '\\[').replace(/\]/g, '\\]'), key.replace('/'+ keyPattern +'/', ''));
+                        if ( keyRe.test(field) ) {
+                            return true;
+                        }
+                    } catch (err) {
+                        // a pattern the engine rejects is skipped (forEachField warns about it)
+                    }
                 }
             }
         }
@@ -26380,6 +26397,94 @@ function ValidatorPlugin(rules, data, formId, culture) {
             var caseValueBackup = null; // #B229 — see the `caseName == field` arm below
             var baseValueBackup = null; // #B230 — see the base-rule restore below
             var caseRegExp      = null; // #B918 — see getCaseRegExp and the condition filter below
+            var caseRegExpKeyNames = null; // #B921 — see expandCaseRegExpKeys and the direct-case loop below
+
+            /**
+             * expandCaseRegExpKeys
+             * #B921 — gives each control a RegExp KEY of a `_case_` condition's `rules` matches
+             * (`"/^item[/": { isRequired: true }`) a literal key of its own in that condition, holding a
+             * copy of the key's rules, so the condition applies to it as it does to a field it names, in
+             * every block position and for every case shape. The condition scan below skips a key that
+             * names no control (`!$fields[_r]`), so a RegExp key was skipped there, and only the
+             * direct-case recursion of a driver that is not the last `_case_` key expanded it: a RegExp
+             * key applied only when its block was not the last. The key is read as a top-level RegExp
+             * key is (`checkForRuleAlias`): `[` and `]` literal, the flags kept. A literal key of the
+             * condition wins, then the first RegExp key that matches; the block's driver is left out;
+             * a pattern the engine rejects warns and is skipped. It writes into `levelRules`, which is
+             * the pass's own copy (#B885), once per level, and returns the names it added, which the
+             * direct-case loop below skips because its own RegExp branch covers them, as before.
+             * Without controls (the server path) nothing is added. Declared here, inside forEachField,
+             * so the function stays self-contained.
+             *
+             * @inner
+             * @param {object} levelRules - the rules this level applies (written in place)
+             * @param {object} $levelFields - the controls by name; null on the server path
+             * @returns {object} the names added, keyed `<_case_ key>|<condition index>`, then by name
+             *
+             * @example
+             * // levelRules: { _case_kind: { conditions: [{ case: 'pro', rules: { '/^item[/': { isRequired: true } } }] } }
+             * // controls: item[0][amount], item[1][amount], kind
+             * expandCaseRegExpKeys(levelRules, $fields);
+             * // -> { '_case_kind|0': { 'item[0][amount]': true, 'item[1][amount]': true } }, and the condition's
+             * //    rules now also hold 'item[0][amount]' and 'item[1][amount]', each { isRequired: true }
+             */
+            var expandCaseRegExpKeys = function(levelRules, $levelFields) {
+                var added = {};
+                // a copy of plain rule data (objects and arrays); anything else is kept as it is
+                var copyRuleValue = function(value) {
+                    var copy = null, k = null;
+                    if ( Array.isArray(value) ) {
+                        copy = [];
+                        for (k = 0; k < value.length; ++k) {
+                            copy[k] = copyRuleValue(value[k]);
+                        }
+                        return copy;
+                    }
+                    if ( value && typeof(value) == 'object' && Object.prototype.toString.call(value) == '[object Object]' ) {
+                        copy = {};
+                        for (k in value) {
+                            if ( Object.prototype.hasOwnProperty.call(value, k) ) {
+                                copy[k] = copyRuleValue(value[k]);
+                            }
+                        }
+                        return copy;
+                    }
+                    return value;
+                };
+                if ( !levelRules || typeof(levelRules) != 'object' || !$levelFields ) {
+                    return added;
+                }
+                for (var ck in levelRules) {
+                    if ( !/^\_case\_/.test(ck) || !levelRules[ck] || !Array.isArray(levelRules[ck].conditions) ) continue;
+                    var driver = ck.replace(/^\_case\_/, '');
+                    for (var ci = 0, ciLen = levelRules[ck].conditions.length; ci < ciLen; ++ci) {
+                        var condRules = ( levelRules[ck].conditions[ci] ) ? levelRules[ck].conditions[ci].rules : null;
+                        if ( !condRules || typeof(condRules) != 'object' ) continue;
+                        var keys = Object.keys(condRules);
+                        for (var ki = 0, kiLen = keys.length; ki < kiLen; ++ki) {
+                            if ( !/^\//.test(keys[ki]) ) continue;
+                            var keyRe = null;
+                            try {
+                                var keyPattern = keys[ki].match(/\/(.*)\//).pop();
+                                keyRe = new RegExp(keyPattern.replace(/\[/g, '\\[').replace(/\]/g, '\\]'), keys[ki].replace('/'+ keyPattern +'/', ''));
+                            } catch (err) {
+                                console.warn('[ ginaFormValidator ] the rule key `'+ keys[ki] +'` of `'+ ck +'` cannot be read as a regular expression ('+ err.message +'): it is skipped');
+                                continue;
+                            }
+                            for (var name in $levelFields) {
+                                keyRe.lastIndex = 0;
+                                if ( name == driver || typeof(condRules[name]) != 'undefined' || !keyRe.test(name) ) continue;
+                                condRules[name] = copyRuleValue(condRules[keys[ki]]);
+                                if ( !added[ck +'|'+ ci] ) {
+                                    added[ck +'|'+ ci] = {};
+                                }
+                                added[ck +'|'+ ci][name] = true;
+                            }
+                        }
+                    }
+                }
+                return added;
+            };
 
             /**
              * getCaseRegExp
@@ -26418,6 +26523,9 @@ function ValidatorPlugin(rules, data, formId, culture) {
 
             //console.debug('parsing ', fields, $fields, rules);
             if ( typeof(rules) != 'undefined' ) {
+
+                // #B921 — see expandCaseRegExpKeys
+                caseRegExpKeyNames = expandCaseRegExpKeys(rules, $fields);
 
                 for (var field in fields) {
 
@@ -26715,6 +26823,9 @@ function ValidatorPlugin(rules, data, formId, culture) {
                                 for (var _r in rules[c].conditions[_c].rules) {
                                     if (/^_comment$/i.test(_r)) continue;
                                     // ignore if we are testing on caseField or if $field does not exist
+                                    // (#B921: a RegExp key never passes this guard, no control bears its name; each
+                                    // control it matches has its own literal key since expandCaseRegExpKeys, so the
+                                    // RegExp branch below is not reached)
                                     if (_r == caseName || !$fields[_r]) continue;
                                     //if (_r == caseName || !$fields[caseName]) continue;
                                     // ok, not the current case but still,
@@ -26976,6 +27087,13 @@ function ValidatorPlugin(rules, data, formId, culture) {
                                 }
                                 for (var f in conditions[c]['rules']) {
                                     if (/^_comment$/i.test(f)) continue;
+                                    // #B921 — a name expandCaseRegExpKeys added for a RegExp key of this
+                                    // condition: the RegExp branch below covers it, as it did before
+                                    if (
+                                        caseRegExpKeyNames
+                                        && caseRegExpKeyNames['_case_' + field + '|' + c]
+                                        && caseRegExpKeyNames['_case_' + field + '|' + c][f]
+                                    ) continue;
                                     //console.debug('F: ', f, '\nrule: '+ JSON.stringify(conditions[c]['rules'][f], null, 2));
                                     if ( /^\//.test(f) ) { // RegExp found
 

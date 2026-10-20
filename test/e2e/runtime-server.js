@@ -90,6 +90,7 @@
  *   GET /js/gina.onload.b926.js        -> built onload with the required value-carrying checkbox whisper
  *   GET /js/gina.onload.b931.js        -> built onload with the shared-rule-set whisper (#B931; the spec
  *                                         builds its pages through /x76-page, same /ac-sink)
+ *   GET /js/gina.onload.b921.js        -> built onload with the RegExp-key-in-a-condition whisper
  *                                         (#B922; the spec builds its pages through /x76-page,
  *                                         same /ac-sink)
  *   GET /link-gate                     -> fixtures/link-disabled-gate.html (#B310
@@ -396,6 +397,26 @@ const B931_FORMS_JSON = JSON.stringify({ rules: {
     other:   { ref: { isRequired: true } },
     boolreq: { ref: { isRequired: true }, agree: { isRequired: true } }
 } });
+
+// #B921 — the forms whisper of the RegExp-key spec (test/e2e/validator-case-regex-key-b921.spec.js). Each
+// rule set puts a RegExp key (`"/^x$/"`) inside a `_case_` condition, in one block position or another.
+const B921_NEVER = { conditions: [ { case: 'never', rules: { x: { isString: true } } } ] };
+const B921_X = { conditions: [ { case: 'a', rules: { '/^x$/': { exclude: true } } } ] };
+const B921_FORMS_JSON = JSON.stringify({ rules: {
+    single:  { ref: { isRequired: true }, _case_mode: B921_X },
+    last:    { ref: { isRequired: true }, _case_ref: B921_NEVER, _case_mode: B921_X },
+    first:   { _case_mode: B921_X, ref: { isRequired: true }, _case_ref: B921_NEVER },
+    amounts: { ref: { isRequired: true }, flag: { isBoolean: true },
+               _case_flag: { conditions: [ { case: true, rules: { '/^item[/': { isRequired: true } } } ] } },
+    boxes:   { flag: { isBoolean: true }, _case_flag: { conditions: [ { case: true, rules: { '/^inv[/': { isRequired: true } } } ] },
+               ref: { isRequired: true }, _case_ref: B921_NEVER },
+    dollar:  { flag: { isBoolean: true }, _case_flag: { conditions: [ { case: true, rules: { '/^item[$pid][amount]/': { isRequired: true } } } ] },
+               ref: { isRequired: true }, _case_ref: B921_NEVER },
+    toplevel: { ref: { isRequired: true }, '/^x$/': { exclude: true } },
+    literal: { ref: { isRequired: true }, _case_mode: { conditions: [ { case: 'a', rules: { x: { exclude: true } } } ] } },
+    live:    { _case_mode: { conditions: [ { case: 'a', rules: { '/^extra/': { isRequired: true } } } ] },
+               ref: { isRequired: true }, _case_ref: B921_NEVER }
+} });
 // The staging answer the client consumes (guide: `files[]` entries; the NESTED
 // `preview` object is the app-provided variant the client renders from `preview.tmpUri`).
 const B459_STAGE_JSON = JSON.stringify({ files: [{
@@ -636,6 +657,9 @@ const server = http.createServer(function (req, res) {
         }
         if (url === '/js/gina.onload.b931.js') {
             return send(res, 200, 'application/javascript; charset=utf-8', renderOnload(B931_FORMS_JSON));
+        }
+        if (url === '/js/gina.onload.b921.js') {
+            return send(res, 200, 'application/javascript; charset=utf-8', renderOnload(B921_FORMS_JSON));
         }
         // #B459 — the staged-upload preview-fields fixture and its three endpoints.
         if (url === '/js/gina.onload.b459.js') {
