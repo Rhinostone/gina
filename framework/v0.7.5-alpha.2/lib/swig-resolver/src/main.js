@@ -21,16 +21,18 @@
  *
  * Three safety gates on the project override:
  *
- *  1. **Package name allowlist** — only the configured `package` (default
- *     `@rhinostone/swig`) is honoured. `swig.package: "@rhinostone/swig-twig"`
- *     lets a project opt into the Twig frontend, and
- *     `swig.package: "@rhinostone/swig-jinja2"` opts into the Jinja2 frontend
- *     (sibling packages from the same multi-flavor release as
- *     `@rhinostone/swig`), without re-keying anything. The abandoned upstream
- *     `swig` package name is never resolvable — it is not in the default or
- *     any of the known alternates, so a project that only has `"swig"` in
- *     node_modules gets the framework copy (which fixes CVE-2023-25345 at
- *     the controller layer).
+ *  1. **Configured package name only** — the resolver looks up exactly the
+ *     configured `package` (default `@rhinostone/swig`); there is no list of
+ *     accepted names. `swig.package` set to `@rhinostone/swig-twig`,
+ *     `@rhinostone/swig-jinja2` or `@rhinostone/swig-django` opts into the
+ *     Twig, Jinja2 or Django frontend (sibling packages from the same
+ *     multi-flavor release as `@rhinostone/swig`), without re-keying
+ *     anything. Only `@rhinostone/swig` has a framework copy to fall back
+ *     to, so another package needs `useProject: true` and a project install
+ *     that passes gates 2 and 3 (#B925). A project that only has the
+ *     abandoned upstream `"swig"` in node_modules gets the framework copy
+ *     (CVE-2023-25345 is also blocked at the controller layer); naming
+ *     `swig` itself fails gate 2, its last release being 1.4.2.
  *
  *  2. **Same-major rule** — the project's version must share the major
  *     component with the floor. Different major → fall back, because the

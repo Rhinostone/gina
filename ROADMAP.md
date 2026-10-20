@@ -17,7 +17,7 @@ This roadmap covers planned features, architectural improvements, new connectors
 | **Q3 2026** | `0.3.2` ✅ | JSON Schema for config files · Entity short-name aliases · Model loading fix · getConfig() proxy fix · Inspector tab presets & QI propagation |
 | **Q3 2026** | `0.3.3` ✅ | OpenAPI spec generation · CLI port:set & framework:get · TypeScript declarations · Explicit exports · Swig npm migration · Live index introspection · Popin perf · Docker fixes |
 | **Q3 2026** | `0.3.4` ✅ | Patch: `gna.js` stale framework path fix · Release lifecycle `gna.js` sync |
-| **Q3 2026** | `0.3.5` ✅ | Security: `@rhinostone/swig` 1.5.0 (CVE-2023-25345 extended guards) · Browser-side swig parity |
+| **Q3 2026** | `0.3.5` ✅ | Security: `@rhinostone/swig` 1.5.0 (extended prototype-chain guards) · Browser-side swig parity |
 | **Q4 2026** | `0.3.6` ✅ | Inspector payload redaction (#R7) · Pre-commit & CI local-tool path guards · Private-token leak gate · Whisper Error fix (#B12) · `framework:init` hardening (#B13) · CORS preflight fix · `syncDocs` lockfile regen |
 | **Q4 2026** | `0.3.7` ✅ | Web Security CSRF trilogy (#CSRF1/2/3) · Nunjucks template engine opt-in (#NJ1–#NJ4) · Eval-safety hardening (#SCS1) · MCP server (#AI8 stdio + HTTP transports) · `connector:*` CLI (#CN10) · vendored-dep CVE-visibility lock · psl/optimist removal · Session.name drop-in identity |
 | **Q4 2026** | `0.3.8` ✅ | Patch: `npm install -g gina@latest` regression fix — `psl` + `@rhinostone/swig` promoted to top-level deps · install scripts decoupled from framework `lib` registry · helpers preload guarding `lib/logger` ↔ `framework/v*/helpers` circular dep |

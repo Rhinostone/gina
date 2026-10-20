@@ -983,7 +983,7 @@
     },
     "swig": {
       "type": "object",
-      "description": "Opt-in override for the swig template engine. When useProject is true the bundle loads the project-pinned package from the project's node_modules instead of the framework's bundled copy — provided the project version satisfies the framework's same-major and minimum-version constraint. A rejected override falls back to the framework copy and logs a warning at bundle startup.",
+      "description": "Opt-in override for the swig template engine. When useProject is true the bundle loads the project-pinned package from the project's node_modules instead of the framework's bundled copy — provided the project version satisfies the framework's same-major and minimum-version constraint. A rejected override of the default @rhinostone/swig falls back to the framework copy and logs a warning at bundle startup; the framework ships no copy of the other packages to fall back to.",
       "additionalProperties": false,
       "properties": {
         "useProject": {
@@ -993,8 +993,8 @@
         },
         "package": {
           "type": "string",
-          "description": "npm package name to resolve. Defaults to @rhinostone/swig (native swig syntax). Set to @rhinostone/swig-twig to use the Twig-syntax frontend. The abandoned upstream \"swig\" name is never accepted.",
-          "enum": ["@rhinostone/swig", "@rhinostone/swig-twig"],
+          "description": "npm package name to resolve. Defaults to @rhinostone/swig (native swig syntax). Set to @rhinostone/swig-twig, @rhinostone/swig-jinja2 or @rhinostone/swig-django to use the Twig, Jinja2 or Django frontend: a value other than the default needs useProject: true and a 2.x version of that package installed in the project. The abandoned upstream \"swig\" package (last released as 1.4.2) is never loaded.",
+          "enum": ["@rhinostone/swig", "@rhinostone/swig-twig", "@rhinostone/swig-jinja2", "@rhinostone/swig-django"],
           "default": "@rhinostone/swig"
         },
         "autoescape": {
