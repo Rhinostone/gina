@@ -993,7 +993,7 @@
         },
         "package": {
           "type": "string",
-          "description": "npm package name to resolve. Defaults to @rhinostone/swig (native swig syntax). Set to @rhinostone/swig-twig, @rhinostone/swig-jinja2 or @rhinostone/swig-django to use the Twig, Jinja2 or Django frontend: a value other than the default needs useProject: true and a 2.x version of that package installed in the project. The abandoned upstream \"swig\" package (last released as 1.4.2) is never loaded.",
+          "description": "npm package name to resolve. Defaults to @rhinostone/swig (native swig syntax). Set to @rhinostone/swig-twig, @rhinostone/swig-jinja2 or @rhinostone/swig-django to use the Twig, Jinja2 or Django frontend: a value other than the default needs useProject: true and a 2.x version of that package installed in the project; without one the bundle stops at startup with SWIG_PACKAGE_UNAVAILABLE. The abandoned upstream \"swig\" package (last released as 1.4.2) is never loaded.",
           "enum": ["@rhinostone/swig", "@rhinostone/swig-twig", "@rhinostone/swig-jinja2", "@rhinostone/swig-django"],
           "default": "@rhinostone/swig"
         },

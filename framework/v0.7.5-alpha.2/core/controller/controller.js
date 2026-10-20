@@ -214,11 +214,12 @@ var routingLib      = lib.routing;
 // (only usage at line 508 is commented out); re-instantiating Domain on every dev-mode request
 // via refreshCoreDependencies() caused [DOMAIN] PSL Loaded ×2 noise per request
 // Swig is resolved through lib.swigResolver (process-cached on
-// process.gina._swig). Server.js's initSwigEngine() populates the cache
-// during bundle startup; controller.js is re-required on every request
-// in dev mode via refreshCoreDependencies(), so this getter sees the
-// already-loaded instance without re-running the resolver. Falls back to
-// require('@rhinostone/swig') when no bundle has loaded yet (tests, etc).
+// process.gina._swig). In a bundle this line runs before initSwigEngine():
+// server.js and gna.js require ./router at module scope, and router.js
+// requires this module, so get() hands out the framework copy here,
+// provisionally (#B932). setOptions() and render() read the module through
+// the resolver again, by which time it holds what initSwigEngine resolved
+// from the bundle's swig settings.
 var swig            = lib.swigResolver.get();
 
 /**
@@ -1713,6 +1714,11 @@ function SuperController(options) {
         if (local.options.template || self.templates) {
             dir = local.options.template.html || self.templates;
 
+            // #B932 — the swig module the resolver holds now, not the copy this module
+            // saw when it loaded: initSwigEngine has since resolved the bundle's
+            // swig.package / swig.useProject.
+            swig = lib.swigResolver.get();
+
             // Output auto-escaping — this per-render setDefaults GOVERNS the
             // default (no-loader) render path: it re-applies swig defaults on
             // every request, overriding initSwigEngine's boot default. So it must
@@ -2634,6 +2640,9 @@ function SuperController(options) {
         if ( _ehPopulated ) {
             local.options.template.h2Links = '';
         }
+
+        // #B932 — hand the delegate the swig module the resolver holds now (see setOptions).
+        swig = lib.swigResolver.get();
 
         return require( _(__dirname + _delegate, true) )(userData, displayInspector, errOptions, {
             self        : self,

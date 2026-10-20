@@ -43,6 +43,11 @@
  *     be >= the floor constant below. Bump the floor in the same commit that
  *     introduces a framework dependency on a new fork API.
  *
+ * In a bundle, controller.js calls get() as it loads, before server.js's
+ * initSwigEngine calls load() with the bundle's swig settings. The copy get()
+ * caches then is provisional: load() resolves the configured package and
+ * replaces it (#B932). Only a copy that a load() cached wins over later calls.
+ *
  * @example
  * var resolver = require('lib/swig-resolver');
  * var decision = resolver.resolve('/path/to/project', {
@@ -383,6 +388,11 @@ function unavailableError(projectPath, pkgName, options, decision) {
  * `[swig-resolver]` warning and keep the already-loaded copy. Split the
  * process (one bundle per port) if you need per-bundle swig isolation.
  *
+ * A copy that {@link get} cached before any `load()` does not count as
+ * loaded: `load()` resolves the configured package and replaces it (#B932).
+ * In a bundle, controller.js calls `get()` as it loads, before
+ * initSwigEngine calls `load()`.
+ *
  * Only `@rhinostone/swig` has a framework copy to fall back to. Another
  * package with no usable project copy throws (#B925).
  *
@@ -409,7 +419,11 @@ function load(projectPath, options) {
         process.gina = {};
     }
 
-    if (process.gina._swig) {
+    // #B932 — a copy that get() cached before any load() is provisional, so the
+    // bundle's load() still resolves its configured package; only a copy that
+    // a load() cached wins below.
+    // was: if (process.gina._swig) {
+    if (process.gina._swig && process.gina._swigProvisional !== true) {
         // Already loaded. Log a warning if the new caller disagrees on the
         // package name — that is the only shape of standalone-mode conflict
         // worth surfacing; version drift below the floor falls back to the
@@ -439,6 +453,7 @@ function load(projectPath, options) {
         swig = require(pkgName);
     }
 
+    delete process.gina._swigProvisional;
     process.gina._swig            = swig;
     process.gina._swigDecision    = decision;
     process.gina._swigPackage     = pkgName;
@@ -471,10 +486,16 @@ function load(projectPath, options) {
  * called before `load()` (tests, early bootstrap paths), falls back to the
  * framework's default `require(DEFAULT_PACKAGE)` so callers never see null.
  * The first fallback is memoised on `process.gina._swig` — subsequent calls
- * return the same instance without re-requiring.
+ * return the same instance without re-requiring. It is provisional: the
+ * first `load()` replaces it with the package the bundle's settings select
+ * (#B932). A bundle reaches this path first: controller.js calls `get()` as
+ * it loads, before initSwigEngine calls `load()`.
  *
  * @memberof module:gina/lib/swig-resolver
  * @returns {*}
+ *
+ * @example
+ * var swig = require('lib/swig-resolver').get();   // the framework copy until load() runs
  */
 function get() {
     if (typeof process.gina === 'undefined' || process.gina === null) {
@@ -495,6 +516,9 @@ function get() {
             warning: null
         };
         process.gina._swigPackage  = DEFAULT_PACKAGE;
+        // #B932 — provisional: the first load() replaces it with the package
+        // the bundle's settings select.
+        process.gina._swigProvisional = true;
     }
     return process.gina._swig;
 }
@@ -601,6 +625,7 @@ function reset() {
         delete process.gina._swigOptions;
         delete process.gina._swigProjectPath;
         delete process.gina._swigMtime;
+        delete process.gina._swigProvisional;
     }
 }
 
