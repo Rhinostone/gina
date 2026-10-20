@@ -87,6 +87,7 @@
  *                                         (#B919; the spec builds its pages through /x76-page,
  *                                         same /ac-sink)
  *   GET /js/gina.onload.b922.js        -> built onload with the case-target submit-control whisper
+ *   GET /js/gina.onload.b926.js        -> built onload with the required value-carrying checkbox whisper
  *                                         (#B922; the spec builds its pages through /x76-page,
  *                                         same /ac-sink)
  *   GET /link-gate                     -> fixtures/link-disabled-gate.html (#B310
@@ -367,6 +368,24 @@ const B922_FORMS_JSON = JSON.stringify({ rules: {
         b: { isRequired: true }
     }
 } });
+// #B926 — the forms whisper of the required value-carrying checkbox spec
+// (test/e2e/validator-required-checkbox-b926.spec.js). `ownbox`: a value-carrying checkbox whose OWN
+// rule says isRequired; `samename`: two boxes under one name, required; `boolbox`: a valueless
+// (boolean) checkbox with isRequired, the control the change leaves alone.
+const B926_FORMS_JSON = JSON.stringify({ rules: {
+    ownbox: {
+        ref: { isRequired: true },
+        'items[0][email]': { isRequired: true, isEmail: true }
+    },
+    samename: {
+        ref: { isRequired: true },
+        'tags[]': { isRequired: true }
+    },
+    boolbox: {
+        ref: { isRequired: true },
+        agree: { isRequired: true }
+    }
+} });
 // The staging answer the client consumes (guide: `files[]` entries; the NESTED
 // `preview` object is the app-provided variant the client renders from `preview.tmpUri`).
 const B459_STAGE_JSON = JSON.stringify({ files: [{
@@ -601,6 +620,9 @@ const server = http.createServer(function (req, res) {
         }
         if (url === '/js/gina.onload.b922.js') {
             return send(res, 200, 'application/javascript; charset=utf-8', renderOnload(B922_FORMS_JSON));
+        }
+        if (url === '/js/gina.onload.b926.js') {
+            return send(res, 200, 'application/javascript; charset=utf-8', renderOnload(B926_FORMS_JSON));
         }
         // #B459 — the staged-upload preview-fields fixture and its three endpoints.
         if (url === '/js/gina.onload.b459.js') {

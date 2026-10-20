@@ -24603,7 +24603,10 @@ function ValidatorPlugin(rules, data, formId, culture) {
                         // an unchecked non-boolean radio group with a truthy isRequired
                         // is collected as an empty value so the submit-path validation
                         // can adjudicate it (see the twin arm there for the rationale).
-                        $target[i].type == 'radio'
+                        // #B926 — and an unticked value-carrying checkbox whose own rule says
+                        // isRequired, as there (« must be ticked »).
+                        // was: $target[i].type == 'radio'
+                        /^(radio|checkbox)$/i.test($target[i].type)
                         && rules
                         && typeof(rules[name]) != 'undefined'
                         && /^true$/i.test(rules[name].isRequired)
@@ -25294,7 +25297,10 @@ function ValidatorPlugin(rules, data, formId, culture) {
      * unchecked non-boolean group whose rule declares a truthy `isRequired`
      * is collected as an empty string (#B221) so the rule engine can
      * adjudicate it; any other unchecked group stays absent (native parity;
-     * boolean-declared groups are owned by the force-false arm).
+     * boolean-declared groups are owned by the force-false arm). An unticked
+     * value-carrying checkbox whose own rule declares a truthy `isRequired` is
+     * collected as an empty string the same way (#B926): `isRequired` on it
+     * means « must be ticked ». A boolean checkbox posts its live state instead.
      *
      * @param {object} $form - form target (DOMObject), not the instance
      * @param {object} [rules]
@@ -25468,7 +25474,16 @@ function ValidatorPlugin(rules, data, formId, culture) {
                     // absent-when-unchecked shape (boolean groups are owned by
                     // the force-false arm above; optional groups bypass on
                     // empty anyway, so their wire shape stays byte-identical).
-                    $form[i].type == 'radio'
+                    // #B926 — an unticked value-carrying CHECKBOX whose own rule says
+                    // isRequired is collected the same way: `isRequired` on it means
+                    // « must be ticked » (several boxes under one name: at least one;
+                    // distinct names: each), as it does for a radio group. A boolean box
+                    // never reaches this arm (the isBooleanCheckbox arm above owns it), and
+                    // an unticked box with no rule, `isRequired: false` or an `isBoolean`
+                    // rule stays absent, as before. Until now no arm admitted the shape, so
+                    // the form posted without the box and no rule judged it, on either side.
+                    // was: $form[i].type == 'radio'
+                    /^(radio|checkbox)$/i.test($form[i].type)
                     && rules
                     && typeof(rules[name]) != 'undefined'
                     && /^true$/i.test(rules[name].isRequired)

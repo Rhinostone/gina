@@ -202,13 +202,15 @@ describe('02 - source pins: the collection arm in both collectors', function () 
     });
 
     it('02.2 getFormValidationInfos carries the whole arm, terminator-anchored', function () {
-        var re = /\$form\[i\]\.type == 'radio'\s*&&\s*rules\s*&&\s*typeof\(rules\[name\]\) != 'undefined'\s*&&\s*\/\^true\$\/i\.test\(rules\[name\]\.isRequired\)\s*&&\s*typeof\(rules\[name\]\.isBoolean\) == 'undefined'\s*&&\s*typeof\(fields\[name\]\) == 'undefined'\s*\)\s*\{\s*fields\[name\] = '';/;
+        // #B926 — the arm takes a radio or a checkbox (was: `\$form\[i\]\.type == 'radio'`)
+        var re = /\/\^\(radio\|checkbox\)\$\/i\.test\(\$form\[i\]\.type\)\s*&&\s*rules\s*&&\s*typeof\(rules\[name\]\) != 'undefined'\s*&&\s*\/\^true\$\/i\.test\(rules\[name\]\.isRequired\)\s*&&\s*typeof\(rules\[name\]\.isBoolean\) == 'undefined'\s*&&\s*typeof\(fields\[name\]\) == 'undefined'\s*\)\s*\{\s*fields\[name\] = '';/;
         assert.match(mainSrc, re,
-            'the infos-collector arm must gate on radio + truthy isRequired + no isBoolean + not-already-collected, and assign the empty value');
+            'the infos-collector arm must gate on radio or checkbox + truthy isRequired + no isBoolean + not-already-collected, and assign the empty value');
     });
 
     it('02.3 the native-submit inline collector carries the twin arm', function () {
-        var re = /\$target\[i\]\.type == 'radio'\s*&&\s*rules\s*&&\s*typeof\(rules\[name\]\) != 'undefined'\s*&&\s*\/\^true\$\/i\.test\(rules\[name\]\.isRequired\)\s*&&\s*typeof\(rules\[name\]\.isBoolean\) == 'undefined'\s*&&\s*typeof\(fields\[name\]\) == 'undefined'\s*\)\s*\{\s*fields\[name\] = '';/;
+        // #B926 — the arm takes a radio or a checkbox (was: `\$target\[i\]\.type == 'radio'`)
+        var re = /\/\^\(radio\|checkbox\)\$\/i\.test\(\$target\[i\]\.type\)\s*&&\s*rules\s*&&\s*typeof\(rules\[name\]\) != 'undefined'\s*&&\s*\/\^true\$\/i\.test\(rules\[name\]\.isRequired\)\s*&&\s*typeof\(rules\[name\]\.isBoolean\) == 'undefined'\s*&&\s*typeof\(fields\[name\]\) == 'undefined'\s*\)\s*\{\s*fields\[name\] = '';/;
         assert.match(mainSrc, re,
             'the inline-collector arm must mirror the infos arm on $target[i]');
     });
