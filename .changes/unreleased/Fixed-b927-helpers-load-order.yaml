@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'The framework''s helpers load in a fixed order whatever order the file system lists them in. Node lists a directory sorted and Bun as the file system does; four helpers load the logger, which loads three of them back while it loads, so under Bun a process that loaded the helpers before the logger could fail with `TypeError: require(...) is not a function` when `path.js` or `json` came first. The entries are now sorted before they load, the order node has always used. Server-side: restart the framework and your bundles (#B927).'
+time: 2026-10-20T10:00:31+01:00

@@ -34,7 +34,13 @@ var _require = function(path) {
 
 var helpers         = {}
     , path          = __dirname
-    , files         = fs.readdirSync(path)
+    // #B927 — loaded in a fixed order: node lists a directory sorted, Bun as the file system
+    // does. `path.js`, `task.js`, `json` and `context` load `lib/logger`, and the logger, while
+    // it loads, requires `helpers/path`, `helpers/json` and `helpers/context` back and calls
+    // them: with `path.js` or `json` first, that call reached a module that was still loading
+    // and threw `require(...) is not a function`.
+    // was: , files         = fs.readdirSync(path)
+    , files         = fs.readdirSync(path).sort()
     , f             = 0
     , len           = files.length
     , helper        = ''

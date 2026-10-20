@@ -77,6 +77,8 @@ Covers context helpers (`setContext`, `getContext`, `joinContext`, `resetContext
 
 ## Global helpers (injected by gna.js — no require needed)
 
+The helpers directory (`framework/v*/helpers/`) is loaded by `helpers/index.js` in a fixed order: its entries are sorted before they load (#B927, 0.7.5). Node lists a directory sorted and Bun as the file system does; `path.js`, `task.js`, `json` and `context` load `lib/logger`, which requires `helpers/path`, `helpers/json` and `helpers/context` back and calls them while it loads, so with `path.js` or `json` listed first that call reached a module that was still loading and threw `require(...) is not a function` in every process that loaded the helpers before the logger.
+
 ```javascript
 _(path, isAbsolute)          // PathObject — resolves paths, normalises separators
 requireJSON(path)            // JSON-with-comments loader (// always; /* */ when the file has a /** docblock; linear, string-aware since #B568). No caching: every call re-reads the file. A parse error quotes the file from 200 characters before the error to 300 after it, marked `--(ERROR !)--`, when the engine reports a position (#B917)
