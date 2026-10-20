@@ -9950,8 +9950,9 @@ function ValidatorPlugin(rules, data, formId, culture) {
 
             var elIdIsChecked = null
                 , re = null
-                , re2 = null
-                , namedId = elId.replace(/\-|\_|\@|\#|\.|\[|\]/g, '\\$&')
+                // #B929 — every regexp character of the id is escaped (`- _ @ # . [ ]` were): `a+b` matched `ab`, `a(b` threw.
+                // was: , namedId = elId.replace(/\-|\_|\@|\#|\.|\[|\]/g, '\\$&')
+                , namedId = elId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
                 //, name = $el.getAttribute('name').replace(/\-|\_|\@|\#|\.|\[|\]/g, '\\$&')
             ;
             // #B919 — a checkbox that is disabled counts as unticked: when its own master is switched
@@ -9970,13 +9971,11 @@ function ValidatorPlugin(rules, data, formId, culture) {
                 // them, never inside a longer id: the checkbox `doc` drove the fields of `doc-2`.
                 // was: re = new RegExp(namedId);
                 re = new RegExp('(^|\\s)' + namedId + '(\\s|$)');
-                re2 = new RegExp(group);
-
-                if (
-                    re.test(allFormGroupedElements[id].group) && re2.test(allFormGroupedElements[id].group)
-                    ||
-                    re.test(allFormGroupedElements[id].group)
-                ) {
+                // #B929 — the second test is gone: its result never mattered (`re && re2 || re` is `re`), and
+                // building it from the raw group threw for a master id holding `(`.
+                // was: re2 = new RegExp(group);
+                // was: if ( re.test(allFormGroupedElements[id].group) && re2.test(allFormGroupedElements[id].group) || re.test(allFormGroupedElements[id].group) )
+                if ( re.test(allFormGroupedElements[id].group) ) {
                     // init default state: disable all;
                     allFormGroupedElements[id].target.disabled = true;
                     // adding custom rule for this case
@@ -10087,7 +10086,9 @@ function ValidatorPlugin(rules, data, formId, culture) {
             var checkBoxGroup   = $el.getAttribute('data-gina-form-element-group') || null;
             // #B923 — matched as one whole id of a group, never inside a longer one (`cb-1` drove `cb-10`'s fields).
             // was: var re              = new RegExp($el.id.replace(/\-|\_|\@|\#|\.|\[|\]/g, '\\$&'));
-            var re              = new RegExp('(^|\\s)' + $el.id.replace(/\-|\_|\@|\#|\.|\[|\]/g, '\\$&') + '(\\s|$)');
+            // #B929 — every regexp character of the id is escaped.
+            // was: var re              = new RegExp('(^|\\s)' + $el.id.replace(/\-|\_|\@|\#|\.|\[|\]/g, '\\$&') + '(\\s|$)');
+            var re              = new RegExp('(^|\\s)' + $el.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(\\s|$)');
             // set to checked if not checked: false -> true
             if ( !checked || checked == 'null' || checked == 'false' || checked == '' ) {
 
@@ -10141,7 +10142,9 @@ function ValidatorPlugin(rules, data, formId, culture) {
         var updateGroupChildrenState = function($groupMaster) {
             // #B923 — matched as one whole id of a group, never inside a longer one.
             // was: var re = new RegExp($groupMaster.id.replace(/\-|\_|\@|\#|\.|\[|\]/g, '\\$&'));
-            var re = new RegExp('(^|\\s)' + $groupMaster.id.replace(/\-|\_|\@|\#|\.|\[|\]/g, '\\$&') + '(\\s|$)');
+            // #B929 — every regexp character of the id is escaped.
+            // was: var re = new RegExp('(^|\\s)' + $groupMaster.id.replace(/\-|\_|\@|\#|\.|\[|\]/g, '\\$&') + '(\\s|$)');
+            var re = new RegExp('(^|\\s)' + $groupMaster.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(\\s|$)');
             // Handle extended groups
             for (let id in allFormGroupedElements) {
                 if (
@@ -10178,7 +10181,9 @@ function ValidatorPlugin(rules, data, formId, culture) {
             isOnResetMode = ( typeof(isOnResetMode) != 'undefined' && isOnResetMode) ? true: false;
 
             //console.debug('reset: '+isOnResetMode, $el.id, $el.checked);
-            var extendedGroupName = $el.id.replace(/\-|\_|\@|\#|\.|\[|\]/g, '\\$&')
+            // #B929 — every regexp character of the id is escaped.
+            // was: var extendedGroupName = $el.id.replace(/\-|\_|\@|\#|\.|\[|\]/g, '\\$&')
+            var extendedGroupName = $el.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
                 , re = null
             ;
             // parse grouped elements: allFormGroupedElements
@@ -10332,7 +10337,9 @@ function ValidatorPlugin(rules, data, formId, culture) {
                     // updateGroupChildrenState($inputs[i]);
                     // #B923 — matched as one whole id of a group, never inside a longer one.
                     // was: let re = new RegExp( $inputs[i].id.replace(/\-|\_|\@|\#|\.|\[|\]/g, '\\$&') );
-                    let re = new RegExp( '(^|\\s)' + $inputs[i].id.replace(/\-|\_|\@|\#|\.|\[|\]/g, '\\$&') + '(\\s|$)' );
+                    // #B929 — every regexp character of the id is escaped.
+                    // was: let re = new RegExp( '(^|\\s)' + $inputs[i].id.replace(/\-|\_|\@|\#|\.|\[|\]/g, '\\$&') + '(\\s|$)' );
+                    let re = new RegExp( '(^|\\s)' + $inputs[i].id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(\\s|$)' );
                     for (let childElement in allFormGroupedElements ) {
                         if ( re.test(allFormGroupedElements[childElement].group) ) {
                             allFormGroupedElements[childElement].target.disabled = true;

@@ -82,13 +82,16 @@ var HGD_START = 'var handleGroupDependencies = function($el, isOnResetMode) {';
 var LOOP_START = '// if is master of a group, init children default state';
 var LOOP_END   = 'for (let childElement in allFormGroupedElements ) {';   // the loop that follows the construction
 
-// The five constructions, as the change writes them and as they read before it.
+// The five constructions, as the change writes them and as they read before it. Since #B929 the id's
+// escape covers every regexp character; `${` would open a substitution in a template literal, so the
+// escape is assembled around it.
+var ESC = String.raw`replace(/[.*+?^$` + '{}' + String.raw`()|[\]\\]/g, '\\$&')`;
 var NEW = {
     updateReletadItems:       String.raw`re = new RegExp('(^|\\s)' + namedId + '(\\s|$)');`,
-    updateCheckBox:           String.raw`var re              = new RegExp('(^|\\s)' + $el.id.replace(/\-|\_|\@|\#|\.|\[|\]/g, '\\$&') + '(\\s|$)');`,
-    updateGroupChildrenState: String.raw`var re = new RegExp('(^|\\s)' + $groupMaster.id.replace(/\-|\_|\@|\#|\.|\[|\]/g, '\\$&') + '(\\s|$)');`,
+    updateCheckBox:           String.raw`var re              = new RegExp('(^|\\s)' + $el.id.` + ESC + String.raw` + '(\\s|$)');`,
+    updateGroupChildrenState: String.raw`var re = new RegExp('(^|\\s)' + $groupMaster.id.` + ESC + String.raw` + '(\\s|$)');`,
     handleGroupDependencies:  String.raw`re = new RegExp('(^|\\s)' + extendedGroupName + '(\\s|$)');`,
-    bindLoop:                 String.raw`let re = new RegExp( '(^|\\s)' + $inputs[i].id.replace(/\-|\_|\@|\#|\.|\[|\]/g, '\\$&') + '(\\s|$)' );`
+    bindLoop:                 String.raw`let re = new RegExp( '(^|\\s)' + $inputs[i].id.` + ESC + String.raw` + '(\\s|$)' );`
 };
 var OLD = {
     updateReletadItems:       're = new RegExp(namedId);',
