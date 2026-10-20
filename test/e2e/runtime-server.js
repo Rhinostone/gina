@@ -93,6 +93,8 @@
  *   GET /js/gina.onload.b921.js        -> built onload with the RegExp-key-in-a-condition whisper
  *                                         (#B922; the spec builds its pages through /x76-page,
  *                                         same /ac-sink)
+ *   GET /js/gina.onload.b596.js        -> built onload with the mixed bracket-keys whisper (#B596; the
+ *                                         spec builds its pages through /x76-page, same /ac-sink)
  *   GET /link-gate                     -> fixtures/link-disabled-gate.html (#B310
  *                                         link disabled-gate harness; same sink)
  *   GET /link-shared                   -> fixtures/link-same-url.html (#B287
@@ -417,6 +419,12 @@ const B921_FORMS_JSON = JSON.stringify({ rules: {
     live:    { _case_mode: { conditions: [ { case: 'a', rules: { '/^extra/': { isRequired: true } } } ] },
                ref: { isRequired: true }, _case_ref: B921_NEVER }
 } });
+
+// #B596 — the forms whisper of the mixed bracket-keys spec (test/e2e/validator-mixed-bracket-keys-b596.spec.js):
+// one rule, so the posted body carries every field the page renders.
+const B596_FORMS_JSON = JSON.stringify({ rules: {
+    mixform: { ref: { isRequired: true } }
+} });
 // The staging answer the client consumes (guide: `files[]` entries; the NESTED
 // `preview` object is the app-provided variant the client renders from `preview.tmpUri`).
 const B459_STAGE_JSON = JSON.stringify({ files: [{
@@ -660,6 +668,9 @@ const server = http.createServer(function (req, res) {
         }
         if (url === '/js/gina.onload.b921.js') {
             return send(res, 200, 'application/javascript; charset=utf-8', renderOnload(B921_FORMS_JSON));
+        }
+        if (url === '/js/gina.onload.b596.js') {
+            return send(res, 200, 'application/javascript; charset=utf-8', renderOnload(B596_FORMS_JSON));
         }
         // #B459 — the staged-upload preview-fields fixture and its three endpoints.
         if (url === '/js/gina.onload.b459.js') {

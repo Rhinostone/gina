@@ -348,6 +348,33 @@ function DataHelper(){
     //     return obj;
     // }
 
+    /**
+     * Nests ONE bracket-notation key path into an accumulator, in place:
+     * `item[0][id]` is split into `['item','0','id']` and lands as
+     * `{ item: [ { id: … } ] }`. A level is created as an array when the segment
+     * below it is an index (`/^\d+$/`) and as an object otherwise. A level that
+     * mixes indexes and names is an object keyed by both, whatever came first
+     * (#B596): a name reaching a level that already holds an array copies the
+     * array into an object before the walk goes on. A path carrying a
+     * `__proto__`, `constructor` or `prototype` segment is dropped (#B446).
+     * Callers start from an object accumulator; the leaf value is assigned as given.
+     *
+     * @inner
+     * @private
+     * @param {(object|Array)} obj - accumulator, mutated in place and returned
+     * @param {Array<string>} key - the split key path, e.g. `['item','0','id']`
+     * @param {number} k - current depth into `key` (callers pass 0)
+     * @param {*} value - the leaf value
+     * @returns {(object|Array)} the accumulator
+     *
+     * @example
+     *   parseLocalObj({}, ['item','0','id'], 0, 'x');   // { item: [ { id: 'x' } ] }
+     *
+     * @example
+     *   // indexes first, then a name: one object, nothing lost
+     *   var o = parseLocalObj({}, ['a','0'], 0, 'x');
+     *   parseLocalObj(o, ['a','b'], 0, 'y');            // { a: { 0: 'x', b: 'y' } }
+     */
     var parseLocalObj = function(obj, key, k, value) {
 
         // #B446 — a bracket-notation field name is client-supplied and every segment is
@@ -435,6 +462,18 @@ function DataHelper(){
                     if ( typeof(obj[ _key ]) == 'undefined' ) {
                         // obj[ _key ] = ( /^\d+$/.test(key[k+1]) ) ? [] : {};
                         obj[ _key ] = null;
+                    }
+
+                    // #B596 — a segment that is not an index (`list[name]`) reaching an
+                    // existing array: that level mixes indexes and names, so it becomes an
+                    // OBJECT keyed by both (`"0"`, `"1"`, `"name"`), whatever came first.
+                    // Before, the name was read as index 0 (`~~'name'`): a fresh `{}`
+                    // replaced the first element, and the name became an array property
+                    // that JSON drops. A level whose segments are all indexes stays an
+                    // array. Identical in helpers/data `parseLocalObj` and the validator
+                    // twin `nestBracketNotationKey` (pinned byte for byte).
+                    if ( Array.isArray(obj[ _key ]) && !/^\d+$/.test(key[k+1]) ) {
+                        obj[ _key ] = Object.assign({}, obj[ _key ]);
                     }
 
                     parseLocalObj(obj[ _key ], key, k+1, value);

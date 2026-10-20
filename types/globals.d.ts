@@ -202,7 +202,10 @@ declare global {
     /**
      * Nest ONE bracket-notation key path (`item[0][id]`) into the accumulator
      * object at depth `k` (callers pass `0`); assigns `value` at the leaf.
-     * Mutates and returns the accumulator.
+     * Mutates and returns the accumulator. A level whose segments are all
+     * indexes is an array; a level that mixes indexes and names is an object
+     * keyed by both, whatever the order (`a[0]=x` then `a[b]=y` give
+     * `{ a: { "0": "x", b: "y" } }`).
      */
     function nestBracketNotationKey(obj: object | any[], key: string[], k: number, value: any): object | any[];
 

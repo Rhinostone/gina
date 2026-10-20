@@ -2894,7 +2894,9 @@ function ValidatorPlugin(rules, data, formId, culture) {
      * Values are placed VERBATIM — no url-decode, no `"true"`/`"false"`/`"null"`
      * coercion — because the non-binary body is posted as `application/json` and the
      * server keeps JSON keys/values as sent (#B28). A numeric next segment makes the
-     * current level an array.
+     * current level an array. A level that mixes indexes and names is an object keyed
+     * by both, whatever came first (#B596): a name reaching a level that already holds
+     * an array copies the array into an object before the walk goes on.
      *
      * @inner
      * @param {(object|Array)} obj - accumulator, mutated in place and returned
@@ -2906,6 +2908,11 @@ function ValidatorPlugin(rules, data, formId, culture) {
      * @example
      * // 'item[0][id]' -> ['item','0','id']
      * nestBracketNotationKey({}, ['item','0','id'], 0, 'x'); // { item: [ { id: 'x' } ] }
+     *
+     * @example
+     * // 'list[0][id]' then 'list[name]': one object, nothing lost
+     * var o = nestBracketNotationKey({}, ['list','0','id'], 0, 'x');
+     * nestBracketNotationKey(o, ['list','name'], 0, 'y'); // { list: { 0: { id: 'x' }, name: 'y' } }
      */
     var nestBracketNotationKey = function(obj, key, k, value) {
 
@@ -2965,6 +2972,18 @@ function ValidatorPlugin(rules, data, formId, culture) {
                     // Init array or object
                     if ( typeof(obj[ _key ]) == 'undefined' ) {
                         obj[ _key ] = null;
+                    }
+
+                    // #B596 — a segment that is not an index (`list[name]`) reaching an
+                    // existing array: that level mixes indexes and names, so it becomes an
+                    // OBJECT keyed by both (`"0"`, `"1"`, `"name"`), whatever came first.
+                    // Before, the name was read as index 0 (`~~'name'`): a fresh `{}`
+                    // replaced the first element, and the name became an array property
+                    // that JSON drops. A level whose segments are all indexes stays an
+                    // array. Identical in helpers/data `parseLocalObj` and the validator
+                    // twin `nestBracketNotationKey` (pinned byte for byte).
+                    if ( Array.isArray(obj[ _key ]) && !/^\d+$/.test(key[k+1]) ) {
+                        obj[ _key ] = Object.assign({}, obj[ _key ]);
                     }
 
                     nestBracketNotationKey(obj[ _key ], key, k+1, value);
