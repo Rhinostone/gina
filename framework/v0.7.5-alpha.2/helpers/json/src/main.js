@@ -113,7 +113,10 @@ module.exports = function(){
      * values like `"http://host//:rest"` round-trip unchanged.
      *
      * On a real syntax error the helper logs via `console.emerg` and exits with
-     * code 1; on unexpected I/O failure it rethrows.
+     * code 1; on unexpected I/O failure it rethrows. When the engine reports the
+     * error's position, the message carries an excerpt of the file from 200
+     * characters before the error to 300 after it, the error marked
+     * `--(ERROR !)--` (#B917); without a position it names the file only.
      *
      * @param {string} filename - absolute or relative path to the JSON-with-comments file
      *
@@ -186,7 +189,15 @@ module.exports = function(){
             if ( Array.isArray(stack) && stack.length > 0) {
                 pos     = stack[0].replace(/[^\d+]/g, '');
                 jsonStr = jsonStr.substring(0, pos) + '--(ERROR !)--\n' + jsonStr.substring(pos);
-                msg     = (jsonStr.length > 400) ?  '...'+ jsonStr.substring(pos-200, 300) +'...' : jsonStr;
+                // #B917 — the excerpt runs from 200 characters before the error to 300 after it.
+                // Its end was the fixed index 300, so for an error past character 500 the start
+                // passed the end, substring() swapped the two, and the excerpt stopped 200
+                // characters short of the error: the marker never showed, and a long file printed
+                // almost whole. `pos` is the digit string read from the stack, so it is parsed
+                // before the sum (a string plus 300 would concatenate).
+                // was: msg     = (jsonStr.length > 400) ?  '...'+ jsonStr.substring(pos-200, 300) +'...' : jsonStr;
+                var at  = parseInt(pos, 10);
+                msg     = (jsonStr.length > 400) ?  '...'+ jsonStr.substring(Math.max(0, at - 200), at + 300) +'...' : jsonStr;
                 error = new Error('[ requireJSON ] could not parse `'+ filename +'`:' +'\n\rSomething is wrong around this portion:\n\r'+msg+'<strong style="color:red">"</strong>\n\rPlease check your file: `'+ filename +'`'+ '\n\r<strong style="color:red">'+err.stack+'</strong>\n');
             } else {
                 error = new Error('[ requireJSON ] could not parse `'+ filename +'`:' +'\n\rSomething is wrong with the content of your file.\n\rPlease check the syntax of your file : `'+ filename +'`'+ '\n\r<strong style="color:red">'+err.stack+'</strong>\n');

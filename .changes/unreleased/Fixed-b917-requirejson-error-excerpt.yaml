@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'When `requireJSON()` cannot parse a file, its message quotes the file around the error and marks the error with `--(ERROR !)--`. The quote ended at a fixed character, so for an error past the first 500 characters it stopped short of the error: the marker never showed, and a long file was printed almost whole. The quote now runs from 200 characters before the error to 300 after it. (#B917)'
+time: 2026-10-20T03:53:37+01:00
