@@ -2303,9 +2303,18 @@ function ValidatorPlugin(rules, data, formId, culture) {
      * @param {object} errors
      * @param {object|null} data
      * @param {string|null} [fieldName] - restricts the pass to one field (the per-field / live-check path)
+     * @param {boolean} [isSubmitTriggerLeftToFormPass=false] - #B922: the caller's whole-form pass writes the
+     *   submit trigger, so a field without errors does not mark the form ready here
+     * @returns {void}
+     *
+     * @example
+     * // a live-check field pass that found no error; the whole-form pass that follows writes the trigger
+     * handleErrorsDisplay($formNode, {}, result.data, 'email', true);
+     *
+     * @inner
      */
     var liveCheckErrors = {}; // Per Form & Per Element
-    var handleErrorsDisplay = function($form, errors, data, fieldName) {
+    var handleErrorsDisplay = function($form, errors, data, fieldName, isSubmitTriggerLeftToFormPass) {
 
         // Toolbar errors display
         if ( envIsDev )
@@ -2388,7 +2397,13 @@ function ValidatorPlugin(rules, data, formId, culture) {
                         && !instance.$forms[formId].errors
                     ) {
                         // update submit trigger state
-                        updateSubmitTriggerState( $form, true );
+                        // #B922 — unless the caller's whole-form pass writes it: there, the `true` of a
+                        // field without errors reached the show branch, which clears native `disabled`,
+                        // before that pass gated the form.
+                        // was: updateSubmitTriggerState( $form, true );
+                        if ( !isSubmitTriggerLeftToFormPass ) {
+                            updateSubmitTriggerState( $form, true );
+                        }
                     }
 
                     if ( typeof(liveCheckErrors[formId]) != 'undefined' && liveCheckErrors[formId].count() == 0 ) {
@@ -7457,8 +7472,8 @@ function ValidatorPlugin(rules, data, formId, culture) {
      * pick and it only dispatches names that are registered.
      *
      * A control is wired when it has a rule, or — since #B884 — when a `_case_` condition names it
-     * (`isCaseConditionTarget`): until the case applies, its field pass finds no rule and the
-     * whole-form pass still re-evaluates the submit trigger. Admitted input types (#B886): radio,
+     * (`isCaseConditionTarget`): its field pass finds no rule, and only the whole-form pass writes the
+     * submit trigger for it (#B922). Admitted input types (#B886): radio,
      * checkbox, text, hidden, password, number, email, tel, url, search, and the date/time family
      * (date, time, datetime-local, month, week).
      *
@@ -7636,7 +7651,13 @@ function ValidatorPlugin(rules, data, formId, culture) {
                                 //console.debug('onSilentPreGlobalLiveValidation: '+ isFormValid, result);
                                 if (isFormValid) {
                                     //resetting error display
-                                    handleErrorsDisplay(event.target.form, {}, result.data, event.target.name);
+                                    // #B922 — a field wired only because a `_case_` condition names it (#B884)
+                                    // has no rule in this pass, which therefore reads valid: its `true` cleared
+                                    // the native `disabled` a page script had set, before the whole-form pass
+                                    // below gated the form. For such a field the whole-form pass alone writes
+                                    // the submit trigger.
+                                    // was: handleErrorsDisplay(event.target.form, {}, result.data, event.target.name);
+                                    handleErrorsDisplay(event.target.form, {}, result.data, event.target.name, isCaseTarget);
                                 } else {
                                     handleErrorsDisplay(event.target.form, result.error, result.data, event.target.name);
                                 }
