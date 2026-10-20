@@ -166,7 +166,10 @@ if (envConfigPath) {
         process.exit(1);
     }
     try {
-        fileCfg = JSON.parse(fs.readFileSync(envConfigPath, 'utf8'));
+        // #B934 — comments and a trailing comma accepted (with a warning), as gina's other JSON
+        // files are; the error now names the file
+        // was: fileCfg = JSON.parse(fs.readFileSync(envConfigPath, 'utf8'));
+        fileCfg = parseJSONWithComments(fs.readFileSync(envConfigPath, 'utf8'), envConfigPath); // jshint ignore:line
     } catch (parseErr) {
         process.stdout.write('[gina-init] failed to parse config file: ' + parseErr.message + '\n');
         process.exit(1);
@@ -384,8 +387,11 @@ try { userInfo = os.userInfo(); } catch(e) { /* running as unresolvable uid (e.g
 // an unresolved template placeholder.
 var prevBindHost = null;
 try {
-    var _prevSettingsRaw = fs.readFileSync(ginaHome + '/' + shortVersion + '/settings.json', 'utf8');
-    prevBindHost = JSON.parse(_prevSettingsRaw).bind_host || null;
+    var _prevSettingsPath = ginaHome + '/' + shortVersion + '/settings.json';
+    var _prevSettingsRaw = fs.readFileSync(_prevSettingsPath, 'utf8');
+    // #B934 — a trailing comma or a comment no longer drops the persisted bind_host
+    // was: prevBindHost = JSON.parse(_prevSettingsRaw).bind_host || null;
+    prevBindHost = parseJSONWithComments(_prevSettingsRaw, _prevSettingsPath).bind_host || null; // jshint ignore:line
     if (prevBindHost && String(prevBindHost).indexOf('${') > -1) { prevBindHost = null; }
 } catch (e) { /* absent or unreadable — defaults apply */ }
 

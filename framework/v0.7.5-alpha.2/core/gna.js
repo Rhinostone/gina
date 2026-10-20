@@ -353,8 +353,13 @@ if ( typeof(getEnvVar) == 'undefined') {
 }
 
 // console.debug('[ FRAMEWORK ] GINA_HOMEDIR [' + (GINA_HOMEDIR||null) +'] vs getEnvVar(GINA_HOMEDIR) [' + getEnvVar('GINA_HOMEDIR') +']' );
-var reversePorts    = require( _(GINA_HOMEDIR + '/ports.reverse.json') );
-var projects        = require( _(GINA_HOMEDIR + '/projects.json') );
+// #B934 — read like the bundle's other files (requireJSON): comments and a trailing comma
+// accepted with a warning, a malformed file named. With require(), a hand-edited comma in
+// either file stopped the bundle at boot with node's SyntaxError.
+// was: var reversePorts    = require( _(GINA_HOMEDIR + '/ports.reverse.json') );
+// was: var projects        = require( _(GINA_HOMEDIR + '/projects.json') );
+var reversePorts    = requireJSON( _(GINA_HOMEDIR + '/ports.reverse.json') );
+var projects        = requireJSON( _(GINA_HOMEDIR + '/projects.json') );
 var root            = projects[projectName].path;
 
 gna.executionPath = root;

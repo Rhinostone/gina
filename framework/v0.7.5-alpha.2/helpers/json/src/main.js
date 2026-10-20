@@ -7,7 +7,65 @@
  */
 
  var fs = require('fs');
- var console = require('./../../../lib/logger');
+ // #B928 — the logger is read when a function runs (getLogger), not bound when this file loads.
+ // lib/logger requires the helpers, this file among them, before it assigns its exports, so the
+ // binding taken here kept the logger's first, empty exports: in gina-container and gina-init
+ // (whose only instance of this file is that one) a trailing comma was refused instead of
+ // accepted with a warning, and so it was, in every process, in the files the logger reads while
+ // it loads. The require stays, so nothing loads in a different order.
+ // was: var console = require('./../../../lib/logger');
+ require('./../../../lib/logger');
+
+/**
+ * The framework logger, or `null` while `lib/logger` is still loading (#B928).
+ *
+ * `lib/logger` requires the helpers, this file among them, before it assigns
+ * its exports, and reads the framework `package.json`, the home
+ * `settings.json` and its extension configs through `requireJSON` during that
+ * load. Required when a function runs, it is the logger, or its first, empty
+ * exports during those reads. An own property is tested: reading a missing
+ * property on a module that is still loading makes node print « Accessing
+ * non-existent property … inside circular dependency ». A logger that cannot
+ * load at all returns `null` too, so the error being reported stays the
+ * caller's.
+ *
+ * @private
+ * @returns {object|null} the logger, or `null` while it is not loaded
+ *
+ * @example
+ * var logger = getLogger();
+ * if (logger) { logger.emerg(message); process.exit(1); }
+ */
+function getLogger() {
+    try {
+        var logger = require('./../../../lib/logger');
+        return ( Object.prototype.hasOwnProperty.call(logger, 'emerg') ) ? logger : null;
+    } catch (loggerErr) {
+        return null;
+    }
+}
+
+/**
+ * Logs a warning through the logger, or through node's own console while the
+ * logger is still loading (#B928): the logger's reads of its own files.
+ *
+ * @private
+ * @param {string} message - the warning
+ * @returns {void}
+ *
+ * @example
+ * warn('[ requireJSON ] trailing comma in `/path/to/file.json` — parsed successfully but please fix the file');
+ */
+function warn(message) {
+    var logger = getLogger();
+    if (logger) {
+        logger.warn(message);
+    } else {
+        // node's console, also where the process replaced the global one (bin/cli does)
+        require('console').warn(message);
+    }
+}
+
 /**
  * JSONHelper
  *
@@ -112,8 +170,12 @@ module.exports = function(){
      * or `\` (escape), the entire line is treated as data and left alone — so
      * values like `"http://host//:rest"` round-trip unchanged.
      *
-     * On a real syntax error the helper logs via `console.emerg` and exits with
-     * code 1; on unexpected I/O failure it rethrows. When the engine reports the
+     * On a real syntax error, or a file it cannot read, the helper logs via
+     * `console.emerg` and exits with code 1; within the controller stack a
+     * syntax error is thrown instead. While `lib/logger` is still loading (its
+     * own reads of the framework `package.json`, the home `settings.json` and
+     * its extension configs) both are thrown, and the trailing-comma warning
+     * goes to node's console (#B928). When the engine reports the
      * error's position, the message carries an excerpt of the file from 200
      * characters before the error to 300 after it, the error marked
      * `--(ERROR !)--` (#B917); without a position it names the file only.
@@ -148,8 +210,12 @@ module.exports = function(){
             jsonStr = fs.readFileSync(filename).toString();
 
         } catch (err) {
-            if ( typeof(console.emerg) != 'undefined' ) {
-                console.emerg(err.stack);
+            // #B928 — the logger read now, not the empty exports bound when this file loaded
+            // was: if ( typeof(console.emerg) != 'undefined' ) {
+            // was:     console.emerg(err.stack);
+            var readLogger = getLogger();
+            if ( readLogger ) {
+                readLogger.emerg(err.stack);
                 process.exit(1);
             }
             throw err
@@ -173,7 +239,9 @@ module.exports = function(){
             if (_stripped !== jsonStr) {
                 try {
                     var _result = JSON.parse(_stripped);
-                    console.warn('[ requireJSON ] trailing comma in `'+ filename +'` — parsed successfully but please fix the file');
+                    // #B928 — on the empty exports, `console.warn` threw here and the retry fell through to the parse error
+                    // was: console.warn('[ requireJSON ] trailing comma in `'+ filename +'` — parsed successfully but please fix the file');
+                    warn('[ requireJSON ] trailing comma in `'+ filename +'` — parsed successfully but please fix the file');
                     return _result;
                 } catch (_retryErr) {
                     // fall through to the original error reporting below
@@ -203,8 +271,12 @@ module.exports = function(){
                 error = new Error('[ requireJSON ] could not parse `'+ filename +'`:' +'\n\rSomething is wrong with the content of your file.\n\rPlease check the syntax of your file : `'+ filename +'`'+ '\n\r<strong style="color:red">'+err.stack+'</strong>\n');
             }
 
-            if ( !/\/controllers/i.test(err.stack) && typeof(console.emerg) != 'undefined' ) {
-                console.emerg(error.message);
+            // #B928 — the logger read now: on the empty exports this threw where it should exit
+            // was: if ( !/\/controllers/i.test(err.stack) && typeof(console.emerg) != 'undefined' ) {
+            // was:     console.emerg(error.message);
+            var parseLogger = getLogger();
+            if ( !/\/controllers/i.test(err.stack) && parseLogger ) {
+                parseLogger.emerg(error.message);
                 process.exit(1);
             }
             throw error;
@@ -214,7 +286,8 @@ module.exports = function(){
     /**
      * Parse JSON-with-comments text the way `requireJSON()` parses a file —
      * `//` line comments, `/* ... *\/` block comments when the text carries a
-     * `/**` docblock, and a trailing comma before `}`/`]` (with a warning) —
+     * `/**` docblock, and a trailing comma before `}`/`]` (with a warning, sent
+     * to node's console while `lib/logger` is still loading, #B928) —
      * but never exit the process: text that is still not JSON throws an Error
      * whose message names `filename`. For readers whose failure must stay on
      * their own error path: a CLI command, the framework daemon,
@@ -250,7 +323,9 @@ module.exports = function(){
             if (_stripped !== jsonStr) {
                 try {
                     var _result = JSON.parse(_stripped);
-                    console.warn('[ parseJSONWithComments ] trailing comma in `'+ name +'` — parsed successfully but please fix the file');
+                    // #B928 — as in requireJSON(): the empty exports made a trailing comma a parse error
+                    // was: console.warn('[ parseJSONWithComments ] trailing comma in `'+ name +'` — parsed successfully but please fix the file');
+                    warn('[ parseJSONWithComments ] trailing comma in `'+ name +'` — parsed successfully but please fix the file');
                     return _result;
                 } catch (_retryErr) {
                     // report the original error below

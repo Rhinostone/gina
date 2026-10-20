@@ -74,6 +74,34 @@ function out(msg) {
     try { fs.writeSync(1, msg); } catch (e) { /* stdout gone — nothing better to do */ }
 }
 
+/**
+ * Reads a `~/.gina` state file the way the CLI reads it, or stops the launcher
+ * naming the file (#B934).
+ *
+ * `//` comments and a trailing comma are accepted (the comma with a warning)
+ * through the `parseJSONWithComments` global that the bootstrap installs
+ * (step 1). A file
+ * that cannot be read, or that is still not JSON, prints
+ * `[ gina-container ] <label> cannot be used: <reason>` and exits with code 1,
+ * as an unusable `manifest.json` does (#B891). The plain `JSON.parse` these
+ * reads used stopped the launcher with an uncaught SyntaxError naming no file.
+ *
+ * @param {string} file - absolute path of the file
+ * @param {string} label - the file's name in the message (`settings.json`, …)
+ * @returns {*} the parsed content
+ *
+ * @example
+ * var projects = readHomeFile(home + '/projects.json', 'projects.json');
+ */
+function readHomeFile(file, label) {
+    try {
+        return parseJSONWithComments(fs.readFileSync(file, 'utf8'), file); // jshint ignore:line
+    } catch (err) {
+        out('[ gina-container ] ' + label + ' cannot be used: ' + ((err && err.message) || err) + '\n');
+        process.exit(1);
+    }
+}
+
 // ── 0b. Container logging preset (#B524) ─────────────────────────────────────
 // This launcher runs a topology with NO framework daemon by construction (see the
 // header), so the logger's default `mq` flow would dial an MQ listener that cannot
@@ -119,7 +147,9 @@ home = getEnvVar('GINA_HOMEDIR'); // jshint ignore:line
 var settingsPath = home + '/' + shortVersion + '/settings.json';
 var settings     = { log_level: 'info' };
 if (fs.existsSync(settingsPath)) {
-    settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+    // #B934 — comments and a trailing comma accepted, an unusable file named
+    // was: settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+    settings = readHomeFile(settingsPath, 'settings.json');
 }
 
 // Guard: settings.json may contain unresolved ${} template placeholders
@@ -178,7 +208,9 @@ setEnvVar('GINA_IS_WIN32',      false, true); // jshint ignore:line
 var _mainJsonPath = home + '/main.json';
 if (fs.existsSync(_mainJsonPath)) {
     try {
-        var _mainData = JSON.parse(fs.readFileSync(_mainJsonPath, 'utf8'));
+        // #B934 — comments and a trailing comma accepted; the warning below now names the file
+        // was: var _mainData = JSON.parse(fs.readFileSync(_mainJsonPath, 'utf8'));
+        var _mainData = parseJSONWithComments(fs.readFileSync(_mainJsonPath, 'utf8'), _mainJsonPath); // jshint ignore:line
         if (_mainData.def_framework !== version) {
             out('[gina-container] def_framework: ' + (_mainData.def_framework || 'unset') + ' → ' + version + '\n');
             _mainData.def_framework = version;
@@ -237,9 +269,14 @@ if (!fs.existsSync(projectsPath)) {
     process.exit(1);
 }
 
-var projects     = JSON.parse(fs.readFileSync(projectsPath, 'utf8'));
+// #B934 — comments and a trailing comma accepted, an unusable file named
+// was: var projects     = JSON.parse(fs.readFileSync(projectsPath, 'utf8'));
+// was: var portsReverse = fs.existsSync(portsReversePath)
+// was:     ? JSON.parse(fs.readFileSync(portsReversePath, 'utf8'))
+// was:     : {};
+var projects     = readHomeFile(projectsPath, 'projects.json');
 var portsReverse = fs.existsSync(portsReversePath)
-    ? JSON.parse(fs.readFileSync(portsReversePath, 'utf8'))
+    ? readHomeFile(portsReversePath, 'ports.reverse.json')
     : {};
 
 var projectEntry = projects[projectName];

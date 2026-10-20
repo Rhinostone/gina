@@ -208,10 +208,15 @@ function Config(opt, contextResetNeeded) {
                 delete require.cache[require.resolve(filename)];
             }
 
+            // #B934 — read with requireJSON, like the bundle's other configs: comments and a
+            // trailing comma accepted with a warning. With require(), a hand-edited comma in
+            // ports.json, ports.reverse.json or projects.json stopped the bundle at boot.
+            // was: content = require(filename)[self.projectName] // get only related project infos
+            // was: content = require(filename);
             if (file == 'project') {
-                content = require(filename)[self.projectName] // get only related project infos
+                content = requireJSON(filename)[self.projectName] // get only related project infos
             } else {
-                content = require(filename);
+                content = requireJSON(filename);
             }
 
             setContext('gina.'+ file, content)
