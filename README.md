@@ -69,54 +69,59 @@ open http://localhost:3100
 
 > **npm 12+** blocks install scripts by default, and gina's post-install bootstraps `~/.gina` and the framework dependencies. Install with `npm install -g gina@latest --allow-scripts=gina`, or allow it once for all global installs with `npm config set allow-scripts=gina --location=user`. (Not needed on npm ≤ 11.)
 
-## What's in 0.7.4
+## What's in 0.7.5
 
-> **Restart your bundles *and* rebuild them.** The form validator, the staged
-> upload widget, the popin plugin, the `<select>` live check and the routing
-> library's placeholder fill are browser-bundled, so `gina.min.js` changed and
-> `gina bundle:restart` alone leaves the old client running: rebuild each
-> consuming bundle, then restart it. If your build copies `gina.min.js` into your
-> own static files, rebuild that copy before the restart.
+> **Restart your bundles *and* rebuild them.** The form validator, the routing
+> library's `getRoute()`, `Collection` and the request-data parser are
+> browser-bundled, so `gina.min.js` changed and `gina bundle:restart` alone leaves
+> the old client running: rebuild each consuming bundle, then restart it. If your
+> build copies `gina.min.js` into your own static files, rebuild that copy before
+> the restart. A framework already running picks up the CLI fixes after
+> `gina framework:restart`.
 
-> **Read before upgrading — some changes can change an answer.** A page template
-> whose path resolves outside the section's template root (`templates.json > html`,
-> `templates/html` by default) now answers 500 — a bundle that renders templates
-> kept outside it widens that root — and a route placeholder filled from the
-> request with a value that would escape as a path component is refused. A route's
-> `cache` field sets `Cache-Control` only while `server.cache.enable` is on and the
-> request is a GET. `gina bundle:start`, `bundle:restart`, `framework:restart` and
-> `gina start --inspect-gina` now exit non-zero when they did not do what they say,
-> and a bundle that cannot bind its port exits 1. A `settings.<env>.json` file is
-> applied for the first time, and the six render-cache switches in the top-level
-> `cache` block of `settings.json` are deprecated there, with a boot warning. The
-> [migration notes](https://gina.io/docs/migration) list every behaviour change.
+> **Read before upgrading — some changes can change an answer.** A Couchbase entry
+> of `connectors.json` without a `scope` now gives its entities the bundle's
+> `NODE_SCOPE`, so the documents it inserted with `_scope: "_default"` stop
+> matching: stamp them with the environment's scope, or set `"scope": "_default"`
+> on the entry. Data stored through a SQLite or DuckDB entry that names neither
+> `file` nor `database` is in `undefined.sqlite` or `undefined.duckdb` in the gina
+> home: set the entry's `file` to it before upgrading (such a DuckDB entry now stops
+> the boot). A bundle that sets `swig.useProject: true` now renders with the
+> project's own `@rhinostone/swig`, a `swig.package` frontend the bundle cannot load
+> stops it at startup, and a grouped expression renders the value of its group
+> (`{{ (1 + 2) * 3 }}` gave 7). On a rule with several URLs, `getRoute()` and the
+> `getUrl` filters compose the URL the values complete (`urlIndex` 0 keeps the
+> first), and a key both in a `self.query()` path and in its data keeps the path's
+> value. Bracket keys that mix indexes and names now give an object, an unticked
+> optional boolean checkbox posts `false`, and a required checkbox that carries a
+> value must be ticked. The [migration notes](https://gina.io/docs/migration) list
+> every behaviour change.
 
-**The request-isolation release.** Nine security fixes, two of them with an
-advisory: a template path taken from the request could leave the template root,
-through the router's placeholder fill or a controller's `setTemplate()`, and read
-any `.html` file the process can read. Under concurrency, a route middleware, the
-engine's error responder, the context-bearing template filters and an async job
-could answer or render with another request's context. One unauthenticated GET
-could stop a bundle through a bracket field nested in a `null` slot — the whole
-request-data parse, the multipart listeners included, is now guarded. A request
-value could forge a log line, a resolved secret could reach the log unmasked, and
-a `__proto__` query field could change `req.delete`'s prototype. Forty-seven fixes
-follow: the CLI's exit codes and pid files, `Collection`, the staged upload
-widget, the renderers and the validator. Full detail in
-[CHANGELOG.md](./CHANGELOG.md).
+**The forms-and-containers release.** Three security fixes, two of them on the
+template-path advisory GHSA-3vmh-634f-vwm3 published with 0.7.4: a query or body
+value could replace a URL segment in a route's template path after the segment had
+passed the route's `requirements` (the residual the advisory stated), and the router
+let an escaping value into `param.path` and `param.namespace` before its
+path-traversal check (the renderers still refused it). Gina also requires
+`@rhinostone/swig` `^2.8.3`, which escapes a template's filename in the code it
+compiles (GHSA-q89c-947c-m7xr). Sixty-one fixes follow: nineteen in the form
+validator, `getRoute()`'s URL choice and query string, how `self.query()` and
+`forward` send their data, the container launchers and the `~/.gina` files, the
+connectors' scope and model directories, and swig's grouped expressions and project
+frontends. On native Windows, gina now stops with one message: run it inside WSL2 or
+a Docker container. Full detail in [CHANGELOG.md](./CHANGELOG.md).
 
-- **Security — a request-fed template path stays inside the template root (#B833, #B867).** The router refuses a placeholder value that would escape as a path component, and both renderers answer 500 for a page path outside the section's `html` root. Two advisories.
-- **Security — no request answers with another request's context (#B807, #B806, #B519, #B811).** The controller methods a route middleware gets, the engine-level error responder and the `getUrl`/`getWebroot`/`t`/`tIcu` filters each read a process-wide slot that the last request overwrote; each is now bound to its own request, and an async job runs with no render context.
-- **Security — one request can no longer stop a bundle (#B792, #B793, #B843).** A bracket field nested in a `null` slot threw in the parser and a GET exited the bundle; the parse of every request's data, and the multipart listeners, now answer 500 instead.
-- **Security — logs (#B830, #B834, #B838).** A request value can no longer start a log line of its own (CWE-117); a resolved secret is masked whichever writer renders it, quotes and escapes included (CWE-532).
-- **Security — `req.delete` keeps its prototype (#B848).** A `__proto__` query field re-pointed it on the default engine. Related: a request field named `hasOwnProperty` reaches the action (#B837), a logged object can no longer make a log call throw (#B832), and `req.delete` is a plain object with Express 4's `simple` query parser (#B847).
-- **Changed — `Cache-Control` follows the server cache switch (#B744)**, and the top-level `cache` keys the render cache never read are deprecated with a boot warning. The SQLite driver takes Node.js 26.11's `Database` class name (#B829).
-- **Fixed — the CLI says what it did (#B851, #B853, #B854, #B855, #B856, #B850, #B763, #B764, #B780, #B782, #B779).** `bundle:start` exits by outcome and a bundle that cannot bind its port exits 1; `bundle:restart` exits 1 when the bundle did not restart; a second start keeps the running bundle's pid file; a refused start no longer stops the framework; `project:start` leaves the framework's records alone; a worker child no longer takes over its bundle's pid file; `framework:status` and `gina stop` find a framework running on Bun, and `gina stop` signals only the pid it read and keeps other versions' pid files; `--inspect-gina` and `framework:restart` return the real exit code; `image:run` leaves the container name to podman.
-- **Fixed — `Collection` (#B517, #B818, #B819, #B820, #B821, #B822, #B826, #B827).** `filter(fn)` filters; a search option matches the value as text, works on every search and in its object form; a dotted key holding a pattern character matches nothing instead of throwing; `update()` writes each row back in its own place; `delete()` and `notIn()` remove the rows they found; `find()` lists a row once.
-- **Fixed — the staged upload widget (#B858, #B859, #B860, #B861, #B862, #B791).** After a reset the next selection is posted; a reset or a delete reaches a file shown without an image, every file of a multi-file input, a custom preview container and a custom prefix; a replaced file's preview metadata is no longer re-posted.
-- **Fixed — renderers and routing (#B516, #B808, #B825, #B688, #B842, #B783, #B794, #B518, #B812).** `getUrl` degrades with no request; a custom async swig loader renders again and sees `setup.js` registrations; a `:placeholder` in `param.path`, `param.title` or `param.namespace` is written verbatim; an error page whose dispatch fails answers the built-in page instead of overflowing the stack; a `throwError()` fallback answers an XHR request; `redirect()` to a dot-less host works; `throwError(err)` keeps `message` and `ref`; a rejecting async middleware answers 500.
-- **Fixed — settings and cache (#B784, #B785).** `settings.<env>.json` is applied, and the `fs` cache reads its entries back from a custom `server.cache.path`.
-- **Fixed — client (#B585, #B781, #B876).** `reBind()` no longer stacks the validator's listeners and `destroy()` removes them; a `<select>`'s live check shows the whole-form error; a popin trigger no longer loads the popin twice on a page with several popin instances.
+- **Security — a route's template path keeps its URL value (#B877, #B883).** A placeholder of `param.file` that is a URL segment takes the URL value, and the router refuses a `param.path` or `param.namespace` value holding a `..` segment or starting with a separator. A redirect route that takes `param.path` from a query value starting with `/` is refused, also when the key has a requirement.
+- **Security — swig escapes a template's filename (#B942).** Up to 2.8.2, swig wrote the including template's filename into the compiled template without escaping it. Gina requires `^2.8.3` in both manifests; a project copy loaded through `swig.useProject` keeps its own version, so update it there.
+- **Changed — `getRoute()` composes the URL the values complete (#B374), and the path's value wins in `self.query()` (#B945).** Without `urlIndex`, a rule with several URLs composes a URL whose placeholders all receive a value, preferring the one that uses the most of them; a forward route's static `param` reaches its target as written.
+- **Fixed — the form validator (#B879, #B880, #B802, #B881, #B884, #B885, #B913, #B886, #B914, #B915, #B916, #B918, #B919, #B920, #B921, #B923, #B926, #B929, #B931).** A `_case_` condition is matched against its own driving field, reads a `/pattern/` case and a regular-expression rule key wherever its block sits, stops applying when it no longer holds, refuses a group it makes required from the first submit, and its targets are live-checked. A required checkbox that carries a value must be ticked; an optional boolean one posts `false`. A field follows only the masters whose whole ids its `data-gina-form-element-group` lists, regular-expression characters included. Each bound form holds its own copy of its rule set. `reBind()` keeps the rule set `data-gina-form-rule` names and uses the rules you pass, `unbind()` works with no argument, `tel`, `url`, `search`, `time`, `datetime-local`, `month` and `week` inputs are live-checked, and a `<select>` change re-checks the form with its own rules.
+- **Fixed — `query` rules and `self.query()` (#B951, #B950, #B945, #B952).** A browser `query` rule on GET (the default), HEAD or DELETE sends its data in the URL; a rule aimed at its own bundle works under `gina-container` without a `proxy` entry for it; `self.query()` and `forward` send the data of a GET, HEAD or DELETE once, in the query string, and the data of a PATCH as a JSON body.
+- **Fixed — `getRoute()` (#B374, #B220, #B943, #B944, #B946).** It composes the URL `urlIndex` names and refuses an index that names none, appends a value bound only to another URL as a query parameter, repeats no value, and keeps a value holding a comma whole.
+- **Fixed — request data (#B596, #B936, #B594).** Bracket keys that mix indexes and names nest to one object, whatever their order; a top-level JSON array document is parsed into its elements.
+- **Fixed — containers and the `~/.gina` files (#K8s7, #B895, #B892, #B934, #B928, #B891, #B938, #B687, #B857, #B852, #B890, #B906, #B905).** `gina-container` reads `GINA_HOMEDIR`, names a missing `manifest.json`, and accepts a comment or a trailing comma in the files it reads, as every reader of `manifest.json` and `main.json` now does; `gina-init` no longer dials the MQ port; state and pid files are written whole, and a process that creates the run directory is registered; a project or `~/.gina` file that cannot be used is refused in one line instead of stopping the framework; a failed `node_modules` link no longer reads as a successful start.
+- **Fixed — connectors (#B893, #B900, #B894, #B901, #B907, #B909, #B911).** A Couchbase entry without `scope` uses `NODE_SCOPE`, as documented, and one named differently from its bucket no longer stops the boot; an entry keyed by its connector type loads without `connector`; model directories follow the entry's `database` or `keyspace`, with no `models/undefined/` and no `undefined.sqlite`; a DuckDB entry that names neither `file` nor `database` stops the boot.
+- **Fixed — swig (#B940, #B932, #B925, #B924).** A grouped expression renders the value of its group (swig 2.8.2 and later); `swig.useProject` and `swig.package` take effect in a running bundle, and a frontend that cannot load stops it with `SWIG_PACKAGE_UNAVAILABLE`; the settings schema lists every frontend.
+- **Fixed — platform and CLI (#B888, #B889, #B363, #B927, #B902, #B903, #B917, #B823, #B824).** Native Windows stops with one message pointing to WSL2 or Docker; the "not started" hint no longer asks for `sudo`; `project:add` leaves an existing `package.json` as it is; the helpers load in a fixed order under Bun; the `onInitialize` sample that `bundle:add` writes works in a bundle named `event`, `app` or `express`; the https credentials error is spelled correctly; a `requireJSON()` parse error quotes the file around the error; a `Collection` filter on one field of an array of objects finds its rows, and `setSearchOption()` refuses a per-field `skipEval`.
 
 ## Documentation
 
