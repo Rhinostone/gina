@@ -3712,6 +3712,19 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
     };
 
     // TODO - One method for the front, and one for the server
+    /**
+     * queryFromFrontend — the browser side of the `query` rule: asks the rule's endpoint for a
+     * verdict over XMLHttpRequest and settles the field through `asyncCompleted.<id>`.
+     * A GET, HEAD or DELETE sends the rule's `data` in the url's query string, with no body
+     * (#B951): each key once, an object value as its JSON text, joined with `&` to a query
+     * string the url already holds, and a key that query string holds is not sent again. A POST,
+     * PUT or PATCH sends `data` as a JSON body.
+     *
+     * @inner
+     * @param {object} options - the rule's options (`url`, `method`, `data`, `validIf`, `headers`, …)
+     * @param {string} [errorMessage] - the rule's error message
+     * @returns {object|undefined} the field (`self[name]`) when a known verdict answers at once; nothing when the request goes out
+     */
     var queryFromFrontend = function(options, errorMessage) {
         var errors      = self[this['name']]['errors'] || {};
         var id          = this.target.id || this.target.getAttribute('id');
@@ -3923,6 +3936,60 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
                 queryOptions.url = route.toUrl();
             } catch (routingError) {
                 throw routingError;
+            }
+        }
+
+        // #B951 — a GET, HEAD or DELETE rule carries its data in the query string. The data went
+        // to xhr.send() only, which a browser drops for a GET or HEAD (the XHR standard), and a
+        // gina receiver reads a DELETE's data from the query string only: such a rule sent none
+        // of its data, GET being the default method. The query string is built the way the server
+        // side's self.query() builds it: each key once, an object value as its JSON text, joined
+        // with `&` to a query string the url already holds, and a key that query string already
+        // holds is not sent again. A POST, PUT or PATCH keeps sending its JSON body.
+        var isBodyLessQuery = !/^(post|put|patch)$/i.test(queryOptions.method || 'GET');
+        if ( isBodyLessQuery && typeof(queryData) == 'string' && queryData != '' ) {
+            var _queryValues = null;
+            try {
+                _queryValues = JSON.parse(queryData);
+            } catch (_queryParseErr) {
+                _queryValues = null;
+            }
+            if ( _queryValues && typeof(_queryValues) == 'object' && !Array.isArray(_queryValues) ) {
+                var _queryUrl   = String(queryOptions.url || '');
+                var _queryAt    = _queryUrl.indexOf('?');
+                var _queryHeld  = Object.create(null);
+                if ( _queryAt > -1 ) {
+                    var _heldPairs = _queryUrl.substring(_queryAt + 1).split('&');
+                    for (var _hp = 0; _hp < _heldPairs.length; ++_hp) {
+                        var _heldKey = _heldPairs[_hp].split('=')[0];
+                        if ( !_heldKey ) {
+                            continue;
+                        }
+                        try {
+                            _heldKey = decodeURIComponent(_heldKey);
+                        } catch (_heldDecodeErr) {
+                            // a malformed escape: the key is compared as written
+                        }
+                        _queryHeld[_heldKey] = true;
+                    }
+                }
+                var _encodeValue = ( typeof(encodeRFC5987ValueChars) == 'function' ) ? encodeRFC5987ValueChars : encodeURIComponent;
+                var _queryPairs = [];
+                for (var _qk in _queryValues) {
+                    if ( !Object.prototype.hasOwnProperty.call(_queryValues, _qk) || _queryHeld[_qk] === true ) {
+                        continue;
+                    }
+                    var _qv = _queryValues[_qk];
+                    if ( _qv !== null && typeof(_qv) == 'object' ) {
+                        _qv = JSON.stringify(_qv);
+                    }
+                    _queryPairs.push(_qk + '=' + _encodeValue(_qv));
+                }
+                if ( _queryPairs.length > 0 ) {
+                    queryOptions.url = _queryUrl
+                        + ( ( _queryAt > -1 ) ? ( /[?&]$/.test(_queryUrl) ? '' : '&' ) : '?' )
+                        + _queryPairs.join('&').replace(/\s/g, '%20');
+                }
             }
         }
 
@@ -4289,7 +4356,9 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
             if ( _this.target && _this.target.dataset ) {
                 _this.target.dataset.ginaFormValidatorQueryPending = _this.value;
             }
-            if (data) {
+            // #B951 — a GET, HEAD or DELETE carries its data in the url built above, and no body.
+            // was: if (data) {
+            if (data && !isBodyLessQuery) {
                 xhr.send( queryData ); // stringyfied
             }  else {
                 xhr.send();
@@ -4298,15 +4367,18 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
     }
 
     /**
-     * queryFromBackend
+     * queryFromBackend — the server side of the `query` rule: calls the rule's route through
+     * `self.query()` from a controller built for the request, and resolves with the endpoint's
+     * answer. A rule aimed at the bundle it runs in — its `name@bundle` names the bundle in
+     * context or the Config instance's — is called on that bundle's own host and port; any other
+     * bundle is reached through app.json's `proxy` entry for it (#B950).
      *
-     *
-     * @param {object} options
+     * @inner
+     * @param {object} options - the rule's options (`url` as `name@bundle`, `method`, `data`, …)
      * @param {object} request
      * @param {object} response
      * @param {callback} next
-     *
-     *
+     * @returns {Promise<object>} the endpoint's answer (`{ isValid, … }`), carrying `error` when the call failed
      */
     var queryFromBackend = async function(options, request, response, next) {
         var Config = require(_(GINA_FRAMEWORK_DIR +'/core/config.js', true));
@@ -4317,14 +4389,22 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
             , rule  = null
             , bundle = null
             , currentBundle = getContext('bundle')
+            , isSameBundle = false
         ;
         // trying to retrieve proxy conf
         if ( /\@/.test(options.url) ) {
             var attr = options.url.split(/@/);
             rule = attr[0];
             bundle = attr[1];
+            // #B950 — the rule's bundle is this bundle when it names the bundle in context or the
+            // Config instance's own. Under bin/gina-container the Config instance's `bundle` is
+            // undefined while getContext('bundle') names the bundle, so a rule aimed at its own
+            // bundle went to the `proxy` lookup below and answered 500 (« Could not retrieve
+            // `proxy` configuration ») unless app.json gave the bundle a proxy entry for itself.
+            isSameBundle = ( bundle === currentBundle || bundle === config.bundle );
             try {
-                if (config.bundle !== bundle) { // ignore if same bundle
+                // was: if (config.bundle !== bundle) { // ignore if same bundle
+                if ( !isSameBundle ) { // ignore if same bundle
                     // getting proxy conf when available
                     // #B522 — clone. The GLOBAL two-argument getConfig() hands back the
                     // bundle's `app` conf BY REFERENCE, so the `opt.method` / `opt.path`
@@ -4364,16 +4444,23 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
         }
 
         if (!opt) { // setup opt by default if no proxy conf found
-            if (config.bundle == bundle) {
+            // #B950 — see isSameBundle above
+            // was: if (config.bundle == bundle) {
+            if ( isSameBundle ) {
                 var credentials = getConfig( currentBundle, 'settings' ).server.credentials;
                 options.ca = credentials.ca || null;
                 options.hostname    = conf.server.scheme +'://'+ conf.host;
+                // #B950 — the bare host too: an HTTP/1.1 call connects to `host` (the agent
+                // carries it), so with `hostname` alone, which holds `scheme://host`, the call
+                // looked `http://localhost` up as a host name (ENOTFOUND).
+                options.host        = conf.host;
                 options.port        = conf.port[conf.server.protocol][conf.server.scheme];
                 options.protocol    = conf.server.protocol;
                 options.rejectUnauthorized  = false;
             }
             opt = {
                 "ca"        : options.ca,
+                "host"      : options.host,
                 "hostname"  : options.hostname,
                 "port"      : options.port,
                 "path"      : options.path
