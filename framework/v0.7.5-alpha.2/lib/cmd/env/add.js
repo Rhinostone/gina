@@ -123,12 +123,23 @@ function Add(opt, cmd) {
      * ran the writer alone (no manifest check, no env.json, no port scan, no
      * message, no exit).
      *
+     * #B938 — `~/.gina/ports.json` and `ports.reverse.json` are read fresh with
+     * `parseJSONWithComments()`, as the command helper read them a moment before
+     * (#B906): a `//` comment is ignored and a trailing comma is accepted with a
+     * warning. A read that fails here (the file changed since the helper's read)
+     * throws to saveEnvs(), which ends the command with exit code 1.
+     *
      * @inner
      * @private
+     * @throws {Error} when a ports file cannot be read or is not JSON
      */
     var addEnvToProjectAndBundles = function() {
+        // #B938 — require() refused the comment and the trailing comma the helper had just
+        // accepted, so env:add stopped on node's SyntaxError after the helper's warning
+        // was: , ports = require(_(GINA_HOMEDIR + '/ports.json'))
         var file    = _(self.projects[self.projectName].path + '/env.json')
-            , ports = require(_(GINA_HOMEDIR + '/ports.json'))
+            , portsFile = _(GINA_HOMEDIR + '/ports.json')
+            , ports = parseJSONWithComments(fs.readFileSync(portsFile, 'utf8'), portsFile)
         ;
 
         if ( !fs.existsSync( _(self.projects[self.projectName].path + '/manifest.json') )) {
@@ -187,9 +198,12 @@ function Add(opt, cmd) {
             self.envPath = _(self.projects[self.projectName].path + '/env.json');
             self.envData = requireJSON(self.envPath);
             self.portsPath = _(GINA_HOMEDIR + '/ports.json');
-            self.portsData = require(self.portsPath);
+            // #B938 — read fresh, as above: what rollback writes back is the file as it is now
+            // was: self.portsData = require(self.portsPath);
+            self.portsData = parseJSONWithComments(fs.readFileSync(self.portsPath, 'utf8'), self.portsPath);
             self.portsReversePath = _(GINA_HOMEDIR + '/ports.reverse.json');
-            self.portsReverseData = require(self.portsReversePath);
+            // was: self.portsReverseData = require(self.portsReversePath);
+            self.portsReverseData = parseJSONWithComments(fs.readFileSync(self.portsReversePath, 'utf8'), self.portsReversePath);
 
             addEnvToBundles(0)
         }

@@ -355,17 +355,29 @@ function Initialize(opt) {
      * registrar (bin/cli's start sync, gina-container, post_install) wrote
      * `frameworks[<release>]` first (#B680).
      *
+     * The file is read with `parseJSONWithComments()`, as bin/cli and the command
+     * helper read it (#B938): a `//` comment is ignored and a trailing comma is
+     * accepted with a warning. The commit rewrites the file as plain JSON, so neither
+     * stays in it.
+     *
      * After the commit, `main.json` is dropped from Node's require cache, so the
      * later steps that `require()` it read the migrated file (#B681).
      *
      * @private
-     * @param {function} done - Step callback; called with the error only when a
-     *        missing `main.json` cannot be created. Any other failure throws, and
-     *        the `begin()` chain exits the process.
+     * @param {function} done - Step callback; called with the error when a missing
+     *        `main.json` cannot be created, and with « main.json cannot be used:
+     *        <reason> » when the file cannot be read or is still not JSON (#B938).
+     *        Any other failure throws. The `begin()` chain prints either and exits
+     *        the process with code 1.
      * @returns {void}
      * @example
      * // A 0.6 main.json read by 0.7.0: def_culture {'0.6':'fr_FR'} gains '0.7':'fr_FR'
      * // and the step logs `Migrating main.json: 0.6 → 0.7`; a second run changes nothing.
+     * @example
+     * // A trailing comma in main.json: a warning naming the file, then the step completes.
+     * // A missing closing brace: the command prints
+     * // « Error: main.json cannot be used: could not parse `/home/me/.gina/main.json`: … »
+     * // and exits 1, the file left as it was.
      */
     self.checkIfMain = function(done) {
         console.debug('Checking main...');
@@ -398,7 +410,19 @@ function Initialize(opt) {
             }
         }
         // update if needed : like the version number ...
-        var mainConfig  = require(target);
+        // #B938 — read with parseJSONWithComments(), as bin/cli and the command helper read
+        // this file (#B906). require() refused the `//` comment and the trailing comma they
+        // accept, and every offline command and the framework start run this step, so a
+        // hand edit stopped all of them with node's SyntaxError. A file that is
+        // still not JSON, or cannot be read, refuses the command here, before the commit
+        // below can rewrite it.
+        // was: var mainConfig  = require(target);
+        var mainConfig  = null;
+        try {
+            mainConfig  = parseJSONWithComments(fs.readFileSync(target, 'utf8'), target);
+        } catch (mainErr) {
+            return done(new Error('main.json cannot be used: '+ (mainErr.message || mainErr)));
+        }
         mainConfig      = whisper(dic, mainConfig);
 
         // MIGRATION — first run on a new short version (e.g. 0.1 → 0.2, 0.5 → 1.0).
@@ -533,6 +557,9 @@ function Initialize(opt) {
         // archs[<release>] and the first command exited 1. Dropping the entry makes
         // their next require() read the file just written. Once per process: init's
         // check chain runs from onComplete only, never per online command.
+        // #B938 — the read at the top of this step no longer goes through require(), so
+        // it no longer fills that cache; the drop stays for a require() of the file made
+        // earlier in this process.
         try {
             delete require.cache[require.resolve(target)];
         } catch (cacheErr) {
