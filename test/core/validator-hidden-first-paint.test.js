@@ -43,7 +43,7 @@ var MAIN    = process.env.GINA_VALIDATOR_MAIN || path.join(FW, 'core/plugins/lib
 var DIST    = process.env.GINA_PLUGIN_DIST    || path.join(FW, 'core/asset/plugin/dist/vendor/gina');
 var DIST_JS = path.join(DIST, 'js/gina.min.js');
 
-var DECL   = 'var handleErrorsDisplay = function($form, errors, data, fieldName) {';
+var DECL   = 'var handleErrorsDisplay = function($form, errors, data, fieldName, isSubmitTriggerLeftToFormPass) {';
 var WALK   = 'for (var i = 0, len = $form.length; i<len; ++i) {';
 var GUARD  = "if ( $target === $el && $el.type == 'hidden' && hasPaintableTwin($form, $el) ) {";
 var HELPER = 'var hasPaintableTwin = function($form, $el) {';

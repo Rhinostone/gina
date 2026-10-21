@@ -561,7 +561,12 @@ describe('validator-case-driver-base-rules §06 — dist fidelity', function () 
         // line-wrap position is content-dependent and may land at any token
         // boundary — the #B389 rebuild emitted `&&(Ua[Xa]=\nR)`, a newline
         // inside the assignment (the case-coercion §04.2 lesson).
-        var restore = min.match(/typeof ([A-Za-z_$][\w$]*)\[([A-Za-z_$][\w$]*)\]=='undefined'&&typeof ([A-Za-z_$][\w$]*)!='undefined'&&\(\1\[\2\]=\s*\3\)/g) || [];
+        // REALIGNED wrap-agnostic 2026-10-20 (approved, with 06.4 below): the
+        // form above held at 1 of its 20 token boundaries; now \s* at every
+        // token boundary, typeof\s+, same backreferences, same count.
+        // Re-validated: 0 on the pre-#B229 artifact (83ee35500^), 1 on #B229's
+        // and on the three bundles built since that were checked.
+        var restore = min.match(/typeof\s+([A-Za-z_$][\w$]*)\s*\[\s*([A-Za-z_$][\w$]*)\s*\]\s*==\s*'undefined'\s*&&\s*typeof\s+([A-Za-z_$][\w$]*)\s*!=\s*'undefined'\s*&&\s*\(\s*\1\s*\[\s*\2\s*\]\s*=\s*\3\s*\)/g) || [];
         assert.equal(restore.length, 1,
             'the shipped, served artifact must carry the caseValue restore — gina.min.js is what browsers run');
     });
@@ -572,7 +577,14 @@ describe('validator-case-driver-base-rules §06 — dist fidelity', function () 
         // coalesces the backup local with `caseValue`):
         //   if(eb==Pa)typeof Ra[Pa]!='undefined'&&(w=Ya[Pa],Ha(Pa,Ra,Ya)…
         // VALIDATED 0-pre / 1-post against the real artifacts.
-        var arm = min.match(/if\(([A-Za-z_$][\w$]*)==([A-Za-z_$][\w$]*)\)typeof ([A-Za-z_$][\w$]*)\[\2\]!='undefined'&&\(([A-Za-z_$][\w$]*)=([A-Za-z_$][\w$]*)\[\2\],([A-Za-z_$][\w$]*)\(\2,\3,\5\)/g) || [];
+        // REALIGNED wrap-agnostic 2026-10-20 (approved; the #B921 rebuild moved
+        // Closure's content-dependent line wrap INSIDE the span — the artifact
+        // read  typeof Fa[za]!=\n'undefined'&&(nb=ab[za],…  — the documented
+        // wrap-fragility class): \s* at every token boundary, typeof\s+, same
+        // backreferences, same count. Re-validated: 0 on the pre-#B229 artifact
+        // (83ee35500^), 1 on #B229's, on two bundles built before the #B921
+        // rebuild, and on it.
+        var arm = min.match(/if\s*\(\s*([A-Za-z_$][\w$]*)\s*==\s*([A-Za-z_$][\w$]*)\s*\)\s*typeof\s+([A-Za-z_$][\w$]*)\s*\[\s*\2\s*\]\s*!=\s*'undefined'\s*&&\s*\(\s*([A-Za-z_$][\w$]*)\s*=\s*([A-Za-z_$][\w$]*)\s*\[\s*\2\s*\]\s*,\s*([A-Za-z_$][\w$]*)\s*\(\s*\2\s*,\s*\3\s*,\s*\5\s*\)/g) || [];
         assert.equal(arm.length, 1,
             'the driver arm must reach the served bundle — backup, then the base-rule check against allFields');
     });

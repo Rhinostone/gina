@@ -182,6 +182,9 @@ declare global {
     /** Load a JSON file with comment stripping. */
     function requireJSON(filename: string): any;
 
+    /** Parse JSON-with-comments text as requireJSON parses a file; throws an Error naming `filename` instead of exiting. */
+    function parseJSONWithComments(text: string, filename?: string): any;
+
     // -- Task helper --
 
     function run(cmdline: string | string[], opt?: object, cb?: (err: Error | null, result?: any) => void): EventEmitter & OnCompletable;
@@ -199,7 +202,10 @@ declare global {
     /**
      * Nest ONE bracket-notation key path (`item[0][id]`) into the accumulator
      * object at depth `k` (callers pass `0`); assigns `value` at the leaf.
-     * Mutates and returns the accumulator.
+     * Mutates and returns the accumulator. A level whose segments are all
+     * indexes is an array; a level that mixes indexes and names is an object
+     * keyed by both, whatever the order (`a[0]=x` then `a[b]=y` give
+     * `{ a: { "0": "x", b: "y" } }`).
      */
     function nestBracketNotationKey(obj: object | any[], key: string[], k: number, value: any): object | any[];
 

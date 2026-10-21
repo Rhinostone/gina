@@ -202,13 +202,15 @@ describe('02 - source pins: the collection arm in both collectors', function () 
     });
 
     it('02.2 getFormValidationInfos carries the whole arm, terminator-anchored', function () {
-        var re = /\$form\[i\]\.type == 'radio'\s*&&\s*rules\s*&&\s*typeof\(rules\[name\]\) != 'undefined'\s*&&\s*\/\^true\$\/i\.test\(rules\[name\]\.isRequired\)\s*&&\s*typeof\(rules\[name\]\.isBoolean\) == 'undefined'\s*&&\s*typeof\(fields\[name\]\) == 'undefined'\s*\)\s*\{\s*fields\[name\] = '';/;
+        // #B926 — the arm takes a radio or a checkbox (was: `\$form\[i\]\.type == 'radio'`)
+        var re = /\/\^\(radio\|checkbox\)\$\/i\.test\(\$form\[i\]\.type\)\s*&&\s*rules\s*&&\s*typeof\(rules\[name\]\) != 'undefined'\s*&&\s*\/\^true\$\/i\.test\(rules\[name\]\.isRequired\)\s*&&\s*typeof\(rules\[name\]\.isBoolean\) == 'undefined'\s*&&\s*typeof\(fields\[name\]\) == 'undefined'\s*\)\s*\{\s*fields\[name\] = '';/;
         assert.match(mainSrc, re,
-            'the infos-collector arm must gate on radio + truthy isRequired + no isBoolean + not-already-collected, and assign the empty value');
+            'the infos-collector arm must gate on radio or checkbox + truthy isRequired + no isBoolean + not-already-collected, and assign the empty value');
     });
 
     it('02.3 the native-submit inline collector carries the twin arm', function () {
-        var re = /\$target\[i\]\.type == 'radio'\s*&&\s*rules\s*&&\s*typeof\(rules\[name\]\) != 'undefined'\s*&&\s*\/\^true\$\/i\.test\(rules\[name\]\.isRequired\)\s*&&\s*typeof\(rules\[name\]\.isBoolean\) == 'undefined'\s*&&\s*typeof\(fields\[name\]\) == 'undefined'\s*\)\s*\{\s*fields\[name\] = '';/;
+        // #B926 — the arm takes a radio or a checkbox (was: `\$target\[i\]\.type == 'radio'`)
+        var re = /\/\^\(radio\|checkbox\)\$\/i\.test\(\$target\[i\]\.type\)\s*&&\s*rules\s*&&\s*typeof\(rules\[name\]\) != 'undefined'\s*&&\s*\/\^true\$\/i\.test\(rules\[name\]\.isRequired\)\s*&&\s*typeof\(rules\[name\]\.isBoolean\) == 'undefined'\s*&&\s*typeof\(fields\[name\]\) == 'undefined'\s*\)\s*\{\s*fields\[name\] = '';/;
         assert.match(mainSrc, re,
             'the inline-collector arm must mirror the infos arm on $target[i]');
     });
@@ -401,7 +403,9 @@ describe('05 - dist fidelity: the arm is in the shipped browser bundle', functio
         // Existence control on a pre-existing neighbor so a wrong path/read
         // cannot false-zero silently:
         assert.ok(min.indexOf('.isBoolean') > -1, 'control: the isBoolean property chain must exist');
-        var hits = min.match(/\/\^true\$\/i\.test\([^)]{0,80}?\.isRequired\)/g) || [];
+        // The gate reads a member (`rules[name].isRequired`, minified `x[y].isRequired`); the
+        // `]` keeps out the #B914 site in forEachField, which tests `localRuleObj.isRequired`.
+        var hits = min.match(/\/\^true\$\/i\.test\([^)]{0,80}?\]\.isRequired\)/g) || [];
         assert.equal(hits.length, 2,
             'the truthy-isRequired gate must appear once per collector in the minified bundle');
     });

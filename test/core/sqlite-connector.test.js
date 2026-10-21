@@ -64,7 +64,7 @@ describe('01 - SQLite connector: lib/connector.js source', function() {
         assert.ok(/fn\(_err,\s*null\)/.test(src));
     });
 
-    it('defaults database file to ~/.gina/{version}/{database}.sqlite', function() {
+    it('defaults database file to ~/.gina/{database}.sqlite', function() {
         assert.ok(/getPath\('gina'\)\.home/.test(src));
         assert.ok(/\.sqlite/.test(src));
     });

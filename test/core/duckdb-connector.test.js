@@ -70,7 +70,7 @@ describe('01 - DuckDB connector: lib/connector.js source', function () {
         assert.ok(src.indexOf('Run: npm install @duckdb/node-api') > -1);
     });
 
-    it('defaults the file path to ~/.gina/{version}/{database}.duckdb', function () {
+    it('defaults the file path to ~/.gina/{database}.duckdb', function () {
         assert.ok(src.indexOf("conf.file || _(getPath('gina').home + '/' + conf.database + '.duckdb', true)") > -1);
     });
 
@@ -244,6 +244,16 @@ describe('03 - DuckDB connector: connection logic (mock driver)', function () {
         var _conn = null, _err = null, _initPromise = null;
 
         var init = function (conf) {
+            // #B911 — mirrors lib/connector.js: an entry that names neither `file`
+            // nor `database` is refused before the driver is loaded.
+            if (!conf.file && !conf.database) {
+                _err = new Error(
+                    '[DuckdbConnector] The connectors.json entry names neither `file` nor `database`.\n'
+                    + 'Set `database` (it names models/<database>/ and the default file ~/.gina/<database>.duckdb), '
+                    + 'or `file` (a path, or ":memory:").'
+                );
+                return;
+            }
             var duckdb;
             try {
                 duckdb = loadDriver();
@@ -305,6 +315,16 @@ describe('03 - DuckDB connector: connection logic (mock driver)', function () {
         assert.ok(/is not installed in your project/.test(seen.err.message));
         assert.ok(/Run: npm install @duckdb\/node-api/.test(seen.err.message));
         assert.equal(seen.conn, null);
+    });
+
+    it('refuses an entry with neither `file` nor `database` SYNCHRONOUSLY, before loading the driver (#B911)', function () {
+        var seen = null, loaded = false;
+        var c = makeConnector(function () { loaded = true; return mockDriver(); }, {}, '/tmp/home');
+        c.onReady(function (err, conn) { seen = { err: err, conn: conn }; });
+        assert.ok(seen !== null, 'the refusal must reach onReady synchronously');
+        assert.ok(/names neither `file` nor `database`/.test(seen.err.message));
+        assert.equal(seen.conn, null);
+        assert.equal(loaded, false, 'the driver must not be loaded for a refused entry');
     });
 
     it('surfaces an open failure as [DuckdbConnector] Failed to open', async function () {

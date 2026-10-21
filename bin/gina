@@ -26,6 +26,14 @@
  * For zsh, if we want to hide all outputs
  * $ gina start  >&/dev/null &!
  */
+// Native Windows is refused before anything else loads (#B888): gina runs
+// inside WSL2 or a Docker container there. Inlined, not required, so this
+// file keeps working when it is copied on its own.
+if ( process.platform === 'win32' ) {
+    require('fs').writeSync(2, 'gina does not run natively on Windows.\nRun it inside WSL2 or a Docker container: https://gina.io/docs/getting-started/installation#windows\n');
+    process.exit(1);
+}
+
 var fs              = require('fs');
 const {spawn}       = require('child_process');
 const {execSync}    = require('child_process');

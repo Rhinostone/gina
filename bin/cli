@@ -223,7 +223,12 @@ async function onExec() {
         if ( /^(bundle|project):(start|restart)$/.test(process.argv[2]) ) {
             var _mainJsonPath = home + '/main.json';
             try {
-                var _mainData = requireJSON(_mainJsonPath);// jshint ignore:line
+                // #B906 — parseJSONWithComments() throws where requireJSON() calls
+                // `process.exit(1)`, which this catch could not stop: a main.json that cannot be
+                // read or parsed is now only warned about here, and for `bundle:start` the
+                // framework daemon then refuses the command with « main.json cannot be used ».
+                // was: var _mainData = requireJSON(_mainJsonPath);// jshint ignore:line
+                var _mainData = parseJSONWithComments(fs.readFileSync(_mainJsonPath, 'utf8'), _mainJsonPath);// jshint ignore:line
                 if ( _mainData.def_framework !== version ) {
                     process.stdout.write('[gina] def_framework: ' + (_mainData.def_framework || 'unset') + ' → ' + version + '\n');
                     _mainData.def_framework = version;
@@ -585,11 +590,13 @@ async function onExec() {
         });
 
         client.on('error', function(err) {
-            if (isWin32) {
-                console.log('[ gina ] not started, try to start framework as Administrator :\n$ gina start')
-            } else {
-                console.log('[ gina ] not started, try to start framework with :\n$ sudo gina start')
-            }
+            // #B889 — one hint on every platform. gina needs no elevated
+            // privileges: the framework runs as the current user, and its pid
+            // files go under the npm prefix, or to `~/.gina/run` when the
+            // prefix is not writable (utils/helper.js getRunDir). The hint
+            // used to ask for root on Unix, and for an Administrator shell on
+            // Windows, a branch no published bin reaches since #B888.
+            console.log('[ gina ] not started, try to start framework with :\n$ gina start')
             // #B160 — name the dial target and the bind knob: a refused
             // connection here is either a daemon that is not running, or one
             // bound to a different address than the one dialled.

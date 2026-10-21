@@ -26,7 +26,7 @@ Gina follows a BDFL governance model — see [GOVERNANCE.md](./GOVERNANCE.md) fo
 
 | Requirement | Version |
 | --- | --- |
-| OS | macOS or Linux (Windows: Docker only) |
+| OS | macOS or Linux (Windows: WSL2 or Docker) |
 | Node.js | >= 22 < 27 |
 | npm | >= 8 |
 | Changie | >= 1.24 |

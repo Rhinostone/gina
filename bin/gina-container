@@ -17,6 +17,10 @@
  * No framework socket server (port 8124) is required — project config is read
  * directly from ~/.gina/{shortVersion}/settings.json and projects.json.
  *
+ * The project root must contain manifest.json: the bundle reads it at boot. A
+ * missing or unusable manifest stops the launcher with exit code 1 and a
+ * message naming the commands that create it (step 6).
+ *
  * Usage (Dockerfile CMD or entrypoint script):
  *   node /path/to/gina/bin/gina-container <bundle> @<project>
  *   gina-container <bundle> @<project>          # if installed globally
@@ -25,12 +29,21 @@
  *   GINA_SHUTDOWN_TIMEOUT — graceful drain window in ms (default: 10000)
  *   NODE_ENV              — override project def_env
  *   NODE_SCOPE            — override project def_scope
+ *   GINA_HOMEDIR          — the ~/.gina root (default: HOME/.gina), as bin/gina-init reads it
  *   GINA_LOG_STDOUT       — container logging preset. Applied as `true` by this
  *                           launcher when unset (JSON lines, MQ transport skipped —
  *                           see step 0b). Set it to `false` to keep the transport.
  *   GINA_LOG_FORMAT       — json|text — the explicit output-format override; it
  *                           wins over the preset for the format only
  */
+
+// Native Windows is refused before anything else loads (#B888): gina runs
+// inside WSL2 or a Docker container there. Inlined, not required, so this
+// file keeps working when it is copied on its own.
+if ( process.platform === 'win32' ) {
+    require('fs').writeSync(2, 'gina does not run natively on Windows.\nRun it inside WSL2 or a Docker container: https://gina.io/docs/getting-started/installation#windows\n');
+    process.exit(1);
+}
 
 var fs    = require('fs');
 var os    = require('os');
@@ -59,6 +72,34 @@ var ginaPath = binPath.replace(/\/bin$/, '');
  */
 function out(msg) {
     try { fs.writeSync(1, msg); } catch (e) { /* stdout gone — nothing better to do */ }
+}
+
+/**
+ * Reads a `~/.gina` state file the way the CLI reads it, or stops the launcher
+ * naming the file (#B934).
+ *
+ * `//` comments and a trailing comma are accepted (the comma with a warning)
+ * through the `parseJSONWithComments` global that the bootstrap installs
+ * (step 1). A file
+ * that cannot be read, or that is still not JSON, prints
+ * `[ gina-container ] <label> cannot be used: <reason>` and exits with code 1,
+ * as an unusable `manifest.json` does (#B891). The plain `JSON.parse` these
+ * reads used stopped the launcher with an uncaught SyntaxError naming no file.
+ *
+ * @param {string} file - absolute path of the file
+ * @param {string} label - the file's name in the message (`settings.json`, …)
+ * @returns {*} the parsed content
+ *
+ * @example
+ * var projects = readHomeFile(home + '/projects.json', 'projects.json');
+ */
+function readHomeFile(file, label) {
+    try {
+        return parseJSONWithComments(fs.readFileSync(file, 'utf8'), file); // jshint ignore:line
+    } catch (err) {
+        out('[ gina-container ] ' + label + ' cannot be used: ' + ((err && err.message) || err) + '\n');
+        process.exit(1);
+    }
 }
 
 // ── 0b. Container logging preset (#B524) ─────────────────────────────────────
@@ -92,16 +133,23 @@ shortVersion.splice(2);
 shortVersion = shortVersion.join('.');
 
 // ── 2. Read ~/.gina/<shortVersion>/settings.json ──────────────────────────────
+// #B895 — the home is GINA_HOMEDIR when the environment sets it, as bin/gina-init
+// writes it. getEnvVar() reads `process.gina` only, and this launcher never imports
+// the environment into it, so a GINA_HOMEDIR given to the container was ignored:
+// the launcher read HOME/.gina and stopped on « projects.json not found ». The
+// value reaches the bundle through `process.gina` (step 7).
 var home = getUserHome(); // jshint ignore:line
 if (typeof(getEnvVar('GINA_HOMEDIR')) == 'undefined') { // jshint ignore:line
-    setEnvVar('GINA_HOMEDIR', home + '/.gina'); // jshint ignore:line
+    setEnvVar('GINA_HOMEDIR', process.env.GINA_HOMEDIR || (home + '/.gina')); // jshint ignore:line
 }
 home = getEnvVar('GINA_HOMEDIR'); // jshint ignore:line
 
 var settingsPath = home + '/' + shortVersion + '/settings.json';
 var settings     = { log_level: 'info' };
 if (fs.existsSync(settingsPath)) {
-    settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+    // #B934 — comments and a trailing comma accepted, an unusable file named
+    // was: settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+    settings = readHomeFile(settingsPath, 'settings.json');
 }
 
 // Guard: settings.json may contain unresolved ${} template placeholders
@@ -160,7 +208,9 @@ setEnvVar('GINA_IS_WIN32',      false, true); // jshint ignore:line
 var _mainJsonPath = home + '/main.json';
 if (fs.existsSync(_mainJsonPath)) {
     try {
-        var _mainData = JSON.parse(fs.readFileSync(_mainJsonPath, 'utf8'));
+        // #B934 — comments and a trailing comma accepted; the warning below now names the file
+        // was: var _mainData = JSON.parse(fs.readFileSync(_mainJsonPath, 'utf8'));
+        var _mainData = parseJSONWithComments(fs.readFileSync(_mainJsonPath, 'utf8'), _mainJsonPath); // jshint ignore:line
         if (_mainData.def_framework !== version) {
             out('[gina-container] def_framework: ' + (_mainData.def_framework || 'unset') + ' → ' + version + '\n');
             _mainData.def_framework = version;
@@ -169,7 +219,19 @@ if (fs.existsSync(_mainJsonPath)) {
             if (_mainData.frameworks[shortVersion].indexOf(version) < 0) {
                 _mainData.frameworks[shortVersion].push(version);
             }
-            fs.writeFileSync(_mainJsonPath, JSON.stringify(_mainData, null, 4));
+            // #B687 — written whole: a temp file in the same directory, renamed into
+            // place, so a process reading ~/.gina meanwhile (another container sharing
+            // it) never finds main.json empty or half written, the #B43 shape. The file
+            // keeps its mode; a failure removes the temp file and reaches the warning below.
+            var _mainTmp = _mainJsonPath + '.' + process.pid + '.tmp';
+            try {
+                fs.writeFileSync(_mainTmp, JSON.stringify(_mainData, null, 4));
+                fs.chmodSync(_mainTmp, fs.statSync(_mainJsonPath).mode & 0o777);
+                fs.renameSync(_mainTmp, _mainJsonPath);
+            } catch (writeErr) {
+                try { fs.unlinkSync(_mainTmp); } catch (unlinkErr) { /* already gone */ }
+                throw writeErr;
+            }
         }
     } catch(e) {
         out('[gina-container] warn: could not sync def_framework — ' + (e.message || e) + '\n');
@@ -207,9 +269,14 @@ if (!fs.existsSync(projectsPath)) {
     process.exit(1);
 }
 
-var projects     = JSON.parse(fs.readFileSync(projectsPath, 'utf8'));
+// #B934 — comments and a trailing comma accepted, an unusable file named
+// was: var projects     = JSON.parse(fs.readFileSync(projectsPath, 'utf8'));
+// was: var portsReverse = fs.existsSync(portsReversePath)
+// was:     ? JSON.parse(fs.readFileSync(portsReversePath, 'utf8'))
+// was:     : {};
+var projects     = readHomeFile(projectsPath, 'projects.json');
 var portsReverse = fs.existsSync(portsReversePath)
-    ? JSON.parse(fs.readFileSync(portsReversePath, 'utf8'))
+    ? readHomeFile(portsReversePath, 'ports.reverse.json')
     : {};
 
 var projectEntry = projects[projectName];
@@ -225,11 +292,12 @@ var projectRoot = projectEntry.path;
 var env   = process.env.NODE_ENV   || projectEntry['def_env'];
 var scope = process.env.NODE_SCOPE || projectEntry['def_scope'];
 
-// ── 6. Resolve bundle entry point (mirrors isRealApp() in lib/cmd/bundle/start.js) ──
+// ── 6. Resolve bundle entry point (isRealApp() in lib/cmd/bundle/start.js, without its fallback) ──
 var appPath = null;
 var isDev   = (projectEntry['dev_env'] === env);
 try {
-    var manifest  = JSON.parse(fs.readFileSync(projectRoot + '/manifest.json', 'utf8'));
+    // #B891 — comments accepted, as every other reader of manifest.json accepts them
+    var manifest  = parseJSONWithComments(fs.readFileSync(projectRoot + '/manifest.json', 'utf8'), projectRoot + '/manifest.json');
     var bundlePkg = manifest.bundles[bundleName];
     if (!bundlePkg) {
         throw new Error('bundle `' + bundleName + '` not found in manifest.json');
@@ -243,9 +311,22 @@ try {
         appPath = projectRoot + '/releases/' + bundleName + '/' + scope + '/' + env + '/' + bundlePkg.version + '/index.js';
     }
 } catch (err) {
-    // fallback: bundles/<bundle>/index.js (mirrors start.js catch block)
-    out('[ gina-container ] manifest.json warning: ' + (err.message || err) + '\n');
-    appPath = projectRoot + '/bundles/' + bundleName + '/index.js';
+    // No fallback entry point (#K8s7). The bundle reads manifest.json itself at
+    // boot (isBundleMounted() in core/gna.js), so starting another entry without
+    // it only moved the failure into the bundle. The fallback was the bundle's
+    // mount link, which a checkout does not have, so the error named a path the
+    // project never had. Stop here and say what is missing.
+    if (err && err.code === 'ENOENT') {
+        out(
+            '[ gina-container ] manifest.json not found in ' + projectRoot + '\n' +
+            '  The bundle reads it at boot. Commit it with the project, or create it in the image:\n' +
+            '    gina project:add @' + projectName + ' --path=' + projectRoot + '\n' +
+            '    gina bundle:add ' + bundleName + ' @' + projectName + ' --import\n'
+        );
+    } else {
+        out('[ gina-container ] manifest.json cannot be used: ' + ((err && err.message) || err) + '\n');
+    }
+    process.exit(1);
 }
 
 if (!fs.existsSync(appPath)) {

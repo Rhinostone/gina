@@ -68,6 +68,33 @@
  *                                         nested-preview JSON, /upload-save and /upload-unstage
  *                                         acknowledge, /upload-tmp/*.png serves a 1x1 PNG)
  *   GET /js/gina.onload.b459.js        -> built onload with the b459 rules whisper
+ *   GET /js/gina.onload.b884.js        -> built onload with the validator-client-cluster rules
+ *                                         whisper (#B884 / #B880 / #B802 / #B886; the spec
+ *                                         builds its pages through /x76-page, same /ac-sink)
+ *   GET /js/gina.onload.b885.js        -> built onload with the case-rules rules whisper
+ *                                         (#B885 / #B913 / #B914 / #B915; the spec builds its
+ *                                         pages through /x76-page, same /ac-sink)
+ *   GET /js/gina.onload.b916.js        -> built onload with the optional-boolean-checkbox
+ *                                         rules whisper (#B916; the spec builds its pages
+ *                                         through /x76-page, same /ac-sink)
+ *   GET /js/gina.onload.b920.js        -> built onload with the later-condition rules whisper
+ *                                         (#B920; the spec builds its pages through /x76-page,
+ *                                         same /ac-sink)
+ *   GET /js/gina.onload.b918.js        -> built onload with the regex-case rules whisper
+ *                                         (#B918; the spec builds its pages through /x76-page,
+ *                                         same /ac-sink)
+ *   GET /js/gina.onload.b919.js        -> built onload with the element-group rules whisper
+ *                                         (#B919; the spec builds its pages through /x76-page,
+ *                                         same /ac-sink)
+ *   GET /js/gina.onload.b922.js        -> built onload with the case-target submit-control whisper
+ *   GET /js/gina.onload.b926.js        -> built onload with the required value-carrying checkbox whisper
+ *   GET /js/gina.onload.b931.js        -> built onload with the shared-rule-set whisper (#B931; the spec
+ *                                         builds its pages through /x76-page, same /ac-sink)
+ *   GET /js/gina.onload.b921.js        -> built onload with the RegExp-key-in-a-condition whisper
+ *                                         (#B922; the spec builds its pages through /x76-page,
+ *                                         same /ac-sink)
+ *   GET /js/gina.onload.b596.js        -> built onload with the mixed bracket-keys whisper (#B596; the
+ *                                         spec builds its pages through /x76-page, same /ac-sink)
  *   GET /link-gate                     -> fixtures/link-disabled-gate.html (#B310
  *                                         link disabled-gate harness; same sink)
  *   GET /link-shared                   -> fixtures/link-same-url.html (#B287
@@ -243,6 +270,160 @@ const B510_FORMS_JSON = JSON.stringify({ rules: {
 const B459_FORMS_JSON = JSON.stringify({ rules: {
     b459form:     { title: { isRequired: true } },
     b459declared: { title: { isRequired: true } }
+} });
+
+// #B884 / #B880 / #B802 / #B886 — the forms whisper of the validator client-cluster spec
+// (test/e2e/validator-client-cluster-b884.spec.js). `caseform`'s `extra` carries NO rule of its
+// own: it becomes required only through `_case_kind` (#B884). `otherform` is the rule set a
+// reBind() argument names (#B802). `telform` puts the required field in an input whose type the
+// live check used to skip (#B886); the spec sets that type on the page.
+const B884_FORMS_JSON = JSON.stringify({ rules: {
+    acform:    { ref: { isRequired: true } },
+    caseform:  { ref: { isRequired: true }, _case_kind: { conditions: [{ case: 'b', rules: { extra: { isRequired: true } } }] } },
+    otherform: { note: { isRequired: true } },
+    telform:   { phone: { isRequired: true } }
+} });
+
+// #B885 / #B913 / #B914 / #B915 — the forms whisper of the validator case-rules spec
+// (test/e2e/validator-case-rules-b885.spec.js). `caseform` gives `extra` a rule of its own that
+// `_case_kind` overrides when kind is b (#B885); `caseformdollar` is the same with a `$` in the
+// rule set, the shape that already validated on a copy; `cbform` holds an optional boolean
+// checkbox (#B913); `radioform` a radio group required only through `_case_kind`, and
+// `radiodriverform` the same with a radio driver that carries no rule (#B914); `selform` a radio
+// group required by its own rule, in a form with a select that carries none (#B915).
+const B885_CASE = { conditions: [{ case: 'b', rules: { extra: { isRequired: true } } }] };
+const B885_FORMS_JSON = JSON.stringify({ rules: {
+    caseform:        { ref: { isRequired: true }, extra: { isRequired: false }, _case_kind: B885_CASE },
+    caseformdollar:  { ref: { isRequired: true, is: '/^[a-z0-9]+$/' }, extra: { isRequired: false }, _case_kind: B885_CASE },
+    cbform:          { ref: { isRequired: true }, agree: { isRequired: false, isBoolean: true } },
+    radioform:       { ref: { isRequired: true }, _case_kind: { conditions: [{ case: 'b', rules: { choice: { isRequired: true } } }] } },
+    radiodriverform: { ref: { isRequired: true }, _case_mode: { conditions: [{ case: 'b', rules: { choice: { isRequired: true } } }] } },
+    selform:         { ref: { isRequired: true }, other: { isRequired: false }, choice: { isRequired: true } }
+} });
+
+// #B916 — the forms whisper of the optional-boolean-checkbox spec
+// (test/e2e/validator-optional-boolean-checkbox-b916.spec.js). `optform` holds a checkbox whose rule
+// declares `isBoolean` with `isRequired: false`, the one shape that reached forEachField's exclusion
+// arm; `reqfform` says only `isRequired: false` (the collector rewrites that rule, so the box already
+// posted `false`), and with a `value` that is not true/false it holds a value-carrying checkbox.
+const B916_FORMS_JSON = JSON.stringify({ rules: {
+    optform:  { ref: { isRequired: true }, agree: { isRequired: false, isBoolean: true } },
+    reqfform: { ref: { isRequired: true }, agree: { isRequired: false } }
+} });
+// #B920 — the forms whisper of the later-condition spec
+// (test/e2e/validator-case-later-condition-b920.spec.js). In `laterform` the first condition of
+// `_case_mode` matches mode a and names `note`; the second requires the radio group `choice` when
+// the case is 'nv'. In `laterboolform` the first names the boolean checkbox `flag`, whose own rule
+// says isBoolean, and the second's case is true. `matchform` is the control: both conditions match a.
+const B920_FORMS_JSON = JSON.stringify({ rules: {
+    laterform:     { ref: { isRequired: true }, _case_mode: { conditions: [
+        { case: 'a', rules: { note: { isString: true } } },
+        { case: 'nv', rules: { choice: { isRequired: true } } }
+    ] } },
+    laterboolform: { ref: { isRequired: true }, flag: { isBoolean: true }, _case_mode: { conditions: [
+        { case: 'a', rules: { flag: { isBoolean: true } } },
+        { case: true, rules: { choice: { isRequired: true } } }
+    ] } },
+    matchform:     { ref: { isRequired: true }, _case_mode: { conditions: [
+        { case: 'a', rules: { note: { isString: true } } },
+        { case: 'a', rules: { choice: { isRequired: true } } }
+    ] } }
+} });
+// #B918 — the forms whisper of the regex-case spec (test/e2e/validator-regex-case-b918.spec.js).
+// In `regexform` the radio driver `mode` has three conditions: 'c' (a value) requires g2,
+// '/^(A|B)$/i' requires g1 and excludes x (the `i` flag lets it match a and b), and '/^z$/' never
+// matches and requires g3. `classform` uses a character class; in `nlform` the regex-case driver is
+// not the last `_case_` block, so a second scan also reaches it. `plainform` is the control.
+const B918_FORMS_JSON = JSON.stringify({ rules: {
+    regexform: { ref: { isRequired: true }, _case_mode: { conditions: [
+        { case: 'c', rules: { g2: { isRequired: true } } },
+        { case: '/^(A|B)$/i', rules: { g1: { isRequired: true }, x: { exclude: true } } },
+        { case: '/^z$/', rules: { g3: { isRequired: true } } }
+    ] } },
+    classform: { ref: { isRequired: true }, _case_mode: { conditions: [
+        { case: '/^[ab]$/', rules: { g1: { isRequired: true } } }
+    ] } },
+    nlform:    { _case_mode: { conditions: [ { case: '/^(a|b)$/', rules: { g1: { isRequired: true } } } ] },
+                 ref: { isRequired: true }, _case_ref: { conditions: [ { case: 'never', rules: { x: { isString: true } } } ] } },
+    plainform: { ref: { isRequired: true }, _case_mode: { conditions: [
+        { case: 'c', rules: { g2: { isRequired: true } } },
+        { case: 'a', rules: { g1: { isRequired: true }, x: { exclude: true } } },
+        { case: 'z', rules: { g3: { isRequired: true } } }
+    ] } }
+} });
+// #B919 — the forms whisper of the element-group spec (test/e2e/validator-element-group-b919.spec.js).
+// One rule set for every page: `ref` is required, so each form is bound with rules; no grouped
+// field has a rule of its own.
+const B919_FORMS_JSON = JSON.stringify({ rules: {
+    groupform: { ref: { isRequired: true } }
+} });
+// #B922 — the forms whisper of the case-target submit-control spec
+// (test/e2e/validator-case-target-trigger-b922.spec.js). `casecheck`: a hidden boolean driver `flag`
+// whose `true` case makes the value-carrying checkbox `items[0][email]` required; that checkbox has
+// no rule of its own (a `_case_` target). `twofields`: two required text fields, the control form.
+const B922_FORMS_JSON = JSON.stringify({ rules: {
+    casecheck: {
+        flag: { isRequired: true, isBoolean: true },
+        title: { isRequired: true },
+        'items[0][id]': { isRequired: true },
+        _case_flag: { conditions: [ { case: true, rules: { 'items[0][email]': { isRequired: true, isEmail: true } } } ] }
+    },
+    twofields: {
+        a: { isRequired: true },
+        b: { isRequired: true }
+    }
+} });
+// #B926 — the forms whisper of the required value-carrying checkbox spec
+// (test/e2e/validator-required-checkbox-b926.spec.js). `ownbox`: a value-carrying checkbox whose OWN
+// rule says isRequired; `samename`: two boxes under one name, required; `boolbox`: a valueless
+// (boolean) checkbox with isRequired, the control the change leaves alone.
+const B926_FORMS_JSON = JSON.stringify({ rules: {
+    ownbox: {
+        ref: { isRequired: true },
+        'items[0][email]': { isRequired: true, isEmail: true }
+    },
+    samename: {
+        ref: { isRequired: true },
+        'tags[]': { isRequired: true }
+    },
+    boolbox: {
+        ref: { isRequired: true },
+        agree: { isRequired: true }
+    }
+} });
+// #B931 — the forms whisper of the shared-rule-set spec (test/e2e/validator-shared-rules-b931.spec.js).
+// `shared` and `other`: two rule sets with the same one rule, so two forms can be bound to one set
+// or to one each; `boolreq`: a required valueless checkbox, the control whose `false` must still pass.
+const B931_FORMS_JSON = JSON.stringify({ rules: {
+    shared:  { ref: { isRequired: true } },
+    other:   { ref: { isRequired: true } },
+    boolreq: { ref: { isRequired: true }, agree: { isRequired: true } }
+} });
+
+// #B921 — the forms whisper of the RegExp-key spec (test/e2e/validator-case-regex-key-b921.spec.js). Each
+// rule set puts a RegExp key (`"/^x$/"`) inside a `_case_` condition, in one block position or another.
+const B921_NEVER = { conditions: [ { case: 'never', rules: { x: { isString: true } } } ] };
+const B921_X = { conditions: [ { case: 'a', rules: { '/^x$/': { exclude: true } } } ] };
+const B921_FORMS_JSON = JSON.stringify({ rules: {
+    single:  { ref: { isRequired: true }, _case_mode: B921_X },
+    last:    { ref: { isRequired: true }, _case_ref: B921_NEVER, _case_mode: B921_X },
+    first:   { _case_mode: B921_X, ref: { isRequired: true }, _case_ref: B921_NEVER },
+    amounts: { ref: { isRequired: true }, flag: { isBoolean: true },
+               _case_flag: { conditions: [ { case: true, rules: { '/^item[/': { isRequired: true } } } ] } },
+    boxes:   { flag: { isBoolean: true }, _case_flag: { conditions: [ { case: true, rules: { '/^inv[/': { isRequired: true } } } ] },
+               ref: { isRequired: true }, _case_ref: B921_NEVER },
+    dollar:  { flag: { isBoolean: true }, _case_flag: { conditions: [ { case: true, rules: { '/^item[$pid][amount]/': { isRequired: true } } } ] },
+               ref: { isRequired: true }, _case_ref: B921_NEVER },
+    toplevel: { ref: { isRequired: true }, '/^x$/': { exclude: true } },
+    literal: { ref: { isRequired: true }, _case_mode: { conditions: [ { case: 'a', rules: { x: { exclude: true } } } ] } },
+    live:    { _case_mode: { conditions: [ { case: 'a', rules: { '/^extra/': { isRequired: true } } } ] },
+               ref: { isRequired: true }, _case_ref: B921_NEVER }
+} });
+
+// #B596 — the forms whisper of the mixed bracket-keys spec (test/e2e/validator-mixed-bracket-keys-b596.spec.js):
+// one rule, so the posted body carries every field the page renders.
+const B596_FORMS_JSON = JSON.stringify({ rules: {
+    mixform: { ref: { isRequired: true } }
 } });
 // The staging answer the client consumes (guide: `files[]` entries; the NESTED
 // `preview` object is the app-provided variant the client renders from `preview.tmpUri`).
@@ -451,6 +632,45 @@ const server = http.createServer(function (req, res) {
         if (url === '/hidden-first' || url === '/hidden-first.html') {
             return send(res, 200, 'text/html; charset=utf-8',
                 fs.readFileSync(path.join(FIXTURES, 'validator-hidden-first.html')));
+        }
+        // #B884 — the validator client-cluster spec builds its pages itself (/x76-page); this is
+        // its rules whisper. Its submits go to /ac-sink.
+        if (url === '/js/gina.onload.b884.js') {
+            return send(res, 200, 'application/javascript; charset=utf-8', renderOnload(B884_FORMS_JSON));
+        }
+        // #B885 / #B913 / #B914 / #B915 — the validator case-rules spec builds its pages itself
+        // (/x76-page); this is its rules whisper. Its submits go to /ac-sink.
+        if (url === '/js/gina.onload.b885.js') {
+            return send(res, 200, 'application/javascript; charset=utf-8', renderOnload(B885_FORMS_JSON));
+        }
+        // #B916 — the optional-boolean-checkbox spec builds its pages itself (/x76-page); this is
+        // its rules whisper. Its submits go to /ac-sink.
+        if (url === '/js/gina.onload.b916.js') {
+            return send(res, 200, 'application/javascript; charset=utf-8', renderOnload(B916_FORMS_JSON));
+        }
+        if (url === '/js/gina.onload.b920.js') {
+            return send(res, 200, 'application/javascript; charset=utf-8', renderOnload(B920_FORMS_JSON));
+        }
+        if (url === '/js/gina.onload.b918.js') {
+            return send(res, 200, 'application/javascript; charset=utf-8', renderOnload(B918_FORMS_JSON));
+        }
+        if (url === '/js/gina.onload.b919.js') {
+            return send(res, 200, 'application/javascript; charset=utf-8', renderOnload(B919_FORMS_JSON));
+        }
+        if (url === '/js/gina.onload.b922.js') {
+            return send(res, 200, 'application/javascript; charset=utf-8', renderOnload(B922_FORMS_JSON));
+        }
+        if (url === '/js/gina.onload.b926.js') {
+            return send(res, 200, 'application/javascript; charset=utf-8', renderOnload(B926_FORMS_JSON));
+        }
+        if (url === '/js/gina.onload.b931.js') {
+            return send(res, 200, 'application/javascript; charset=utf-8', renderOnload(B931_FORMS_JSON));
+        }
+        if (url === '/js/gina.onload.b921.js') {
+            return send(res, 200, 'application/javascript; charset=utf-8', renderOnload(B921_FORMS_JSON));
+        }
+        if (url === '/js/gina.onload.b596.js') {
+            return send(res, 200, 'application/javascript; charset=utf-8', renderOnload(B596_FORMS_JSON));
         }
         // #B459 — the staged-upload preview-fields fixture and its three endpoints.
         if (url === '/js/gina.onload.b459.js') {

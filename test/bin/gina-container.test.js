@@ -30,6 +30,42 @@ function resolveAppPath(projectRoot, bundleName, scope, env, isDev, manifest) {
 }
 
 /**
+ * Removes line and block comments from JavaScript source and keeps string
+ * literals intact, so a source pin reads code only. Meant for plain code
+ * slices: a regex literal holding a quote or two slashes would confuse it.
+ *
+ * @inner
+ * @param {string} src - JavaScript source
+ * @returns {string} The source without its comments
+ */
+function stripComments(src) {
+    var res = '', i = 0, n = src.length, quote = null;
+    while (i < n) {
+        var c = src[i], d = src[i + 1];
+        if (quote) {
+            res += c;
+            if (c === '\\' && i + 1 < n) { res += d; i += 2; continue; }
+            if (c === quote) { quote = null; }
+            i++;
+            continue;
+        }
+        if (c === '/' && d === '/') {
+            while (i < n && src[i] !== '\n') { i++; }
+            continue;
+        }
+        if (c === '/' && d === '*') {
+            var e = src.indexOf('*/', i + 2);
+            i = (e < 0) ? n : e + 2;
+            continue;
+        }
+        if (c === '\'' || c === '"' || c === '`') { quote = c; }
+        res += c;
+        i++;
+    }
+    return res;
+}
+
+/**
  * Replica of the context JSON build in gina-container (step 7).
  */
 function buildCtxJSON(ginaPath, frameworkPath, envVars, launcherPid) {
@@ -194,12 +230,19 @@ describe('02 - gina-container: source structure', function() {
         );
     });
 
-    it('fallback appPath uses bundles/<bundle>/index.js', function() {
-        var src = fs.readFileSync(CONTAINER_SOURCE, 'utf8');
-        assert.ok(
-            /bundles.*index\.js/.test(src),
-            'expected fallback to bundles/<bundle>/index.js'
-        );
+    it('a manifest.json error exits 1 and names the file; no bundles/ entry point is assigned (#K8s7)', function() {
+        var src   = fs.readFileSync(CONTAINER_SOURCE, 'utf8');
+        var start = src.indexOf('// ── 6.');
+        var end   = src.indexOf('// ── 7.', start);
+        assert.ok(start > -1 && end > start, 'expected the step 6 and step 7 banners');
+        var step6 = stripComments(src.slice(start, end));
+        var at    = step6.indexOf('catch (err)');
+        var stop  = step6.indexOf('if (!fs.existsSync(appPath))', at);
+        assert.ok(at > -1 && stop > at, 'expected the catch of step 6, then the entry-point check');
+        var body  = step6.slice(at, stop);
+        assert.match(body, /process\.exit\(1\)/, 'expected the catch to exit 1');
+        assert.match(body, /manifest\.json/, 'expected the catch to name manifest.json');
+        assert.doesNotMatch(step6, /appPath\s*=[^;]*bundles\//, 'expected no bundles/ entry point to be assigned');
     });
 
 });
@@ -332,11 +375,11 @@ describe('05 - gina-container: def_framework sync block (§3b)', function() {
         );
     });
 
-    it('writes the updated main.json via fs.writeFileSync', function() {
+    it('writes the updated main.json through a temp file renamed into place (#B687)', function() {
         var src = fs.readFileSync(CONTAINER_SOURCE, 'utf8');
         assert.ok(
-            /fs\.writeFileSync\(_mainJsonPath/.test(src),
-            'expected fs.writeFileSync(_mainJsonPath...) in gina-container §3b'
+            /fs\.renameSync\(_mainTmp,\s*_mainJsonPath\)/.test(src),
+            'expected fs.renameSync(_mainTmp, _mainJsonPath) in gina-container §3b'
         );
     });
 
