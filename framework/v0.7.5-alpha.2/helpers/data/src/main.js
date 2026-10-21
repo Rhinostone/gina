@@ -100,7 +100,8 @@ function DataHelper(){
     };
 
     /**
-     * Parses a request payload into a plain object. Three input shapes:
+     * Parses a request payload into a plain object (an array for a `[`-leading
+     * document). Three input shapes:
      *
      * - a urlencoded string (`key=value&…`): split on `&`, then at the FIRST `=`,
      *   each key and value percent-decoded exactly ONCE after the split, bracket
@@ -111,7 +112,11 @@ function DataHelper(){
      *   a repeated key keeps the last value;
      * - a `{`/`[`-leading JSON document: parsed VERBATIM — never percent-decoded
      *   (#B589) — after the quoted-token casting on the document text
-     *   (`"true"`/`"false"`/`"on"` → boolean, `"null"` in any case → null);
+     *   (`"true"`/`"false"`/`"on"` → boolean, `"null"` in any case → null); a
+     *   `[`-leading one gives an array whose object elements are parsed like a
+     *   document of their own (bracket keys nested, the three prototype names
+     *   dropped), each into its own object, and whose other elements are kept as
+     *   they are (#B936, #B594);
      * - an object: stringified first, so it takes the document contract (the
      *   browser validator and DTO routes hand their fields over this way).
      *
@@ -121,11 +126,13 @@ function DataHelper(){
      *
      * @global
      * @param {string|object} bodyStr - urlencoded string, JSON document, or object
-     * @returns {object|undefined} the parsed object, or `undefined` for an invalid document
+     * @returns {object|Array|undefined} the parsed object (an array for a `[`-leading
+     *   document), or `undefined` for an invalid document
      * @example
      *   formatDataFromString('user[name]=Ada&tag=a%26b');   // { user: { name: 'Ada' }, tag: 'a&b' }
      *   formatDataFromString('{"active":"true","n":"2"}'); // { active: true, n: '2' }
      *   formatDataFromString({ q: 'a%20b' });               // { q: 'a%20b' }  (never decoded)
+     *   formatDataFromString('[{"a[b]":"1"},2,null]');      // [ { a: { b: '1' } }, 2, null ]
      */
     formatDataFromString = function(bodyStr){
 
@@ -159,10 +166,34 @@ function DataHelper(){
         return parseBody(bodyStr);
     }
 
+    /**
+     * Writes the elements of a parsed `[`-leading document into `obj` (#B936,
+     * #B594). An element that is an object (not `null`, not an array) is parsed
+     * like a document of its own, into its OWN object: bracket keys nest, and a
+     * top-level `__proto__`, `constructor` or `prototype` key is dropped. Any
+     * other element (a number, a string, a boolean, `null`, a nested array) is
+     * kept as it is, as a value inside an object document is.
+     *
+     * @inner
+     * @private
+     * @param {Array} collection - the array `JSON.parse` returned
+     * @param {Array} obj - the array the elements are written into
+     * @returns {Array} `obj`
+     * @example
+     *   parseCollection([{ 'a[b]': '1' }, 2, null], []); // [ { a: { b: '1' } }, 2, null ]
+     */
     var parseCollection = function (collection, obj) {
 
         for(var i = 0, len = collection.length; i<len; ++i) {
-            obj[i] = parseObject(collection[i], obj);
+            // #B936 / #B594 — was:
+            //     obj[i] = parseObject(collection[i], obj);
+            // parseObject wrote each element's pairs onto the root array and returned
+            // it, so every slot held the array itself: a circular value that
+            // JSON.stringify cannot serialize (a 500 on any route that renders it), and
+            // an element that was not an object lost its value.
+            obj[i] = ( collection[i] !== null && typeof(collection[i]) == 'object' && !Array.isArray(collection[i]) )
+                ? parseObject(collection[i], {})
+                : collection[i];
         }
 
         return obj
