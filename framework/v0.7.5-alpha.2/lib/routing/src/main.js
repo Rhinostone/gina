@@ -1174,9 +1174,7 @@ function Routing() {
             , urls          = null
             , i             = null
             , len           = null
-            , rawRouteUrl   = route.url
             , p             = null
-            , pLen          = null
         ;
 
         for (p in route.param) {
@@ -1244,38 +1242,96 @@ function Routing() {
             }
         }
 
-        // Selecting url in case of multiple urls & optional requirmements
-        if ( urls ) {
-            i = 0; len = urls.length;
-            var rawUrlVars = null
-                , rawUrlScore = null
-                , rawUrls = rawRouteUrl.split(/\,/g)
-                , pKey = null
-                , lastScore = 0
-            ;
-            route.urlIndex = 0; // by default
-            for (; i < len; ++i) {
-                rawUrlScore = 0;
-                rawUrlVars = rawUrls[0].match(/\:[-_a-z0-9]+/ig);
-                if ( !rawUrlVars ) continue;
-                p = 0;
-                pLen = rawUrlVars.length;
-                for (; p < pLen; p++) {
-                    pKey = rawUrlVars[p].substring(1);
-                    if ( typeof(params[ pKey ]) != 'undefined' && params[ pKey ] ) {
-                        rawUrlScore++;
-                    }
-                }
-                // We just rely in params count for now
-                if (rawUrlScore > lastScore) {
-                    lastScore = rawUrlScore;
-                    route.urlIndex = i;
-                }
-            }
-        }
+        // #B374 — which url of a multi-url rule getRoute() composes is chosen there, on the rule's
+        // own url (selectUrlIndex). The loop that chose it here read the FIRST url on every pass
+        // (`rawUrls[0]`), so it always chose 0, and getRoute() let that 0 override the caller's
+        // own urlIndex whenever a placeholder had been filled.
+        // was: // Selecting url in case of multiple urls & optional requirmements
+        // was: if ( urls ) {
+        // was:     i = 0; len = urls.length;
+        // was:     var rawUrlVars = null
+        // was:         , rawUrlScore = null
+        // was:         , rawUrls = rawRouteUrl.split(/\,/g)
+        // was:         , pKey = null
+        // was:         , lastScore = 0
+        // was:     ;
+        // was:     route.urlIndex = 0; // by default
+        // was:     for (; i < len; ++i) {
+        // was:         rawUrlScore = 0;
+        // was:         rawUrlVars = rawUrls[0].match(/\:[-_a-z0-9]+/ig);
+        // was:         if ( !rawUrlVars ) continue;
+        // was:         p = 0;
+        // was:         pLen = rawUrlVars.length;
+        // was:         for (; p < pLen; p++) {
+        // was:             pKey = rawUrlVars[p].substring(1);
+        // was:             if ( typeof(params[ pKey ]) != 'undefined' && params[ pKey ] ) {
+        // was:                 rawUrlScore++;
+        // was:             }
+        // was:         }
+        // was:         // We just rely in params count for now
+        // was:         if (rawUrlScore > lastScore) {
+        // was:             lastScore = rawUrlScore;
+        // was:             route.urlIndex = i;
+        // was:         }
+        // was:     }
+        // was: }
 
         return route;
     }
+
+    /**
+     * selectUrlIndex
+     *
+     * #B374 — the url of a multi-url rule that getRoute() composes when the caller names none:
+     * the first url whose placeholders all receive a value, preferring among those the url that
+     * uses the most values; when no url is complete, the url that receives the most values. Ties
+     * go to the first url, so a rule whose urls carry the same placeholders (one url per
+     * language, for instance) keeps composing its first url. A placeholder receives a value
+     * when its value is not `undefined`, the test the fill itself applies (checkRouteParams
+     * writes `''` and `null` too).
+     *
+     * @inner
+     * @param {string} rawUrl - the rule's own url, its urls separated by commas, before any value
+     *   is filled in
+     * @param {object} [params] - the values getRoute() fills in, keyed by placeholder name
+     * @returns {number} index of the url to compose; `0` for a rule with a single url
+     *
+     * @example
+     * selectUrlIndex('/logout/:timestamp,/logout', {});               // 1
+     * selectUrlIndex('/logout/:timestamp,/logout', { timestamp: 9 });  // 0
+     * selectUrlIndex('/s,/s/:ts', { ts: '12' });                        // 1
+     * selectUrlIndex('/help,/aide', {});                                // 0
+     */
+    var selectUrlIndex = function(rawUrl, params) {
+        var urls        = rawUrl.split(/\,/g)
+            , best      = 0
+            , bestDone  = -1
+            , bestFill  = -1
+            , names     = null
+            , fill      = 0
+            , done      = 0
+            , value     = null
+            , u         = 0
+            , n         = 0
+        ;
+        for (; u < urls.length; ++u) {
+            names   = urls[u].match(/\:[-_a-z0-9]+/ig) || [];
+            fill    = 0;
+            for (n = 0; n < names.length; ++n) {
+                value = ( params ) ? params[ names[n].substring(1) ] : undefined;
+                if ( typeof(value) != 'undefined' ) {
+                    ++fill;
+                }
+            }
+            done = ( fill === names.length ) ? 1 : 0;
+            if ( done > bestDone || ( done === bestDone && fill > bestFill ) ) {
+                best        = u;
+                bestDone    = done;
+                bestFill    = fill;
+            }
+        }
+        return best;
+    };
 
     /**
      * #B168 — once-per-process latch for the proxied-context degrade warning in
@@ -1287,7 +1343,20 @@ function Routing() {
     var _proxyHostDegradeWarned = false;
 
     /**
-     * @function getRoute
+     * Composes the url of a routing rule and returns the route object (`url`, `toUrl()`,
+     * `request()`). The values in `params` fill the rule's `:placeholders`; on a GET rule, the
+     * other values become query parameters.
+     *
+     * A rule with several urls (`"url": "/a/:id, /b/:id"`) composes one of them (#B374): the
+     * one `urlIndex` names or, without `urlIndex`, the first url whose placeholders all receive
+     * a value, preferring among those the url that uses the most values; when no url is
+     * complete, the url that receives the most values. Ties go to the first url. A placeholder
+     * receives a value when its value is not `undefined`.
+     *
+     * Query parameters, on a GET rule: a value declared in `param` whose placeholder is not in
+     * the url composed (#B220), then every other value that is neither reserved, nor declared in
+     * the rule's `requirements`, nor already written into the path (#B943). No value is
+     * appended twice (#B944).
      *
      * On the server, the proxied classification and proxy hostname come from the
      * REQUEST first (#B502): core/router.js fills `proxy` on the process.gina._reqALS
@@ -1301,11 +1370,25 @@ function Routing() {
      * hostname (route.isProxyHost is flipped false) instead of failing, and a
      * once-per-process warning is emitted.
      *
+     * @function getRoute
+     *
      * @param {string} rule e.g.: [ <scheme>:// ]<name>[ @<bundle> ][ /<environment> ]
-     * @param {object} params - substituted into the route's `:placeholders`; on a GET route, leftover keys that are neither reserved nor declared in the rule's `requirements` are appended to `route.url` as query parameters (a rule with no `requirements` block is safe — the block is optional)
-     * @param {number} [urlIndex] in case you have more than one url registered for the current route, you can select the one you want to use. Default is 0.
+     * @param {object} [params] - values for the rule's `:placeholders`; on a GET rule, the values left over are appended to `route.url` as query parameters, as described above (a rule with no `requirements` block is safe — the block is optional)
+     * @param {number|string} [urlIndex] - for a rule with several urls, the 0-based index of the url to compose; a numeric string such as `"1"` is accepted. Ignored for a rule with a single url.
      *
      * @returns {object} route
+     *
+     * @throws {Error} when the rule is not found, or when `urlIndex` names no url of a rule with several urls
+     *
+     * @example
+     * // "logout": { "url": "/logout/:timestamp, /logout", "param": { "control": "logout", "timestamp": ":timestamp" } }
+     * routing.getRoute('logout@auth').url;                          // '/logout'
+     * routing.getRoute('logout@auth', { timestamp: '9' }).url;       // '/logout/9'
+     * routing.getRoute('logout@auth', { timestamp: '9' }, 1).url;    // '/logout?timestamp=9'
+     *
+     * @example
+     * // "invoice": { "url": "/invoice/:id", "param": { "control": "get", "id": ":id" } }
+     * routing.getRoute('invoice@frontend', { id: 'abc-123', tab: '2' }).url; // '/invoice/abc-123?tab=2'
      * */
     self.getRoute = function(rule, params, urlIndex) {
 
@@ -1448,12 +1531,41 @@ function Routing() {
         }
 
         if ( /\,/.test(route.url) ) {
-            if ( typeof(route.urlIndex) != 'undefined' ) {
-                urlIndex = route.urlIndex; // set by checkRouteParams(route, params)
-                delete route.urlIndex;
+            // #B374, #B946 — the url to compose is chosen on the rule's own url, before any value
+            // is filled in: a filled url can carry a comma inside a value, which the split used to
+            // read as a url boundary (`{ x: 'a,b' }` on `/o/:x` composed `/o/a`). The caller's
+            // urlIndex wins; it used to be overridden by the 0 the fill always chose. An index that
+            // names no url throws instead of composing `undefined`. Without one, selectUrlIndex()
+            // chooses. Only the url chosen is filled, by the same checkRouteParams().
+            // was: if ( typeof(route.urlIndex) != 'undefined' ) {
+            // was:     urlIndex = route.urlIndex; // set by checkRouteParams(route, params)
+            // was:     delete route.urlIndex;
+            // was: }
+            // was: urlIndex = ( typeof(urlIndex) != 'undefined' ) ? urlIndex : 0;
+            // was: route.url = route.url.split(/,/g)[urlIndex];
+            var _ruleUrls = routing[rule].url.split(/\,/g);
+            if ( _ruleUrls.length > 1 ) {
+                if ( typeof(urlIndex) != 'undefined' && urlIndex !== null ) {
+                    var _index = ( typeof(urlIndex) == 'string' && /^\d+$/.test(urlIndex) ) ? parseInt(urlIndex, 10) : urlIndex;
+                    if ( typeof(_index) != 'number' || _index % 1 !== 0 || _index < 0 || _index >= _ruleUrls.length ) {
+                        throw new Error('[ RoutingHelper::getRoute(rule, params, urlIndex) ] : urlIndex `'+ urlIndex +'` names no url of rule `'+ rule +'`, which has '+ _ruleUrls.length +' urls');
+                    }
+                    urlIndex = _index;
+                } else {
+                    urlIndex = selectUrlIndex(routing[rule].url, params);
+                }
+                // the placeholder bindings only (`"id": ":id"`): `path`, `title`, `namespace` and
+                // `file` were filled by the first checkRouteParams() call above
+                var _bindings = {};
+                for (var _key in route.param) {
+                    if ( typeof(route.param[_key]) == 'string' && /^:/.test(route.param[_key]) ) {
+                        _bindings[_key] = route.param[_key];
+                    }
+                }
+                route.url = checkRouteParams({ url: _ruleUrls[urlIndex], param: _bindings }, params).url;
+                // read by the query append below, which needs the url actually composed; removed there
+                route.urlIndex = urlIndex;
             }
-            urlIndex = ( typeof(urlIndex) != 'undefined' ) ? urlIndex : 0;
-            route.url = route.url.split(/,/g)[urlIndex];
         }
         // fix url in case of empty param value allowed by the routing rule
         // to prevent having a folder.
@@ -1464,17 +1576,33 @@ function Routing() {
         // Completeting url with extra params e.g.: ?param1=val1&param2=val2
         if ( /GET/i.test(route.method) && typeof(params) != 'undefined' ) {
             var queryParams = '?'
-                , maskedUrl = routing[rule].url
+                // #B220 — the url actually composed (the one chosen above), not every url of the
+                // rule joined: a value whose placeholder sits only in another url of the rule was
+                // skipped here and, when declared in `requirements`, dropped by the loop below.
+                // was: , maskedUrl = routing[rule].url
+                , maskedUrl = routing[rule].url.split(/\,/g)[ route.urlIndex || 0 ] || routing[rule].url
             ;
 
             // in route.rule params
             var extracted = [], i = 0;
             for (let r in route.param) {
-                if ( self.reservedParams.indexOf(r) > -1 || new RegExp(route.param[r]).test(maskedUrl) )
+                // #B220 — a placeholder is in the url only where the fill writes it: `:name` followed
+                // by `/` or the end (checkRouteParams), so `:key` no longer matches inside `:keyXyz`.
+                // was: if ( self.reservedParams.indexOf(r) > -1 || new RegExp(route.param[r]).test(maskedUrl) )
+                if (
+                    self.reservedParams.indexOf(r) > -1
+                    || (
+                        ( /^:/.test(route.param[r]) )
+                            ? new RegExp('('+ route.param[r] +'/|'+ route.param[r] +'$)').test(maskedUrl)
+                            : new RegExp(route.param[r]).test(maskedUrl)
+                    )
+                )
                     continue;
                 if (typeof(params[r]) != 'undefined' ) {
                     queryParams += r +'='+ encodeRFC5987ValueChars(params[r])+ '&';
-                    extracted[i] = params[r];
+                    // #B944 — the loop below tests KEYS: record the key, not its value
+                    // was: extracted[i] = params[r];
+                    extracted[i] = r;
                     ++i;
                 }
             }
@@ -1488,6 +1616,14 @@ function Routing() {
                     // on such a GET route appends the query params instead of throwing
                     || ( route.requirements && typeof(route.requirements[p]) != 'undefined' )
                     || extracted.indexOf(p) > -1
+                    // #B943 — a key bound to a placeholder of the url composed (`"id": ":id"`) is in
+                    // the path already; an unbound one keeps travelling as a query parameter
+                    || (
+                        route.param
+                        && typeof(route.param[p]) == 'string'
+                        && /^:/.test(route.param[p])
+                        && new RegExp('('+ route.param[p] +'/|'+ route.param[p] +'$)').test(maskedUrl)
+                    )
                 ) {
                     continue;
                 }
@@ -1508,6 +1644,8 @@ function Routing() {
             }
             queryParams = null;
         }
+        // #B374 — the index handed over by the url choice above is not part of the route returned
+        delete route.urlIndex;
 
         // recommanded for x-bundle coms
         // leave `ignoreWebRoot` empty or set it to false for x-bundle coms

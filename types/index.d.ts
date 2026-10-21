@@ -1069,7 +1069,7 @@ declare namespace gina {
         /** Stale built-release watch primitives — source-tree fingerprints, change classification, busy probes and the in-flight request gauge (#RWATCH). */
         releaseWatch: any;
         routing: {
-            getRoute(name: string): RouteEntry | undefined;
+            getRoute(name: string, params?: Record<string, any>, urlIndex?: number | string): RouteEntry | undefined;
             getRouteByUrl(url: string): RouteEntry | undefined;
             [key: string]: any;
         };
