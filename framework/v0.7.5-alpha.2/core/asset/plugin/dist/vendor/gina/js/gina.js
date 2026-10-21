@@ -7761,10 +7761,11 @@ function Routing() {
      * complete, the url that receives the most values. Ties go to the first url. A placeholder
      * receives a value when its value is not `undefined`.
      *
-     * Query parameters, on a GET rule: a value declared in `param` whose placeholder is not in
-     * the url composed (#B220), then every other value that is neither reserved, nor declared in
-     * the rule's `requirements`, nor already written into the path (#B943). No value is
-     * appended twice (#B944).
+     * Query parameters, on a GET rule: a value whose key `param` declares, when the url composed
+     * does not carry it (#B220): its placeholder, or a fixed value as written, is not in that url;
+     * `requirements` does not keep such a value out. Then every other value that is neither
+     * reserved, nor declared in the rule's `requirements`, nor already written into the path
+     * (#B943). No value is appended twice (#B944).
      *
      * On the server, the proxied classification and proxy hostname come from the
      * REQUEST first (#B502): core/router.js fills `proxy` on the process.gina._reqALS
@@ -7962,12 +7963,21 @@ function Routing() {
                 } else {
                     urlIndex = selectUrlIndex(routing[rule].url, params);
                 }
-                // the placeholder bindings only (`"id": ":id"`): `path`, `title`, `namespace` and
-                // `file` were filled by the first checkRouteParams() call above
-                var _bindings = {};
-                for (var _key in route.param) {
-                    if ( typeof(route.param[_key]) == 'string' && /^:/.test(route.param[_key]) ) {
-                        _bindings[_key] = route.param[_key];
+                // #B947 — the placeholder bindings only (`"id": ":id"`), read on the rule's own param:
+                // the first checkRouteParams() call above wrote the values into `path`, `title`,
+                // `namespace` and `file`, so a placeholder bound under one of those keys
+                // (`"file": ":file"`) no longer read as a binding on the route and stayed in the url.
+                // Only `.url` is kept from this second fill.
+                // was: var _bindings = {};
+                // was: for (var _key in route.param) {
+                // was:     if ( typeof(route.param[_key]) == 'string' && /^:/.test(route.param[_key]) ) {
+                // was:         _bindings[_key] = route.param[_key];
+                // was:     }
+                // was: }
+                var _bindings = {}, _ruleParam = routing[rule].param || {};
+                for (var _key in _ruleParam) {
+                    if ( typeof(_ruleParam[_key]) == 'string' && /^:/.test(_ruleParam[_key]) ) {
+                        _bindings[_key] = _ruleParam[_key];
                     }
                 }
                 route.url = checkRouteParams({ url: _ruleUrls[urlIndex], param: _bindings }, params).url;
