@@ -401,6 +401,11 @@ function Routing() {
     /**
      * Parse routing for mathcing url
      *
+     * A DELETE rule whose `requirements` cover its URL placeholders is matched here, by the
+     * DELETE branch, rather than by `fitsWithRequirements`: each placeholder's regex is tested
+     * against its URL segment, and a matched value is written to `request[method]` and, for a
+     * placeholder the rule binds in `param`, to `request.params` (#B955).
+     *
      * @param {object} params - `params` is the same `request.routing` that can be retried in controller with: req.routing
      * @param {string} url
      * @param {object} request
@@ -409,6 +414,9 @@ function Routing() {
      *
      * @returns {object} foundRoute
      *
+     * @example
+     * // rule: { url: '/items/:id', method: 'DELETE', requirements: { id: '/^[0-9]+$/' }, param: { id: ':id' } }
+     * // DELETE /items/42  =>  request.delete.id === '42' and request.params.id === '42'
      * */
     var parseRouting = async function(params, url, request, response, next) {
 
@@ -502,6 +510,14 @@ function Routing() {
                     ) {
                         ++score;
                         request[method][uRo[p].substring(1)] = uRe[p];
+                        // #B955 — the matched URL value reaches `request.params` too, as the GET
+                        // path's `fitsWithRequirements` writes it, for a placeholder the rule binds
+                        // in `param` (the same gate as there). This branch wrote `request[method]`
+                        // alone, so `req.params.<key>` stayed unset on a DELETE route whose regex
+                        // requirements cover its placeholders.
+                        if ( hasOwn(params.param, _key) && typeof(request.params) != 'undefined' ) {
+                            request.params[_key] = uRe[p];
+                        }
                     }
                 }
                 hasAlreadyBeenScored = true;
