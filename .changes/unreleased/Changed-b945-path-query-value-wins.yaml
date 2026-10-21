@@ -1,0 +1,3 @@
+kind: Changed
+body: 'When a key is both in the query string of the path given to self.query() and in its data, the value in the path travels and the data''s copy is not sent. For a forward route, a static param that the target url does not carry now reaches the target as written: an incoming ?k=other replaced the route''s k: ''v'' on a gina receiver, and a standard parser read k as ''v?k=other''. To let the caller choose that value, leave the key out of the forward route''s param: the incoming query string is forwarded as it is. (#B945)'
+time: 2026-10-21T16:34:06+01:00

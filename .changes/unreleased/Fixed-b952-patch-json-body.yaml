@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'self.query() sends the data of a PATCH as a JSON body, as it does for a PUT or a POST. A PATCH with data used to put the data in the query string and send the string ?key=value as its body under the application/json label, so a gina receiver answered 500 (« Could not parse application/json PATCH body ») before the action ran: a forward route with param.method PATCH, and a validator query rule with method PATCH, failed every time. (#B952)'
+time: 2026-10-21T16:34:06+01:00

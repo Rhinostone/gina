@@ -5484,10 +5484,25 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
      *   relabel are both skipped. `data` must then be empty (`BODY_AND_DATA`); any
      *   other body type is refused (`BODY_TYPE`). Both refusals are synchronous and
      *   the upstream is never contacted.
-     * @param {object}   [data]           - Request body / query params
+     * @param {object}   [data]           - The values to send. A PUT, POST or PATCH sends
+     *   them as a JSON body (#B952: PATCH included). Any other method (GET, HEAD, DELETE, …)
+     *   sends them in the query string only, with no body (#B945): each key once, an object
+     *   value as its JSON text; joined with `&` when `options.path` already holds a query
+     *   string, and a key that query string already holds is not appended again — the
+     *   path's value travels. A PUT, POST or PATCH whose `headers['content-type']` is not
+     *   JSON, text or form-encoded keeps the older shape: the values in the query string and
+     *   as the body.
      * @param {function} [callback]       - `callback(err, result)` — omit (or pass `null`) to get the onComplete handle
      * @fires SuperController#query.complete only from the one-tick fallback, when nothing consumed the outcome (no callback, no `onComplete`) — the two transport handlers never emit
      * @returns {void|object} `undefined` in callback form; the `{onComplete}` handle otherwise — on every path, including the synchronous failures (#B475) and the nested-render refusal (#B479)
+     * @example
+     * // GET: the values travel in the query string, once; the path's own `page` wins
+     * self.query({ hostname: 'api-internal', path: '/items?page=2', method: 'GET' },
+     *     { page: 5, tag: 'new' }, function(err, result) { ... });   // GET /items?page=2&tag=new
+     *
+     * // PATCH: the values travel as a JSON body
+     * self.query({ hostname: 'api-internal', path: '/items/42', method: 'PATCH' },
+     *     { title: 'Renamed' }, function(err, result) { ... });      // body {"title":"Renamed"}
      */
     // replaced: arguments object — use named params (#P23)
     this.query = function(options, data, callback) {
@@ -5731,7 +5746,12 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
 
             queryData = '?';
             // TODO - if 'application/json' && method == (put|post)
-            if ( ['put', 'post'].indexOf(options.method.toLowerCase()) >-1 && /(text\/plain|application\/json|application\/x\-www\-form)/i.test(options.headers['content-type']) ) {
+            // #B952 — a PATCH carries a body as PUT and POST do. It took the query-string branch
+            // below, which put its data in the path AND sent the `?k=v` string as the body under
+            // the json label set further down, so a gina receiver answered 500 (« Could not parse
+            // application/json PATCH body ») and the request never reached its action.
+            // was: if ( ['put', 'post'].indexOf(options.method.toLowerCase()) >-1 && /(text\/plain|application\/json|application\/x\-www\-form)/i.test(options.headers['content-type']) ) {
+            if ( ( ['put', 'post'].indexOf(options.method.toLowerCase()) >-1 || /^patch$/i.test(options.method) ) && /(text\/plain|application\/json|application\/x\-www\-form)/i.test(options.headers['content-type']) ) {
                 // Send the body as raw JSON. The wire content-type is forced to
                 // application/json below, and the receiving parser (server.js
                 // processRequestData) reads application/json verbatim — so the body must
@@ -5746,8 +5766,35 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                 // replaced: for...in — use Object.keys() (#P22)
                 var tmpData = JSON.clone(data);
                 var dataKeys = Object.keys(tmpData);
+                // #B945 — the path can already hold a query string: a getRoute() url carries
+                // the values its own url does not (a forward's static param, a validator rule's
+                // data), and a caller may write one. The keys it holds are read here so the
+                // data below joins that query string instead of opening a second `?` — which a
+                // standard parser reads as part of the previous value (`?k=v?x=1` gives
+                // `k = 'v?x=1'`) — and so a key the path already holds is not appended again:
+                // the path's value travels, and a forward route's static param stays static.
+                var _pathQueryAt = ( typeof(options.path) == 'string' ) ? options.path.indexOf('?') : -1;
+                var _pathKeys = Object.create(null);
+                if ( _pathQueryAt > -1 ) {
+                    var _pathPairs = options.path.substring(_pathQueryAt + 1).split('&');
+                    for (var pi = 0; pi < _pathPairs.length; ++pi) {
+                        var _pathKey = _pathPairs[pi].split('=')[0];
+                        if ( !_pathKey ) {
+                            continue;
+                        }
+                        try {
+                            _pathKey = decodeURIComponent(_pathKey);
+                        } catch (_keyDecodeErr) {
+                            // a malformed escape: the key is compared as written
+                        }
+                        _pathKeys[_pathKey] = true;
+                    }
+                }
                 for (var di = 0; di < dataKeys.length; ++di) {
                     var d = dataKeys[di];
+                    if ( _pathKeys[d] === true ) {
+                        continue;
+                    }
                     if ( typeof(tmpData[d]) == 'object') {
                         tmpData[d] = JSON.stringify(tmpData[d]);
                     }
@@ -5757,7 +5804,22 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                 queryData = queryData.substring(0, queryData.length-1);
                 queryData = queryData.replace(/\s/g, '%20');
 
-                options.path += queryData;
+                // was: options.path += queryData;
+                if ( queryData.length > 1 ) {
+                    if ( _pathQueryAt > -1 ) {
+                        options.path += ( /[?&]$/.test(options.path) ? '' : '&' ) + queryData.substring(1);
+                    } else {
+                        options.path += queryData;
+                    }
+                }
+                // #B945 — a GET, HEAD or DELETE keeps its data in the query string only. The
+                // same `?k=v` string also went out as its body, under the json label set further
+                // down, and a receiver reads it nowhere: gina fills `req.get` and `req.delete`
+                // from the query string. A PUT, POST or PATCH sent under another content type
+                // keeps the body it had.
+                if ( !/^(put|post|patch)$/i.test(options.method) ) {
+                    queryData = '';
+                }
             }
 
         } else {
