@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'A field carrying `data-gina-form-element-group` now follows only the masters whose ids its group lists. Each id was looked for anywhere in the list, so an id found inside a longer one matched too: with masters `opt` and `opt-2`, the radio `opt` drove the fields of `opt-2`, a checkbox `item-1` those of `item-10`, and a master checked in the HTML could find its fields disabled at page load. Each id is now matched as a whole entry of the space-separated list, so a group must list each master''s id itself: an entry that only contains it, such as `opt-2` written to follow `opt`, or ids joined by a comma, no longer follows that master. Browser-bundled: restart the bundle and re-bake your bundles (#B923).'
-time: 2026-10-20T04:11:26+01:00

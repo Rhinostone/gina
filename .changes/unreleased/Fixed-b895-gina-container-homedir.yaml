@@ -1,3 +1,0 @@
-kind: Fixed
-body: '`gina-container` reads `GINA_HOMEDIR`. `gina-init` writes the `~/.gina/` state there when the variable is set, but the launcher ignored it and read `HOME/.gina`, so a container that set it stopped at start with `…/.gina/projects.json not found`. The launcher now takes its home from `GINA_HOMEDIR` when it is set, and the bundle it starts gets the same value: `${GINA_HOMEDIR}` in its settings names that directory, the default certificate paths included, so an https bundle reads its certificates from `$GINA_HOMEDIR/certificates/scopes/<scope>/<host>/`. A container that does not set it is not affected. (#B895)'
-time: 2026-10-16T15:14:45+01:00

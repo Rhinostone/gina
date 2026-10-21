@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'A Couchbase entry whose key differs from its bucket (`"couchbase": { "database": "demo", … }`) no longer stops the boot on a project without a `models/<bucket>/entities` directory. The model layer created `models/<entry key>/entities` while the Couchbase connector reads `models/<database>/entities`, and the connector read it without checking that it exists, so the bundle aborted with `ENOENT: no such file or directory, scandir …/models/<bucket>/entities` and restarted in a loop. The connector now creates that directory first, as the MongoDB, MySQL, PostgreSQL, SQLite, ScyllaDB and DuckDB connectors already did. Restart the bundle. (#B894)'
-time: 2026-10-16T14:16:51+01:00

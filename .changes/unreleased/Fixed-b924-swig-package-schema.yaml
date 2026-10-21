@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'The `swig.package` setting in the settings.json schema now lists `@rhinostone/swig-jinja2` and `@rhinostone/swig-django` beside `@rhinostone/swig` and `@rhinostone/swig-twig`, so editors no longer mark the Jinja2 and Django frontends as invalid. The schema also says that a value other than the default needs `swig.useProject: true` and a 2.x version of that package installed in the project, because only `@rhinostone/swig` has a framework copy to fall back to (#B924).'
-time: 2026-10-20T02:27:23+01:00

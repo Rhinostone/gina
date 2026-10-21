@@ -1,3 +1,0 @@
-kind: Fixed
-body: '`gina.validator.$forms[id].reBind(formId, rules)` binds the form with the `rules` you pass every time. It used them only after a validation on the page had found an error, because it read a global `rule` variable instead of its own argument; the validator leaked that global from an error loop that assigned an undeclared `rule`, so the first validation that found an error also overwrote any page variable named `rule`. The loop variable is declared, `reBind()` checks its own argument, and `window.rule` is no longer written. Browser-bundled: restart the bundle and rebuild your bundles (`gina bundle:build`) to pick it up. (#B880, #B802)'
-time: 2026-10-15T16:16:14+01:00

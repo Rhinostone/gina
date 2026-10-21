@@ -1,3 +1,0 @@
-kind: Fixed
-body: '`gina-init` no longer dials the MQ port at container start. Unlike `gina-container`, it did not apply the container logging preset, so every start printed `[MQSpeaker] Error: connect ECONNREFUSED 127.0.0.1:8125`, and in a Kubernetes pod, whose containers share `localhost`, a sidecar listening on that port would have received its log frames. It now sets `GINA_LOG_STDOUT=true` for its own process when the variable is unset, as the launcher does; its own `[gina-init]` lines do not change, and `GINA_LOG_STDOUT=false` keeps the dial. (#B892)'
-time: 2026-10-16T15:14:44+01:00

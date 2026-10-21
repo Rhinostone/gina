@@ -1,3 +1,0 @@
-kind: Security
-body: 'A `:placeholder` in a route''s `param.file` that is also a URL segment now takes the URL value. A query or body value of the same name replaced the segment after it had passed the route''s `requirements`, so a request could render another template under the bundle template root: the residual stated in GHSA-3vmh-634f-vwm3, now closed. A placeholder the URL does not carry is still filled from the query or body, as before, and a query key folded in by its own requirement still selects its template. Restart your bundles (#B877).'
-time: 2026-10-15T11:51:26+01:00

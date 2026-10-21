@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'lib.routing.getRoute() keeps a value that contains a comma whole. The url was split on its commas after the values were filled in, so such a value, an array for instance, truncated the url at its first comma, on any rule: getRoute(''one'', { x: ''a,b'' }) on "/o/:x" composed /o/a and now composes /o/a,b. (#B946)'
-time: 2026-10-21T13:48:58+01:00

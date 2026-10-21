@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'After a change on a `<select>`, the validator re-checks the whole form with the form''s own rules. It used the rule registry, keyed by rule-set name, where no field has a rule, so a radio group whose rule says `isRequired: true` and that nobody had picked was not seen: the submit control lost its gated mark, although a click on it still sent nothing. Browser-bundled: restart the bundle and rebuild your bundles (`gina bundle:build`) to pick it up. (#B915)'
-time: 2026-10-18T21:06:20+01:00

@@ -1,3 +1,0 @@
-kind: Fixed
-body: '`setSearchOption()` on a `Collection` now refuses `skipEval` given to a field, in both forms (`setSearchOption(''name'', ''skipEval'', true)` and `setSearchOption({ name: { skipEval: true } })`), with an error naming the constructor option. It was accepted, and the field then matched no row, with no error. `skipEval` is a constructor option: `new Collection(rows, { searchOptionRules: { skipEval: true } })`. A top-level `skipEval` in the object form is still accepted and has no effect. Browser-bundled: restart the bundle and rebuild your bundles (`gina bundle:build`) to pick it up. (#B824)'
-time: 2026-10-15T16:10:03+01:00

@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'The commented `onInitialize` sample in the `index.js` that `gina bundle:add` writes now takes `self`, the gina instance, before the callback. In a bundle named `event`, `app` or `express`, the callback parameter of that name replaced the instance, so uncommenting the sample aborted the boot with « TypeError: self.getConfig is not a function ». A bundle created before keeps its `index.js`: if it is named `event`, `app` or `express` and runs that sample, move `var self = <bundle>;` above `<bundle>.onInitialize(`. (#B902)'
-time: 2026-10-16T16:35:41+01:00

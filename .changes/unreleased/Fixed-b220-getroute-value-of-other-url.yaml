@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'lib.routing.getRoute() no longer drops a value whose placeholder sits only in another url of a rule with several urls: when the url composed does not carry the placeholder, the value is appended as a query parameter, where it was skipped, and lost entirely when the rule''s requirements declared the key. Whether a placeholder is in the url is now decided by the fill''s own rule (:name followed by / or the end of the url), so :key no longer matches inside :keyXyz. (#B220)'
-time: 2026-10-21T13:48:58+01:00

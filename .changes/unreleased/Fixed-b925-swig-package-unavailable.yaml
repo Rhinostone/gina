@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'When `swig.package` names a package other than `@rhinostone/swig` and the project has no usable copy of it (`swig.useProject` is not `true`, the package is not installed, or the project''s copy fails the version or manifest checks), the swig resolver now throws an error that names the package, the reason and the `npm install` line, with `code: ''SWIG_PACKAGE_UNAVAILABLE''`, as the Nunjucks resolver does with `NUNJUCKS_NOT_INSTALLED`. Before, it threw a bare `Cannot find module` from inside the framework, which ships only `@rhinostone/swig` (#B925).'
-time: 2026-10-20T17:24:12+01:00

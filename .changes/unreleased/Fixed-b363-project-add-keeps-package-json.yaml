@@ -1,3 +1,0 @@
-kind: Fixed
-body: '`gina project:add` now leaves an existing `package.json` exactly as it is, as it already did for `.gitignore`. It used to rewrite it: the project name, a template description and the Node version of the machine that ran the command replaced your `name`, `description` and `engines.node`, the keys were reordered, the indent became 4 spaces, the final newline was dropped and the file was made executable. `project:restore`, which registers through `project:add`, now keeps the archived `package.json` too. A new `package.json` carries Gina''s own Node floor in `engines.node` (`>=22`) instead of the running Node''s version, ends with a newline, and is written at mode 0644. Nothing to restart. (#B363)'
-time: 2026-10-15T21:28:30+01:00

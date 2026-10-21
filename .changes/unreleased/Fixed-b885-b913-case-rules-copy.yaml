@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'On a rule set with no `$` reference, each validation check works on its own copy of the rules. It wrote what it decided into the form''s stored rules, and nothing put them back: once a `_case_` condition had applied, its rules stayed applied after the driving field changed back, so a valid form kept its submit control gated and refused the click, and forms bound to the same rule set could gate each other; and a checkbox whose rule says `isRequired: false` and that was unticked when a check ran stayed out of the posted data after the user ticked it. A rule set with a `$` reference already worked on a copy. Browser-bundled: restart the bundle and rebuild your bundles (`gina bundle:build`) to pick it up. (#B885, #B913)'
-time: 2026-10-18T20:43:36+01:00

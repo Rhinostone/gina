@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'A radio or checkbox master whose id holds a regular-expression character (`+`, `*`, `?`, `$`, `^`, `(`, `)`, `{`, `}`, `|` or `\`) now drives the fields whose `data-gina-form-element-group` names it. The id was escaped for `- _ @ # . [ ]` only and read as a pattern otherwise, so `plan+1` found `plan1`, `opt*2` found `op2` and `opt2`, `a$b` found nothing, and an id holding `(` stopped the form from binding. Every regular-expression character of the id is now escaped at the five places a group is matched, and the second expression `updateReletadItems` built from a checkbox''s own group as written, whose result never mattered, is gone. Browser-bundled: restart the bundle and re-bake your bundles (#B929).'
-time: 2026-10-20T10:12:33+01:00

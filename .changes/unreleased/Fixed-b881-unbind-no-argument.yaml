@@ -1,3 +1,0 @@
-kind: Fixed
-body: '`gina.validator.$forms[id].unbind()` with no argument unbinds the handle''s form. It threw "could not unbind form `undefined`" and left the form bound, because, unlike `.bind()` and `.reBind()`, it did not fall back to the handle''s own form. Browser-bundled: restart the bundle and rebuild your bundles (`gina bundle:build`) to pick it up. (#B881)'
-time: 2026-10-15T16:16:14+01:00

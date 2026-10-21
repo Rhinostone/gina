@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'A validator query rule aimed at a route of its own bundle works in a bundle started by gina-container without a proxy entry for that bundle in app.json. The rule''s bundle was told apart from the running one by the Config instance''s bundle name, which gina-container leaves undefined, so the rule looked for a proxy entry and answered 500 (« Could not retrieve `proxy` configuration for bundle `<bundle>` »); the bundle in context now counts too, and a proxy entry for the bundle itself is no longer read for such a rule: the rule calls the bundle on its own host and port. A bundle serving HTTP/1.1 now reaches itself that way: the call looked `http://localhost` up as a host name (« getaddrinfo ENOTFOUND »). (#B950)'
-time: 2026-10-21T16:52:47+01:00
