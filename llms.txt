@@ -50,7 +50,7 @@ Strict-superset fork of the dormant `busboy@1.6.0` multipart parser. Published t
 
 ### Swig — `@rhinostone/swig` (npm dependency)
 
-Maintained fork of the abandoned swig 1.4.2 template engine. Published to npm as `@rhinostone/swig` (npm org: `rhinostone`, maintainer: `beemaster`). Repo: `https://github.com/gina-io/swig`. Declared (pinned `^2.7.2`) in BOTH the root `package.json` and `framework/v*/package.json` — installed via `npm install` inside the framework directory. Requires `npm install` after clone, merge, or worktree switch (the framework `node_modules/` is gitignored).
+Maintained fork of the abandoned swig 1.4.2 template engine. Published to npm as `@rhinostone/swig` (npm org: `rhinostone`, maintainer: `beemaster`). Repo: `https://github.com/gina-io/swig`. Declared (pinned `^2.8.2`) in BOTH the root `package.json` and `framework/v*/package.json` — installed via `npm install` inside the framework directory. Requires `npm install` after clone, merge, or worktree switch (the framework `node_modules/` is gitignored).
 
 Previously vendored at `core/deps/swig-1.4.2/` — removed in the migration to the npm dep. The fork's parse-time blocklist (`__proto__`/`constructor`/`prototype`, in `parser.js` and `tags/set.js`) is prototype-chain hardening. CVE-2023-25345 itself (directory traversal through `include`/`extends`) is fixed in the fork's filesystem loader since 2.7.1 (paths are confined to the loader root) and by the path traversal boundary check in `controller.render-swig.js`, which is Gina's own code and is unaffected by this migration.
 
