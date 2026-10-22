@@ -8566,6 +8566,12 @@ function Server(options) {
         // loop entry.
         var _preCacheParams     = Object.assign({}, req.params);
         var _preCacheReqMethod  = (typeof(req[_reqMethodKey]) != "undefined") ? Object.assign({}, req[_reqMethodKey]) : undefined;
+        // #B957 — whether `req.body` names the method's bag (processRequestData makes them one
+        // object on a non-empty POST, PUT or PATCH body). Read before the warm lookup and the loop,
+        // which can replace the bag with a copy; the #B954 block after the loop restores the alias.
+        // A top-level JSON array body is left out: the loop's copy re-keys it by index (#B953),
+        // and `req.body` keeps the array (#B594).
+        var _bodyIsReqMethod    = ( typeof(req.body) == 'object' && req.body !== null && !Array.isArray(req.body) && req.body === req[_reqMethodKey] );
         var hasCachedRoute      = null;
         var _cachedRouteThrew   = false;
         try {
@@ -8884,6 +8890,41 @@ function Server(options) {
                 if (typeof(req[_reqMethodKey][_bodyKeys[_bk]]) == "undefined") {
                     req[_reqMethodKey][_bodyKeys[_bk]] = _origReqMethod[_bodyKeys[_bk]];
                 }
+            }
+        }
+
+        // #B954 / #B957 — once a rule has matched, a URL placeholder's value wins over a query or
+        // body key of the same name, on the first request to a METHOD:PATH and on every later one.
+        // The loop above copies `req.params` over the bag only on a cold match (on GET and DELETE
+        // only when the query is empty), lib/routing fills the bag only where the client sent no
+        // key of that name, and the warm route-cache path breaks out of the loop before either copy.
+        // So a client value reached the action under a URL placeholder's name from the second
+        // request on (#B957), and on a POST, or on a DELETE whose placeholder had no regex
+        // requirement, from the first (#B954). Every own key of `req.params` but the engine's `0`
+        // (the request path) is now copied over the bag the action reads, `req[req.method]`:
+        // `req.delete` after the GET→DELETE override, `req.head` on a HEAD (the #B675 alias below
+        // then exposes it as `req.get`). The loop's coercion of 'false', 'true' and 'on' applies.
+        // The client's value stays in `req.query` on a DELETE, in `req.rawBody` on a POST, PUT or
+        // PATCH, and in `req.originalUrl` on a GET. `req.body` names the bag again when it did
+        // before routing: the cold loop matched on a copy, so on the first request it named the
+        // client's object while every later request gave the bag. Otherwise (an empty body, a
+        // top-level JSON array body, GET, DELETE, HEAD) it is left alone.
+        if ( matched && typeof(req.params) == 'object' && req.params !== null ) {
+            var _paramsBag = req[req.method.toLowerCase()];
+            if ( typeof(_paramsBag) == 'object' && _paramsBag !== null && !Array.isArray(_paramsBag) ) {
+                for (let _pk in req.params) {
+                    if ( _pk === '0' || !Object.prototype.hasOwnProperty.call(req.params, _pk) ) {
+                        continue;
+                    }
+                    // false & true case
+                    if ( /^(false|true|on)$/.test( req.params[_pk] ) && typeof(req.params[_pk]) == 'string' )
+                        req.params[_pk] = ( /^(true|on)$/.test( req.params[_pk] ) ) ? true : false;
+
+                    _paramsBag[_pk] = req.params[_pk];
+                }
+            }
+            if ( _bodyIsReqMethod && req.body !== req[_reqMethodKey] ) {
+                req.body = req[_reqMethodKey];
             }
         }
 
