@@ -1107,6 +1107,12 @@ function Router(env, scope) {
                             // was: Setup.apply(Setup, arguments);
                             //      return Setup;
                             // #B807 — on this run's own receiver (above), no longer on the export.
+                            // #TPL3 — record this run on the engine the action's render will use, so that
+                            // render does not run setup.js again (controller.js runBundleSetupForRender
+                            // runs it for a render whose engine has not run this module yet)
+                            if ( controller.engine && typeof(controller.engine) == 'object' ) {
+                                controller.engine._ginaSetupFn = Setup;
+                            }
                             return Setup.apply(setupContext, arguments);
                         }(request, response, next)
                     }

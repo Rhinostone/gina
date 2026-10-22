@@ -2385,6 +2385,104 @@ function SuperController(options) {
         return refToObj( local.userData )
     }
 
+    /**
+     * #TPL3 — runs the bundle's `controllers/setup.js` on the swig engine a render is about to use,
+     * when that engine has not yet run this `setup.js` module.
+     *
+     * The router runs `setup.js` only for a request that reaches a controller action: the route
+     * middlewares run first and the reserved hooks run in their `done` callback, and an XHR request
+     * past the first one skips it (`isSetupRequired`). A route middleware that answers with
+     * `self.render()` never calls `done`, so its template saw no bundle filter, tag or extension until
+     * an earlier request had run `setup.js` on the same engine: a 500 `Invalid filter` from boot until
+     * a controller request, and on every request for a route set whose middleware renders them all.
+     * The engine is per template root and outlives the request (`getDefaultSwigEngine`), so one run
+     * per engine is enough for its registrations. The key is the module itself, so a dev re-require
+     * (the router evicts `setup.js` when a controller changed) runs the new code once, as the router
+     * does; outside dev a recorded run, or a recorded absence of the file, ends the check without a
+     * probe (#P39 (G)). The router records its own runs on the same engine, so an action request does
+     * not run `setup.js` twice. The receiver is the router's (router.js, #B807): a fresh object
+     * inheriting from the export, with the same 15 members. Mirrors the nunjucks delegate's
+     * `registerUserFilters`, which runs `setup.js` at render time once per Environment.
+     *
+     * Not awaited, as on the router path: a `setup.js` that registers after an `await` is not waited
+     * for. A throw, or a rejection, is logged and the render goes on (the nunjucks precedent): a
+     * template that needs nothing from `setup.js` still renders.
+     *
+     * Called before the delegate re-registers gina's own filters, so a bundle filter named like one of
+     * gina's still loses, as it does on the action path.
+     *
+     * @inner
+     * @private
+     * @param {object} engine - The swig engine the render uses (`local._swigEngine`)
+     * @param {object} req - The request being answered
+     * @param {object} res - Its response
+     * @param {function} [next] - Its `next`
+     * @returns {void}
+     *
+     * @example
+     * runBundleSetupForRender(local._swigEngine, local.req, local.res, local.next);
+     */
+    var runBundleSetupForRender = function(engine, req, res, next) {
+        if ( !engine || typeof(engine) != 'object' || typeof(engine.setFilter) != 'function' ) {
+            return;
+        }
+        var cacheless = self.isCacheless();
+        if ( !cacheless && ( engine._ginaSetupFn || engine._ginaSetupAbsent ) ) {
+            return;
+        }
+        var opts = local.options;
+        if ( !opts || !opts.conf || !opts.conf.bundlesPath || !opts.bundle ) {
+            return;
+        }
+        var setupFile = _(opts.conf.bundlesPath +'/'+ opts.bundle +'/controllers/setup.js', true);
+        if ( !fs.existsSync(setupFile) ) {
+            if ( !cacheless ) {
+                engine._ginaSetupAbsent = true;
+            }
+            return;
+        }
+        var Setup = null;
+        try {
+            Setup = require(setupFile);
+        } catch (loadErr) {
+            console.warn('[ BUNDLE ][ '+ opts.bundle +' ][ Controller ] controllers/setup.js could not be loaded for a render: '+ (loadErr.message || loadErr));
+            return;
+        }
+        if ( typeof(Setup) != 'function' || engine._ginaSetupFn === Setup ) {
+            return;
+        }
+        // recorded before the call, so a render setup.js itself starts does not run it again
+        engine._ginaSetupFn = Setup;
+
+        var setupContext = Object.create(Setup);
+        setupContext.engine              = engine;
+        setupContext.getConfig           = self.getConfig;
+        setupContext.checkBundleStatus   = self.checkBundleStatus;
+        setupContext.getLocales          = self.getLocales;
+        setupContext.getFormsRules       = self.getFormsRules;
+        setupContext.throwError          = ( self.serverInstance && self.serverInstance.throwError ) ? self.serverInstance.throwError : self.throwError;
+        setupContext.redirect            = self.redirect;
+        setupContext.render              = self.render;
+        setupContext.renderJSON          = self.renderJSON;
+        setupContext.renderWithoutLayout = self.renderWithoutLayout;
+        setupContext.isXMLRequest        = self.isXMLRequest;
+        setupContext.isWithCredentials   = self.isWithCredentials;
+        setupContext.isPopinContext      = self.isPopinContext;
+        setupContext.isCacheless         = self.isCacheless;
+        setupContext.requireController   = self.requireController;
+
+        try {
+            var _setupResult = Setup.apply(setupContext, [req, res, next]);
+            if ( _setupResult && typeof(_setupResult.then) == 'function' ) {
+                _setupResult.then(null, function onSetupRejected(setupErr) {
+                    console.warn('[ BUNDLE ][ '+ opts.bundle +' ][ Controller ] controllers/setup.js rejected during a render: '+ ( (setupErr && setupErr.message) || setupErr ));
+                });
+            }
+        } catch (setupErr) {
+            console.warn('[ BUNDLE ][ '+ opts.bundle +' ][ Controller ] controllers/setup.js threw during a render: '+ ( (setupErr && setupErr.message) || setupErr ));
+        }
+    }
+
 
 
     /**
@@ -2639,6 +2737,12 @@ function SuperController(options) {
         // Guarded on the per-call flag: only the call that populated may restore.
         if ( _ehPopulated ) {
             local.options.template.h2Links = '';
+        }
+
+        // #TPL3 — a swig render runs the bundle's setup.js on its engine when that engine has not yet
+        // run it: a route middleware's render, or an XHR one, gets the bundle's filters as an action's does
+        if ( _engine !== 'nunjucks' ) {
+            runBundleSetupForRender(local._swigEngine, local.req, local.res, local.next);
         }
 
         // #B932 — hand the delegate the swig module the resolver holds now (see setOptions).
