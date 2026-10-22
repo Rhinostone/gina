@@ -2420,10 +2420,16 @@ function Server(options) {
             // armed the timer, honour that same policy across process
             // lifetimes: sweep the configured staging dirs at boot for staged
             // parts old enough that a surviving timer would already have taken
-            // them. The threshold is floored at 1h: an in-flight upload from a
-            // sibling live process on a SHARED staging dir keeps a fresh mtime
-            // while its chunks land, and the floor keeps even a stalled one
-            // safe. A disabled timer (the shipped default) arms NO sweep — the
+            // them. The threshold is the timeout plus one hour (#B472): an
+            // in-flight upload from a sibling live process on a SHARED staging
+            // dir keeps a fresh mtime while its chunks land, the hour keeps even
+            // a stalled one safe, and the sweep acts an hour after the owner's
+            // own timer would, so a sweeping node whose clock runs ahead of the
+            // file's (or an attribute cache serving an older mtime) by less than
+            // an hour cannot take a part its owner still holds. (It was
+            // max(timeout, 1h), which for a timeout of an hour or more acted at
+            // the owner's own moment, by the sweeping node's clock.) A disabled
+            // timer (the shipped default) arms NO sweep — the
             // docs say tmp cleanup is then the operator's own job, and this
             // keeps that contract intact. Runs in every scope (production is
             // where restarts strand parts); duplicate sweeps of a dir shared
@@ -2451,7 +2457,8 @@ function Server(options) {
                     }
                     var _sweepAppName = self.appName;
                     setImmediate(function() {
-                        sweepStagedUploadOrphans(_sweepDirs, Math.max(_sweepTimeoutMs, 3600000), function(report) {
+                        // was: sweepStagedUploadOrphans(_sweepDirs, Math.max(_sweepTimeoutMs, 3600000), function(report) {
+                        sweepStagedUploadOrphans(_sweepDirs, _sweepTimeoutMs + 3600000, function(report) {
                             if (report.removed || report.errors) {
                                 console.info('[ BUNDLE ][ '+ _sweepAppName +' ][ server ][ init ] upload orphan sweep: removed '+ report.removed +' staged part(s)'+ ( report.errors ? ' ('+ report.errors +' error(s))' : '' ) +' across '+ _sweepDirs.length +' staging dir(s)');
                             } else {
