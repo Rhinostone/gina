@@ -6896,10 +6896,11 @@ function Routing() {
     /**
      * Parse routing for mathcing url
      *
-     * A DELETE rule whose `requirements` cover its URL placeholders is matched here, by the
-     * DELETE branch, rather than by `fitsWithRequirements`: each placeholder's regex is tested
-     * against its URL segment, and a matched value is written to `request[method]` and, for a
-     * placeholder the rule binds in `param`, to `request.params` (#B955).
+     * A DELETE rule that declares `requirements` is matched here, by the DELETE branch, rather
+     * than by `fitsWithRequirements`: each placeholder's regex is tested against its URL segment
+     * — a placeholder without a requirement accepts any non-empty segment (#B956) — and a matched
+     * value is written to `request[method]` and, for a placeholder the rule binds in `param`, to
+     * `request.params` (#B955).
      *
      * @param {object} params - `params` is the same `request.routing` that can be retried in controller with: req.routing
      * @param {string} url
@@ -6976,6 +6977,19 @@ function Routing() {
                     // #B650 — a requirement counts only when the rule declares it itself.
                     // was: if ( typeof(params.requirements[_key]) == 'undefined' ) {
                     if ( !hasOwn(params.requirements, _key) || typeof(params.requirements[_key]) == 'undefined' ) {
+                        // #B956 — a placeholder the rule declares no requirement for accepts any
+                        // non-empty segment and scores, as fitsWithRequirements does on the GET
+                        // path. It was skipped unscored, so a DELETE rule whose requirements cover
+                        // only some of its placeholders never reached maxLen: it answered 404 on
+                        // every request. A static segment that differs from the URL's is still
+                        // skipped unscored (the `/^:/` test), so such a rule still does not match.
+                        if ( /^:/.test(uRo[p]) && uRe[p] ) {
+                            ++score;
+                            request[method][_key] = uRe[p];
+                            if ( hasOwn(params.param, _key) && typeof(request.params) != 'undefined' ) {
+                                request.params[_key] = uRe[p];
+                            }
+                        }
                         continue;
                     }
                     let condition = params.requirements[_key];
