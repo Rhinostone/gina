@@ -27,9 +27,16 @@
  *   O1C CONTROL the same page, no new file: the link deletes the stored file
  *   O4 OBSERVE an empty selection (the picker cancelled) after a stored file, then its link
  *
- * RED-FIRST: B150_PREFIX_BUNDLE=<path to the pre-fix gina.min.js> serves the old bytes to every
- * arm (page.route, nothing written to disk; `routeHits` proves they ran): the F arms fail on their
- * own assertion, every other arm passes.
+ * FIXED (#B959): a change that carries no file (an emptied selection) emptied the input's entries
+ * before the listener's early return, so the links of the files already shown removed nothing and
+ * logged the warning. Since the fix the return comes first.
+ *   F4 [fix, #B959] an empty selection after a stored file: the entry stays, its link deletes it
+ *   F5 [fix, #B959] an empty selection after a staged file: the entry stays, its link resets it
+ *
+ * RED-FIRST: B150_PREFIX_BUNDLE=<path to a pre-fix gina.min.js> serves the old bytes to every
+ * arm (page.route, nothing written to disk; `routeHits` proves they ran). A bundle without either
+ * fix fails F1-F5, one with #B150 only fails F4 and F5, each on its own assertion; every other arm
+ * passes.
  *
  * Run (local, cached headless shell):
  *   GINA_E2E_PORT=3191 PW_CHROME=<chrome-headless-shell> npx playwright test \
@@ -326,6 +333,46 @@ test.describe('#B150 reproduction attempt — a reset or a delete that removes n
         expect(s.deleteLinks, 'the replaced file\'s link is gone after the successful staging').toEqual([]);
         expect(s.customFiles).toEqual([{ name: 'second.png', deleteLinkId: null }]);
         expect(log.remove).toEqual([]);
+        expect(log.b150).toEqual([]);
+        expect(log.errors).toEqual([]);
+    });
+
+    test('F4 [fix, #B959] an empty selection after a stored file leaves its entry: the delete link still deletes it', async ({ page: pw }) => {
+        const log = await open(pw, page(EDIT_ONE), 'image');
+        await ready(pw);
+        await pw.setInputFiles('#docA', []);
+        await pw.waitForTimeout(400);
+        const afterEmpty = await state(pw);
+        expect(afterEmpty.deleteLinks, 'the stored file\'s link stays').toEqual(['docA-0-delete-trigger']);
+        expect(afterEmpty.customFiles, 'the stored entry stays on the input').toEqual([{ name: 'old.png', deleteLinkId: 'docA-0-delete-trigger' }]);
+        await pw.click('#docA-0-delete-trigger');
+        await settle(pw, log);
+        const after = await state(pw);
+        record('F4', log, { afterEmpty: afterEmpty, after: after });
+        expect(log.remove, 'the delete request went out').toEqual(['DELETE ']);
+        expect(after.deleteLinks, 'the link went with the file').toEqual([]);
+        expect(log.stage, 'the empty selection staged nothing').toEqual([]);
+        expect(log.b150).toEqual([]);
+        expect(log.errors).toEqual([]);
+    });
+
+    test('F5 [fix, #B959] an empty selection after a staged file leaves its entry: the reset link still resets it', async ({ page: pw }) => {
+        const log = await open(pw, page('<input id="docA" type="file" name="doc" ' + ACTIONS + '>'
+            + '<div id="docA-preview"></div><p id="docA-error" hidden></p>'), 'image');
+        await ready(pw);
+        expect(await select(pw, log, ['me.png'])).toBe(true);
+        await pw.setInputFiles('#docA', []);
+        await pw.waitForTimeout(400);
+        const afterEmpty = await state(pw);
+        expect(afterEmpty.resetLinkPresent, 'the staged file\'s reset link stays').toBe(true);
+        expect(afterEmpty.customFiles, 'the staged entry stays on the input').toEqual([{ name: 'me.png', deleteLinkId: null }]);
+        await pw.click('#docA-0-reset-trigger');
+        await settle(pw, log);
+        const after = await state(pw);
+        record('F5', log, { afterEmpty: afterEmpty, after: after });
+        expect(log.remove, 'the reset request went out').toEqual(['POST {"files":["me.png"]}']);
+        expect(after.resetLinkPresent, 'the link went with the file').toBe(false);
+        expect(log.stage.length, 'the empty selection staged nothing').toBe(1);
         expect(log.b150).toEqual([]);
         expect(log.errors).toEqual([]);
     });

@@ -23049,18 +23049,26 @@ function ValidatorPlugin(rules, data, formId, culture) {
                     // [0] is for a single file, when multiple == false
                     //var files = Array.from($el.files);
                     var files = $el.files;
+                    // #B959 — a change that carries no file (an emptied selection) leaves the input's
+                    // records as they were: the entries its reset and delete links act on, and the
+                    // #B150 record below. Both used to be written first, so the entries were emptied
+                    // and every reset or delete link of the input was left bound to nothing: a click
+                    // sent no request, removed nothing and logged the zero-match warning, while the
+                    // files' previews and hidden fields stayed in the form.
+                    // was: the return stood after the two assignments below
+                    if (!files.length ) return false;
                     // #B150 — the stored entries this selection replaces (the ones the bind-time scan
                     // recorded, each with its delete link id) are kept on the input until a staging
                     // success removes their delete links (see onUpload): a link placed outside the
                     // preview container is not taken by the container reset there, and it outlived
                     // the entry it belonged to, still bound — a click then sent nothing, removed
-                    // nothing, and logged the zero-match warning. Carried over a failed staging and
-                    // an empty selection, so the next success still removes them.
+                    // nothing, and logged the zero-match warning. Carried over a failed staging, so
+                    // the next success still removes them.
                     var _replacedStoredFiles = ($el.customFiles || []).filter(function (entry) { return entry && entry.deleteLinkId; });
                     $el._replacedStoredFiles = ( $el._replacedStoredFiles || [] ).concat(_replacedStoredFiles);
-                    // used for validation & onUploadResetOrDelete
+                    // read by onUploadResetOrDelete; no validation rule reads it (the field
+                    // collection leaves a staged file input out of the fields, #B725)
                     $el.customFiles = Array.from(files);
-                    if (!files.length ) return false;
 
 
 
