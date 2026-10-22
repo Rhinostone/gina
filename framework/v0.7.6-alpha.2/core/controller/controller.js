@@ -719,6 +719,48 @@ var _isProdScope    = process.env.NODE_SCOPE_IS_PRODUCTION && process.env.NODE_S
 var _heapLimitLabel = null;
 
 /**
+ * #TPL3 — the `version` in each project's own `package.json`, keyed by project path, read on the
+ * first render that needs it and kept for the life of the process (a dev re-require of this
+ * module reads it again). `''` records a project whose file or field is missing, so the file is
+ * read once either way. Exposed as `page.environment.packageVersion`: the config token
+ * `${projectVersion}` is the version in the gina manifest, a different value.
+ *
+ * @private
+ * @type {Object.<string, string>}
+ */
+var _packageVersionByProject = {};
+
+/**
+ * Reads the `version` field of `<projectPath>/package.json`, once per project path.
+ *
+ * @inner
+ * @private
+ * @param {string} projectPath - The project root (`conf.projectPath`)
+ * @returns {string} The version, or `''` when the path, the file or a string `version` is missing
+ *
+ * @example
+ * var v = readPackageVersion('/srv/myproject'); // '3.0.43', or '' without a package.json
+ */
+var readPackageVersion = function(projectPath) {
+    if ( !projectPath || typeof(projectPath) != 'string' ) {
+        return '';
+    }
+    if ( typeof(_packageVersionByProject[projectPath]) == 'undefined' ) {
+        var _version = '';
+        try {
+            var _pkg = JSON.parse( fs.readFileSync(projectPath.replace(/\/+$/, '') +'/package.json', 'utf8') );
+            if ( _pkg && typeof(_pkg.version) == 'string' ) {
+                _version = _pkg.version;
+            }
+        } catch (pkgErr) {
+            // no package.json, or not JSON: the field stays unset
+        }
+        _packageVersionByProject[projectPath] = _version;
+    }
+    return _packageVersionByProject[projectPath];
+};
+
+/**
  * The encoded `page.environment.forms` whisper, memoized per forms catalog object (phase-2
  * per-request trims, slice B). The export is a function of the catalog alone, and the
  * catalog is built once per bundle load; the framework never writes it afterwards — the
@@ -1501,6 +1543,11 @@ function SuperController(options) {
 
             set('page.environment.bundle', options.conf.bundle);
             set('page.environment.project', options.conf.projectName);
+            // #TPL3 — the version in the project's own package.json; not set when it has none
+            var _packageVersion = readPackageVersion(options.conf.projectPath);
+            if (_packageVersion) {
+                set('page.environment.packageVersion', _packageVersion);
+            }
             set('page.environment.protocol', options.conf.server.protocol);
             set('page.environment.scheme', options.conf.server.scheme);
             set('page.environment.port', options.conf.server.port);

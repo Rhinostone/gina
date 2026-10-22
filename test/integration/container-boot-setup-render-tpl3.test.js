@@ -23,6 +23,7 @@
  *   02  controls that hold on both sides of the fix
  *   03  the same scene booted from a prod build (`bundle:build --env=prod`, then NODE_ENV=prod):
  *       the first middleware render, an action's single run, and no second run for the engine
+ *   04  `page.environment.packageVersion`: the version in the project's own package.json, dev and prod
  *
  * Every request carries a client timeout, so a pre-fix run FAILS instead of hanging the suite.
  *
@@ -87,14 +88,18 @@ var ARMS = [
     ['mw.cold',  'tpl3-mw?n=1'],
     ['mw.plain', 'tpl3-mw-plain?n=2'],
     ['ctrl',     'tpl3-ctrl?n=3'],
-    ['mw.warm',  'tpl3-mw?n=4']
+    ['mw.warm',  'tpl3-mw?n=4'],
+    ['ver',      'tpl3-ver?n=5']
 ];
 // then to a prod boot of the same scene (an offline `bundle:build --env=prod`, then NODE_ENV=prod)
 var PROD_ARMS = [
     ['prod.mw.cold', 'tpl3-mw?n=11'],
     ['prod.ctrl',    'tpl3-ctrl?n=12'],
-    ['prod.mw.warm', 'tpl3-mw?n=13']
+    ['prod.mw.warm', 'tpl3-mw?n=13'],
+    ['prod.ver',     'tpl3-ver?n=14']
 ];
+// the version written into the scaffold's package.json, read back as page.environment.packageVersion
+var PACKAGE_VERSION = '9.8.7-tpl3';
 
 
 // ---------------------------------------------------------------------------
@@ -160,7 +165,14 @@ function installScene() {
     r.tpl3_mw       = { namespace: 'content', url: '/tpl3-mw',       method: 'GET', param: { control: 'tpl3page' },  middleware: ['middlewares.tpl3.paint'] };
     r.tpl3_mw_plain = { namespace: 'content', url: '/tpl3-mw-plain', method: 'GET', param: { control: 'tpl3plain' }, middleware: ['middlewares.tpl3.paint'] };
     r.tpl3_ctrl     = { namespace: 'content', url: '/tpl3-ctrl',     method: 'GET', param: { control: 'tpl3page' } };
+    r.tpl3_ver      = { namespace: 'content', url: '/tpl3-ver',      method: 'GET', param: { control: 'tpl3ver' } };
     fs.writeFileSync(rf, JSON.stringify(r, null, 2));
+
+    // the project's own package.json carries a known version
+    var pf = path.join(PROJ_DIR, 'package.json');
+    var pkg = fs.existsSync(pf) ? JSON.parse(fs.readFileSync(pf, 'utf8')) : { name: PROJ };
+    pkg.version = PACKAGE_VERSION;
+    fs.writeFileSync(pf, JSON.stringify(pkg, null, 2) + '\n');
 
     var cf = path.join(src, 'controllers', 'controller.content.js');
     var s = fs.readFileSync(cf, 'utf8');
@@ -169,6 +181,7 @@ function installScene() {
     fs.writeFileSync(cf, s.replace(anchor, [
         "    this.tpl3page = function(req, res) { self.render({ who: 'ctrl' }); };",
         "    this.tpl3plain = function(req, res) { self.render({ who: 'ctrl-plain' }); };",
+        "    this.tpl3ver = function(req, res) { self.render({ who: 'ver' }); };",
         ''
     ].join('\n') + anchor));
 
@@ -207,6 +220,7 @@ function installScene() {
     fs.writeFileSync(path.join(td, 'tpl3_mw.html'), withFilters);
     fs.writeFileSync(path.join(td, 'tpl3_ctrl.html'), withFilters);
     fs.writeFileSync(path.join(td, 'tpl3_mw_plain.html'), '<div id="tpl3plain">{{ who }}</div>\n');
+    fs.writeFileSync(path.join(td, 'tpl3_ver.html'), '<div id="tpl3ver">[{{ page.environment.packageVersion }}]</div>\n');
 }
 
 /**
@@ -415,5 +429,19 @@ describe('container-boot-setup-render — a route middleware render sees the set
         if (!ready(t)) return;
         assert.ok(bodyOf('prod.mw.warm').indexOf('mw|STAMP&lt;x&gt;|x</div>') > -1);
         assert.deepEqual(runsDuring['prod.mw.warm'], [], 'the engine already ran this setup.js module');
+    });
+
+    // ── 04 page.environment.packageVersion ──────────────────────────────────
+
+    it('04.1  [fix] dev — page.environment.packageVersion is the version in the project\'s package.json', async function (t) {
+        if (!ready(t)) return;
+        var body = bodyOf('ver');
+        assert.ok(body.indexOf('<div id="tpl3ver">[' + PACKAGE_VERSION + ']</div>') > -1, 'got ' + body.slice(0, 200));
+    });
+
+    it('04.2  [fix] prod — page.environment.packageVersion is the version in the project\'s package.json', async function (t) {
+        if (!ready(t)) return;
+        var body = bodyOf('prod.ver');
+        assert.ok(body.indexOf('<div id="tpl3ver">[' + PACKAGE_VERSION + ']</div>') > -1, 'got ' + body.slice(0, 200));
     });
 });
