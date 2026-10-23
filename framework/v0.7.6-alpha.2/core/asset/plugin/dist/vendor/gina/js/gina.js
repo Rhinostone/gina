@@ -18745,6 +18745,31 @@ function ValidatorPlugin(rules, data, formId, culture) {
         wait.replay();
     };
 
+    /**
+     * onUpload — settles a staged upload: the virtual upload form's request answered (`status`
+     * 'success') or failed ('error', a transport failure included). It finalizes the progress
+     * indicator and the dropzone, and notes the settle for a submit that waits on it (#B726).
+     * On a success the selection takes the file input over (#B960): the preview container is
+     * emptied, the delete links of the stored entries the selection replaces go (#B150), its files
+     * become the entries the reset and delete links act on (`customFiles`, from `pendingFiles`),
+     * the hidden fields are built (see buildUploadHiddenFields) and filled, and the previews and
+     * reset links are rendered. On a failure the error is shown or announced, and only the pending
+     * selection is dropped: the previews, the controls, the entries and the hidden fields stay as
+     * they were.
+     *
+     * @inner
+     * @private
+     * @param {object} gina - the gina client instance
+     * @param {HTMLFormElement} $target - the virtual upload form, carrying `uploadProperties`
+     * @param {string} status - 'success', or 'error' for every failure path
+     * @param {string} id - the virtual upload form's id
+     * @param {object} data - the staging answer (`files`), or the failure (`message` / `error`)
+     * @returns {void}
+     * @throws {Error} when `$target` carries no `uploadProperties`
+     *
+     * @example
+     * onUpload(gina, $uploadForm, 'error', $uploadForm.id, { status: 500, error: 'staging refused' }); // the page stays as it was
+     */
     var onUpload = function(gina, $target, status, id, data) {
 
         var uploadProperties = $target.uploadProperties || null;
@@ -18783,11 +18808,11 @@ function ValidatorPlugin(rules, data, formId, culture) {
             , files                 = data.files || []
             , $error                = null
         ;
-        // reset previewContainer
+        // the preview container; a success empties it, a failure leaves it as it was (#B960)
         if ( uploadProperties.hasPreviewContainer ) {
             $previewContainer = document.getElementById(uploadProperties.previewContainer.id);
-            if ($previewContainer)
-                $previewContainer.innerHTML = '';
+            // was: if ($previewContainer)
+            // was:     $previewContainer.innerHTML = '';
         }
 
         if (uploadProperties.errorField) {
@@ -18798,6 +18823,12 @@ function ValidatorPlugin(rules, data, formId, culture) {
         //reset errors
         if ($error)
             $error.style.display = 'none';
+
+        // #B960 — a failed staging drops the selection it carried, and nothing else: the previews,
+        // the reset and delete links, the input's entries and the form's hidden fields stay as they were
+        if ( status != 'success' && $uploadTriger ) {
+            $uploadTriger.pendingFiles = null;
+        }
 
         if ($error && status != 'success') { // handle errors first
            // console.error('[ mainUploadError ] ', status, data)
@@ -18855,26 +18886,42 @@ function ValidatorPlugin(rules, data, formId, culture) {
                 , maxWidth = null
                 , ratio = null
             ;
+            // #B960 — the preview container is emptied by a success, and only by it: it was emptied
+            // before the error and success branches, so a failed staging took the previews of the
+            // files the input still held, and any link inside the container, off the page.
+            if ($previewContainer)
+                $previewContainer.innerHTML = '';
             // #B859 — the staging answer, by file index, on the file input: a reset names the files
             // it removes from these entries (`originalFilename`, and the preview's own when there is
             // one), so a file that got no preview <img> — not an image, no `preview` — is removed too.
             if ( $uploadTriger ) {
                 $uploadTriger.stagedFiles = files;
-                // #B150 — the delete links of the stored entries this selection replaced go with
-                // their entries (the change listener kept them on the input): the container reset
-                // above took a link placed inside the preview container, never one placed after it,
-                // which stayed on the page bound to an entry the input no longer held. Removed as a
-                // delete removes a link; its wrapper goes when it is an emptied <li> of the container.
-                if ( Array.isArray($uploadTriger._replacedStoredFiles) ) {
-                    for (var r = 0, rLen = $uploadTriger._replacedStoredFiles.length; r < rLen; ++r) {
-                        var $replacedLink = document.getElementById($uploadTriger._replacedStoredFiles[r].deleteLinkId);
-                        if ($replacedLink) {
-                            var $replacedItem = $replacedLink.parentNode;
-                            $replacedLink.remove();
-                            dropEmptyUploadPreviewItem($replacedItem, $previewContainer);
-                        }
+                // #B150 — the delete links of the stored entries this selection replaces go with their
+                // entries: the container reset above takes a link placed inside the preview container,
+                // never one placed after it, which stayed on the page bound to an entry the input no
+                // longer held. Removed as a delete removes a link; its wrapper goes when it is an
+                // emptied <li> of the container.
+                // #B960 — the selection takes the input over here, when its staging succeeds: the
+                // replaced entries are read from the input's entries, its files become the entries
+                // the reset and delete links act on, and the form's hidden fields are built for the
+                // files the answer names. The change listener used to write the entries, and keep the
+                // replaced ones in `_replacedStoredFiles`, and the fields were built at the selection.
+                // was: the replaced entries came from $uploadTriger._replacedStoredFiles, then emptied
+                var replacedStoredFiles = ( $uploadTriger.customFiles || [] ).filter(function (entry) { return entry && entry.deleteLinkId; });
+                for (var r = 0, rLen = replacedStoredFiles.length; r < rLen; ++r) {
+                    var $replacedLink = document.getElementById(replacedStoredFiles[r].deleteLinkId);
+                    if ($replacedLink) {
+                        var $replacedItem = $replacedLink.parentNode;
+                        $replacedLink.remove();
+                        dropEmptyUploadPreviewItem($replacedItem, $previewContainer);
                     }
-                    $uploadTriger._replacedStoredFiles = [];
+                }
+                // read by onUploadResetOrDelete; no validation rule reads it (the field collection
+                // leaves a staged file input out of the fields, #B725)
+                $uploadTriger.customFiles = $uploadTriger.pendingFiles || [];
+                $uploadTriger.pendingFiles = null;
+                if ( $uploadTriger.form ) {
+                    uploadProperties.uploadFields = buildUploadHiddenFields($uploadTriger, getUploadFieldPrefix($uploadTriger), files.length, uploadProperties.mandatoryFields, false);
                 }
             }
             for (var f = 0, fLen = files.length; f<fLen; ++f) {
@@ -19304,19 +19351,22 @@ function ValidatorPlugin(rules, data, formId, culture) {
      * buildUploadHiddenFields — #B858: the hidden `<prefix>[i][…]` fields of a file input's
      * selection, in its form, by file index: the inputs the form holds are reused (declared by the
      * page, or written by an earlier selection), the ones a reset removed come back, and the
-     * missing mandatory ones are created, empty, for the staging answer to fill. Run on EVERY
-     * selection: building them only with the input's virtual upload form left a selection made
-     * after a reset with no field in the form, and one with more files than the first with none for
-     * its new files.
+     * missing mandatory ones are created, empty, for the staging answer to fill. Run for EVERY
+     * staging that succeeds, by `onUpload` (#B960): run at the selection, it left the fields a
+     * failed staging had created in the form, empty, for the save to post, and a reset made while
+     * the staging was on the wire took them out before the answer filled them. Building them only
+     * with the input's virtual upload form (before #B858) left a selection made after a reset with
+     * no field in the form, and one with more files than the first with none for its new files.
      *
      * @inner
      * @private
      * @param {HTMLInputElement} $el - the file input
      * @param {string} fieldPrefix - see getUploadFieldPrefix
-     * @param {number} filesLength - the count of files selected
+     * @param {number} filesLength - the count of files the staging answer names
      * @param {Array<string>} mandatoryFields - the metadata keys every file gets an input for
      * @param {boolean} bindResetTriggers - binds each file's reset trigger when it is already in
-     *   the page (the selection that creates the virtual upload form)
+     *   the page (`onUpload` passes false: it binds the reset links it renders, and the selection
+     *   that creates the virtual upload form binds the ones the page declares)
      * @returns {Array<object>} by file index, the field map the staging answer fills
      *
      * @example
@@ -23049,26 +23099,25 @@ function ValidatorPlugin(rules, data, formId, culture) {
                     // [0] is for a single file, when multiple == false
                     //var files = Array.from($el.files);
                     var files = $el.files;
-                    // #B959 — a change that carries no file (an emptied selection) leaves the input's
-                    // records as they were: the entries its reset and delete links act on, and the
-                    // #B150 record below. Both used to be written first, so the entries were emptied
+                    // #B959 — a change that carries no file (an emptied selection) leaves the input as it
+                    // was. The input's records (the entries its reset and delete links act on, and the
+                    // #B150 record) used to be written before this return, so the entries were emptied
                     // and every reset or delete link of the input was left bound to nothing: a click
                     // sent no request, removed nothing and logged the zero-match warning, while the
                     // files' previews and hidden fields stayed in the form.
-                    // was: the return stood after the two assignments below
+                    // was: the return stood after the two assignments that #B960 removed from here
                     if (!files.length ) return false;
-                    // #B150 — the stored entries this selection replaces (the ones the bind-time scan
-                    // recorded, each with its delete link id) are kept on the input until a staging
-                    // success removes their delete links (see onUpload): a link placed outside the
-                    // preview container is not taken by the container reset there, and it outlived
-                    // the entry it belonged to, still bound — a click then sent nothing, removed
-                    // nothing, and logged the zero-match warning. Carried over a failed staging, so
-                    // the next success still removes them.
-                    var _replacedStoredFiles = ($el.customFiles || []).filter(function (entry) { return entry && entry.deleteLinkId; });
-                    $el._replacedStoredFiles = ( $el._replacedStoredFiles || [] ).concat(_replacedStoredFiles);
-                    // read by onUploadResetOrDelete; no validation rule reads it (the field
-                    // collection leaves a staged file input out of the fields, #B725)
-                    $el.customFiles = Array.from(files);
+                    // #B960 — the selection waits on the input until its staging settles: a success takes
+                    // the input over (its entries, the replaced entries' delete links and the form's
+                    // hidden fields, see onUpload), a failure drops it. They were written here, before
+                    // the answer: a failed staging left the reset and delete links of the files the page
+                    // still showed bound to the files it had dropped, its empty fields were posted with
+                    // the form, and a reset made while the staging was on the wire took the new file's
+                    // fields out of the form before the answer filled them.
+                    // was: var _replacedStoredFiles = ($el.customFiles || []).filter(function (entry) { return entry && entry.deleteLinkId; });
+                    // was: $el._replacedStoredFiles = ( $el._replacedStoredFiles || [] ).concat(_replacedStoredFiles);
+                    // was: $el.customFiles = Array.from(files);
+                    $el.pendingFiles = Array.from(files);
 
 
 
@@ -23173,8 +23222,8 @@ function ValidatorPlugin(rules, data, formId, culture) {
                             if ( typeof($el.form) != 'undefined' ) {
 
                                 // adding virtual fields
-                                // #B862 — the prefix rule the reset removes the fields by (see getUploadFieldPrefix)
-                                var fieldPrefix = getUploadFieldPrefix($el);
+                                // #B960 — the prefix rule (#B862) is read where the fields are built, in onUpload
+                                // was: var fieldPrefix = getUploadFieldPrefix($el);
                                 var fieldId     = $el.id || $el.getAttribute('id');
 
                                 var hasPreviewContainer = false;
@@ -23216,8 +23265,13 @@ function ValidatorPlugin(rules, data, formId, culture) {
                                     ]
                                 ;
 
-                                // #B858 — built again on every selection (see buildUploadHiddenFields)
-                                hiddenFields = buildUploadHiddenFields($el, fieldPrefix, files.length, mandatoryFields, true);
+                                // #B960 — the hidden fields are built when the staging succeeds (see onUpload);
+                                // the reset triggers the page already holds are bound here, as the build bound
+                                // them when it ran at the selection (#B858)
+                                // was: hiddenFields = buildUploadHiddenFields($el, fieldPrefix, files.length, mandatoryFields, true);
+                                for (var _r = 0, _rLen = files.length; _r < _rLen; ++_r) {
+                                    bindUploadResetOrDeleteTrigger('reset', $el, _r);
+                                }
 
                                 $uploadForm.uploadProperties = {
                                     id                  : $el.form.id || $el.getAttribute('id'),
@@ -23271,17 +23325,14 @@ function ValidatorPlugin(rules, data, formId, culture) {
                                 document.body.appendChild($uploadForm)
                             }
                         } else {
-                            // #B858 — a selection that finds the input's virtual upload form builds its
-                            // own hidden fields: they were built only with that form, so after a reset
-                            // (which takes them out of the real form) the next selection filled inputs
-                            // no longer in it and the save posted no file, and a selection with more
-                            // files than the first had none for its new files. In a popin the lookup
-                            // above reads a parsed COPY of the popin, without the upload's properties:
-                            // they are on the document's element.
+                            // #B858 — a selection that finds the input's virtual upload form reads its
+                            // properties from the document's element: in a popin the lookup above reads a
+                            // parsed COPY of the popin, without them. #B960 — its hidden fields are built
+                            // when the staging succeeds (see onUpload), no longer here.
                             $uploadForm = document.getElementById(uploadFormId) || $uploadForm;
-                            if ( $el.form && $uploadForm.uploadProperties ) {
-                                $uploadForm.uploadProperties.uploadFields = buildUploadHiddenFields($el, getUploadFieldPrefix($el), files.length, $uploadForm.uploadProperties.mandatoryFields, false);
-                            }
+                            // was: if ( $el.form && $uploadForm.uploadProperties ) {
+                            // was:     $uploadForm.uploadProperties.uploadFields = buildUploadHiddenFields($el, getUploadFieldPrefix($el), files.length, $uploadForm.uploadProperties.mandatoryFields, false);
+                            // was: }
                         }
 
                         // #R8 — upload-progress kickoff: show activity from selection
