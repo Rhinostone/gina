@@ -5183,8 +5183,9 @@ function ValidatorPlugin(rules, data, formId, culture) {
      * On a success the selection takes the file input over (#B960): the preview container is
      * emptied, the delete links of the stored entries the selection replaces go (#B150), its files
      * become the entries the reset and delete links act on (`customFiles`, from `pendingFiles`),
-     * the hidden fields are built (see buildUploadHiddenFields) and filled, and the previews and
-     * reset links are rendered. On a failure the error is shown or announced, and only the pending
+     * the hidden fields are built (see buildUploadHiddenFields) and filled from the answer, each key
+     * it carries replacing its field's value (`name` included, #B962), and the previews and reset
+     * links are rendered. On a failure the error is shown or announced, and only the pending
      * selection is dropped: the previews, the controls, the entries and the hidden fields stay as
      * they were.
      *
@@ -5463,9 +5464,13 @@ function ValidatorPlugin(rules, data, formId, culture) {
                 var $elIgnored = null;
                 for (var key in fieldsObjectList) {
                     // update field value
+                    // #B962 — the answer's `name` fills its field like every other key. The fill skipped `name`
+                    // whenever its field held a value, so a replacement in an edit form posted the saved
+                    // file's name beside the new file's location, and a second staging on the same input
+                    // posted the first staged file's name. An answer without `name` leaves the field as it is.
+                    // was: key == 'name' && fieldsObjectList[key].value != '' (the condition's first clause)
                     if (
-                        key == 'name' && fieldsObjectList[key].value != ''
-                        || !files[f][key]
+                        !files[f][key]
                         || key == 'preview' && typeof(files[f][key]) == 'undefined'
                         || /(height|width)/i.test(key) && !/^image/.test(files[f].mime)
                     ) {
