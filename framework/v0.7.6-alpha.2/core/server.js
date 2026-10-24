@@ -8358,7 +8358,9 @@ function Server(options) {
      * to the declaration-order scan of the bundle's routing table — restricted to the
      * rules the candidate index says could match (#P46) — then dispatches the rule
      * that matched. Every method check uses the request's own method, whatever
-     * protocol the bundle is configured for (#B645).
+     * protocol the bundle is configured for (#B645). Once a rule matches, the method's
+     * bag holds each URL placeholder's value (#B954), and a top-level JSON array body
+     * reaches the action as that array, on a path's first request too (#B953).
      *
      * @inner
      * @private
@@ -8576,9 +8578,16 @@ function Server(options) {
         // #B957 — whether `req.body` names the method's bag (processRequestData makes them one
         // object on a non-empty POST, PUT or PATCH body). Read before the warm lookup and the loop,
         // which can replace the bag with a copy; the #B954 block after the loop restores the alias.
-        // A top-level JSON array body is left out: the loop's copy re-keys it by index (#B953),
-        // and `req.body` keeps the array (#B594).
+        // A top-level JSON array body is left out: the #B953 block after the loop gives the bag the
+        // array back, and `req.body` keeps the array (#B594).
         var _bodyIsReqMethod    = ( typeof(req.body) == 'object' && req.body !== null && !Array.isArray(req.body) && req.body === req[_reqMethodKey] );
+        // #B953 — the bag as the request arrived, when processRequestData parsed a top-level JSON
+        // array body into it (POST, PATCH), and whether `req.body` is that array. The loop below
+        // matches on an `Object.assign` copy, which keys an array by index; a warm hit breaks out
+        // before the copy. A copy taken here, before the warm lookup writes into the bag, lets the
+        // block after the loop give the first request the array as well.
+        var _bagArray           = Array.isArray(req[_reqMethodKey]) ? req[_reqMethodKey].slice() : null;
+        var _bodyIsBagArray     = ( _bagArray !== null && req.body === req[_reqMethodKey] );
         var hasCachedRoute      = null;
         var _cachedRouteThrew   = false;
         try {
@@ -8900,6 +8909,29 @@ function Server(options) {
             }
         }
 
+        // #B953 — a top-level JSON array body reached the action as an object keyed by index on the
+        // first request to each METHOD:path the route cache had not seen (the loop above matches on
+        // an `Object.assign` copy of the bag) and as the array on every later one (a warm hit breaks
+        // out before that copy). Once a rule has matched on such a copy, the bag is the array again:
+        // the copy captured before the warm lookup, so a rejected warm candidate's writes are not
+        // carried, holding the loop copy's other keys (the URL placeholders the router set) where the
+        // array has no property of that name, as the router fills a bag (never an index, `length` or
+        // one of its methods); `req.body` names it when it named the bag before routing.
+        if ( matched && _bagArray !== null && !Array.isArray(req[_reqMethodKey]) ) {
+            var _keyedBag = req[_reqMethodKey];
+            if ( typeof(_keyedBag) == 'object' && _keyedBag !== null ) {
+                for (let _kk in _keyedBag) {
+                    if ( Object.prototype.hasOwnProperty.call(_keyedBag, _kk) && !/^[0-9]+$/.test(_kk) && typeof(_bagArray[_kk]) == 'undefined' ) {
+                        _bagArray[_kk] = _keyedBag[_kk];
+                    }
+                }
+            }
+            req[_reqMethodKey] = _bagArray;
+            if ( _bodyIsBagArray ) {
+                req.body = _bagArray;
+            }
+        }
+
         // #B954 / #B957 — once a rule has matched, a URL placeholder's value wins over a query or
         // body key of the same name, on the first request to a METHOD:PATH and on every later one.
         // The loop above copies `req.params` over the bag only on a cold match (on GET and DELETE
@@ -8914,11 +8946,17 @@ function Server(options) {
         // The client's value stays in `req.query` on a DELETE, in `req.rawBody` on a POST, PUT or
         // PATCH, and in `req.originalUrl` on a GET. `req.body` names the bag again when it did
         // before routing: the cold loop matched on a copy, so on the first request it named the
-        // client's object while every later request gave the bag. Otherwise (an empty body, a
-        // top-level JSON array body, GET, DELETE, HEAD) it is left alone.
+        // client's object while every later request gave the bag. Otherwise (an empty body, GET,
+        // DELETE, HEAD) it is left alone; for a top-level JSON array body the #B953 block above has
+        // already pointed it at the array.
         if ( matched && typeof(req.params) == 'object' && req.params !== null ) {
             var _paramsBag = req[req.method.toLowerCase()];
-            if ( typeof(_paramsBag) == 'object' && _paramsBag !== null && !Array.isArray(_paramsBag) ) {
+            // #B953 — an array bag (a top-level JSON array body) takes the URL values too, except under
+            // the names the array answers for itself (an index, `length`, one of its methods): those
+            // values are read from `req.params`.
+            // was: if ( typeof(_paramsBag) == 'object' && _paramsBag !== null && !Array.isArray(_paramsBag) ) {
+            if ( typeof(_paramsBag) == 'object' && _paramsBag !== null ) {
+                var _bagIsArray = Array.isArray(_paramsBag);
                 for (let _pk in req.params) {
                     if ( _pk === '0' || !Object.prototype.hasOwnProperty.call(req.params, _pk) ) {
                         continue;
@@ -8927,6 +8965,9 @@ function Server(options) {
                     if ( /^(false|true|on)$/.test( req.params[_pk] ) && typeof(req.params[_pk]) == 'string' )
                         req.params[_pk] = ( /^(true|on)$/.test( req.params[_pk] ) ) ? true : false;
 
+                    if ( _bagIsArray && ( /^[0-9]+$/.test(_pk) || _pk === 'length' || typeof(_paramsBag[_pk]) != 'undefined' && !Object.prototype.hasOwnProperty.call(_paramsBag, _pk) ) ) {
+                        continue;
+                    }
                     _paramsBag[_pk] = req.params[_pk];
                 }
             }

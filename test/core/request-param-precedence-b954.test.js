@@ -185,10 +185,12 @@ describe('request-param-precedence-b954 §02 — the lifted block, executed', fu
         assert.equal(req.body, original);
     });
 
-    it('02.9  a bag that is not a plain object, or no req.params: nothing is copied and nothing throws', function () {
+    it('02.9  an array bag takes the URL values beside its elements (#B953); no bag, or no req.params: nothing is copied and nothing throws', function () {
         var arr = ['a'];
         runBlock(true, { method: 'PUT', params: { 0: '/p', id: '43' }, put: arr, body: {} }, false, 'put');
-        assert.deepEqual(arr, ['a']);
+        assert.equal(arr.id, '43', 'the URL value lands on the array');
+        assert.equal(arr.length, 1, 'its length is unchanged');
+        assert.equal(arr[0], 'a', 'its element is unchanged');
         runBlock(true, { method: 'PUT', params: { 0: '/p', id: '43' }, put: undefined, body: {} }, false, 'put');
         runBlock(true, { method: 'PUT', params: null, put: { id: '99' }, body: {} }, false, 'put');
     });
