@@ -552,6 +552,10 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge'
          * Only `[open]` dialogs are inerted. A closed `<dialog>` is already
          * `display:none` per the UA stylesheet, so it is unreachable without help.
          *
+         * #B974 — the Escape handler clears `$popin.isRedirecting` before it closes, as a
+         * modal dialog's native Escape does through bindNativeCloseSync(): a redirect still
+         * in progress (a link inside the popin) cannot make popinClose() ignore the user.
+         *
          * @inner
          * @param {object} $popin - popin descriptor; the Escape handler closes by $popin.name
          * @param {HTMLElement} $el - the dialog element being shown non-modally
@@ -568,6 +572,8 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge'
             var onKeydown = function (e) {
                 if ( e.key === 'Escape' || e.keyCode === 27 ) {
                     e.preventDefault();
+                    // #B974 — the user's Escape always closes, as a modal dialog's does
+                    $popin.isRedirecting = false;
                     popinClose($popin.name);
                 }
             };
@@ -1630,6 +1636,9 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge'
                         var linkTarget = event.target.getAttribute('target');
                         if ( linkTarget != null && linkTarget != '' ) {
                             var _window = window.open(linkHref, linkTarget);
+                            // #B974 — the link opened another window: nothing loads into
+                            // this popin, so no redirect is in progress here
+                            $popin.isRedirecting = false;
                             // _window.onload = function onWindowLoad() {
                             //     var $popin = getActivePopin();
                             //     triggerEvent(gina, $popin, 'loaded.' + id);
@@ -2193,6 +2202,12 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge'
          * addEventListener — NOT gina's addListener (the custom event bus). Gated on
          * useDialogMode: a <div> has no `close` event.
          *
+         * #B974 — a native close that still finds the popin open or loading is the user's
+         * (Escape, a method="dialog" form) or the page's own `dialog.close()`, since the
+         * plugin's own closes clear both first: it clears `$popin.isRedirecting` before
+         * popinClose(), so a redirect still in progress (a link inside the popin) cannot
+         * leave the popin flagged open behind a closed dialog.
+         *
          * @param {object} $popin - the registered popin
          * @param {HTMLElement} $el - its dialog element
          *
@@ -2206,6 +2221,8 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge'
                 $el._ginaCloseSyncBound = true;
                 $el.addEventListener('close', function () {
                     if ( $popin.isOpen || $popin.isLoading ) {
+                        // #B974 — a user's close wins over a redirect in progress
+                        $popin.isRedirecting = false;
                         popinClose($popin.name);
                     }
                 });
@@ -2340,9 +2357,22 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge'
         /**
          * popinLoad
          *
-         * @param {string} name
-         * @param {string} url
-         * @param {object} [options]
+         * Loads `url` into the popin `name` over a fresh XHR. Each load takes a sequence
+         * number: a close during the load, or a newer load of the same popin, bumps the
+         * popin's, and the landing is dropped (#gh76 §8, #B975). Once the load settles —
+         * landed, failed or JSON — `$popin.isRedirecting` ends (#B974): a redirect it carried
+         * (a link inside the popin, the validator's redirect-in-place) is over, and a close is
+         * honoured again.
+         *
+         * @param {string} name - the popin's name
+         * @param {string} url - the content's URL
+         * @param {object} [options] - XHR options, merged over the plugin's defaults
+         * @returns {object|undefined} `{ open }` — `.open()` opens the popin content-first
+         *   when its body lands; undefined when the transport could not start
+         *
+         * @example
+         * var handle = gina.popin.getPopinByName('details').load('details', '/details/42');
+         * if ( handle ) { handle.open(); }
          * */
         function popinLoad(name, url, options) {
             // if no name defiend, get the current
@@ -2551,6 +2581,10 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge'
                             return;
                         }
                         $popin._loadXhr = null;
+                        // #B974 — this load has settled: a redirect it carried (a link inside
+                        // the popin, the validator's redirect-in-place) is over, whatever the
+                        // outcome, so a close is honoured again
+                        $popin.isRedirecting = false;
                         // 200, 201, 201' etc ...
                         var result = null;
 
@@ -2827,7 +2861,10 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge'
          *
          * @this {object} [$popin] - when a registry entry, the popin to load into
          * @param {string} stringContent - the HTML to inject (plain text)
-         * @param {boolean} [isRedirecting] - to handle a link inside a popin without a form
+         * @param {boolean} [isRedirecting] - true for a redirect's landing (a link inside the
+         *   popin, a reload of an open popin): fires `loaded.<id>` instead of `open.<id>`.
+         *   `$popin.isRedirecting` holds it for that dispatch only (#B974)
+         * @returns {void}
          *
          * @example
          * gina.popin.getPopinByName('details').loadContent('<p>updated</p>');
@@ -2879,6 +2916,8 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge'
                 // console.debug('Popin now redirecting [1-b]');
                 triggerEvent(gina, instance.target, 'loaded.' + $popin.id, $popin);
             }
+            // #B974 — the flag only chose the event above: the content has landed
+            $popin.isRedirecting = false;
 
             // Update toolbar
             if ( gina && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
@@ -3239,10 +3278,18 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge'
         /**
          * popinClose
          *
-         * Closes a popin by `name` or all `is-active`
+         * Closes a popin: the one named, else the one it is called on (`$popin.close()`),
+         * else the active one. Ignored while `$popin.isRedirecting` is set — a redirect into
+         * this popin is in progress, and the validator's redirect-in-place relies on its own
+         * `close()` being a no-op; the flag ends when that redirect's load settles, and a
+         * user's Escape clears it first (#B974). A close cancels a load still in flight: its
+         * landing is dropped instead of filling, or re-opening, the dismissed popin (#B975).
          *
-         * @parama {string} [name]
+         * @param {string} [name] - the popin's name
+         * @returns {void}
          *
+         * @example
+         * gina.popin.close('details');
          * */
         function popinClose(name) {
 
@@ -3283,6 +3330,16 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/loading-state', 'lib/merge'
                 // in this case, we want to ignore close
                 if ( $popin.isRedirecting )
                     return;
+
+                // #B975 — cancel a load still in flight (a link inside the popin, a
+                // gina.popin.load()): the sequence check drops its landing instead of letting
+                // it fill, or re-open, the popin closed here. Below the guard, so the
+                // validator's redirect-in-place, whose close() is a no-op, keeps its load
+                $popin._loadSeq = ( $popin._loadSeq || 0 ) + 1;
+                if ( $popin._loadXhr && $popin._loadXhr.readyState !== 4 ) {
+                    try { $popin._loadXhr.abort(); } catch (abortErr) { /* already dead */ }
+                }
+                $popin._loadXhr = null;
 
                 $el = $popin.target;
                 var $popinTrigger = document.getElementById($popin.openTrigger) || null;
